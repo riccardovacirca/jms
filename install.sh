@@ -86,20 +86,16 @@ GIT_TOKEN=
 EOF
 
     sed "s|PROJECT_DIR_PLACEHOLDER|$project_dir|g" .env > .env.tmp && mv .env.tmp .env
-    echo "File .env generato con configurazione di default"
 }
 
 # Genera o carica .env
 if [ ! -f .env ]; then
-    echo "File .env non trovato, genero configurazione di default..."
     generate_env_file
-    echo ""
     . ./.env
 fi
 
 if [ -z "$PROJECT_NAME" ]; then
     . ./.env
-    echo "Configurazione caricata da .env"
 fi
 
 # Variabili derivate
@@ -142,23 +138,19 @@ create_pgsql_container() {
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${PGSQL_CONTAINER}$"; then
         if docker ps --format "{{.Names}}" | grep -q "^${PGSQL_CONTAINER}$"; then
-            echo "PostgreSQL container già in esecuzione."
             return 0
         fi
         docker start "$PGSQL_CONTAINER" >/dev/null 2>&1 || {
-            echo "Errore nell'avvio del container PostgreSQL."
+            echo "ERRORE: avvio container PostgreSQL '$PGSQL_CONTAINER' fallito."
             return 1
         }
-        echo "Container PostgreSQL avviato."
         return 0
     fi
 
     if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${PGSQL_IMAGE}$"; then
-        echo "Download immagine PostgreSQL..."
         docker pull "$PGSQL_IMAGE" >/dev/null 2>&1
     fi
 
-    echo "Creazione container PostgreSQL..."
     docker run -d --name "$PGSQL_CONTAINER" --network "$DEV_NETWORK" \
         -e POSTGRES_USER="$PGSQL_ROOT_USER" \
         -e POSTGRES_PASSWORD="$PGSQL_ROOT_PASSWORD" \
@@ -166,58 +158,43 @@ create_pgsql_container() {
         -p "$PGSQL_PORT_HOST:5432" \
         -v "$PGSQL_VOLUME:/var/lib/postgresql/data" \
         "$PGSQL_IMAGE" >/dev/null 2>&1 || {
-            echo "Errore nella creazione del container PostgreSQL."
+            echo "ERRORE: creazione container PostgreSQL '$PGSQL_CONTAINER' fallita."
             return 1
         }
-
-    echo "Container PostgreSQL creato e avviato."
-    echo "  Host: localhost:$PGSQL_PORT_HOST"
-    echo "  Database: $PGSQL_NAME"
-    echo "  User: $PGSQL_ROOT_USER / $PGSQL_ROOT_PASSWORD"
 }
 
 # Setup database PostgreSQL
 setup_pgsql_database() {
-    echo "  Attesa disponibilità PostgreSQL..."
     sleep 3
 
     if ! docker exec "$DEV_CONTAINER" sh -c "command -v psql >/dev/null 2>&1"; then
-        echo "  Installazione client PostgreSQL nel container dev..."
         docker exec "$DEV_CONTAINER" sh -c "apt-get update -qq && apt-get install -y -qq postgresql-client >/dev/null 2>&1"
     fi
 
-    echo "  Verifica connessione PostgreSQL..."
     for i in 1 2 3 4 5; do
         if docker exec "$DEV_CONTAINER" pg_isready -h"$PGSQL_CONTAINER" -U"$PGSQL_ROOT_USER" >/dev/null 2>&1; then
-            echo "  PostgreSQL pronto"
             break
         fi
-        echo "  Tentativo $i/5..."
         sleep 2
     done
 
     if ! docker exec "$DEV_CONTAINER" pg_isready -h"$PGSQL_CONTAINER" -U"$PGSQL_ROOT_USER" >/dev/null 2>&1; then
-        echo "  [ERRORE] PostgreSQL non raggiungibile dopo 5 tentativi."
-        echo "  Causa probabile: container '$PGSQL_CONTAINER' non avviato o rete '$DEV_NETWORK' non configurata."
-        echo "  Verifica con: docker ps -a --filter name=$PGSQL_CONTAINER"
+        echo "ERRORE: PostgreSQL non raggiungibile dopo 5 tentativi."
+        echo "Causa probabile: container '$PGSQL_CONTAINER' non avviato o rete '$DEV_NETWORK' non configurata."
+        echo "Verifica con: docker ps -a --filter name=$PGSQL_CONTAINER"
         return 1
     fi
 
-    echo "  Creazione utente applicazione..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
         -c \"DO \\\$\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PGSQL_USER') THEN CREATE ROLE \\\"$PGSQL_USER\\\" WITH LOGIN PASSWORD '$PGSQL_PASSWORD'; END IF; END \\\$\\\$;\"" 2>/dev/null || true
 
-    echo "  Creazione database applicazione..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
         -c \"SELECT 1 FROM pg_database WHERE datname = '$PGSQL_NAME'\" | grep -q 1 || \
          PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
         -c \"CREATE DATABASE \\\"$PGSQL_NAME\\\";\"" 2>/dev/null || true
 
-    echo "  Configurazione permessi schema..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d \"$PGSQL_NAME\" \
         -c \"GRANT ALL ON SCHEMA public TO \\\"$PGSQL_USER\\\";\"" 2>/dev/null || true
-
-    echo "  Setup PostgreSQL completato"
 }
 
 # --postgres
@@ -228,8 +205,6 @@ if [ "$1" = "--postgres" ]; then
         exit 1
     fi
 
-    echo "Configurazione PostgreSQL..."
-
     if ! docker ps --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
         echo "ERRORE: Container dev '$DEV_CONTAINER' non in esecuzione."
         echo "Esegui prima './install.sh' per avviare il container dev."
@@ -239,14 +214,7 @@ if [ "$1" = "--postgres" ]; then
     create_pgsql_container
     setup_pgsql_database
 
-    echo ""
-    echo "=========================================="
-    echo "PostgreSQL configurato e pronto!"
-    echo "=========================================="
-    echo "  Host: localhost:$PGSQL_PORT_HOST"
-    echo "  Database: $PGSQL_NAME"
-    echo "  User: $PGSQL_USER / $PGSQL_PASSWORD"
-    echo ""
+    echo "Installazione completata"
     exit 0
 fi
 
@@ -254,22 +222,15 @@ fi
 if [ "$1" = "--dev" ] || [ -z "$1" ]; then
 
     if docker ps -a --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
-        echo "Container '$DEV_CONTAINER' già esistente."
         if ! docker ps --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
-            echo "Avvio container..."
-            docker start "$DEV_CONTAINER"
-        else
-            echo "Container già in esecuzione."
+            docker start "$DEV_CONTAINER" >/dev/null
         fi
     else
         # Crea la rete se non esiste
         if ! docker network ls --format '{{.Name}}' | grep -q "^$DEV_NETWORK$"; then
-            docker network create "$DEV_NETWORK"
-            echo "Docker network '$DEV_NETWORK' creata."
+            docker network create "$DEV_NETWORK" >/dev/null
         fi
 
-        # Dockerfile.dev temporaneo
-        echo "Creazione Dockerfile.dev..."
         mkdir -p docker
         cat > docker/Dockerfile.dev << 'DOCKERFILE'
 FROM ubuntu:24.04
@@ -292,12 +253,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /workspace
 DOCKERFILE
 
-        # Build immagine dev
-        echo "Build immagine di sviluppo (richiede qualche minuto)..."
-        docker build -t "$PROJECT_NAME-dev:latest" -f docker/Dockerfile.dev .
+        docker build -q -t "$PROJECT_NAME-dev:latest" -f docker/Dockerfile.dev . >/dev/null
 
-        # Avvia container di sviluppo
-        echo "Creazione container di sviluppo..."
         docker run -it -d \
             --name "$DEV_CONTAINER" \
             -v "$PWD":/workspace \
@@ -306,17 +263,13 @@ DOCKERFILE
             -p "$VITE_PORT_HOST:$VITE_PORT" \
             --network "$DEV_NETWORK" \
             "$PROJECT_NAME-dev:latest" \
-            tail -f /dev/null
-
-        echo "Container '$DEV_CONTAINER' creato e avviato."
+            tail -f /dev/null >/dev/null
 
         # Rimuove il Dockerfile dopo la build (effimero)
         rm -f docker/Dockerfile.dev
         rmdir docker 2>/dev/null || true
     fi
 
-    # .gitignore
-    echo "Creazione .gitignore..."
     rm -f .gitignore
     cat > .gitignore << 'GITIGNORE'
 # Build artifacts
@@ -332,11 +285,8 @@ docker/
 # Environment (contiene credenziali)
 .env
 GITIGNORE
-    echo ".gitignore creato"
-
     # Struttura progetto se non esiste ancora
     if [ ! -f pom.xml ]; then
-        echo "Creazione struttura progetto..."
 
         # --- Java / Undertow ---
         mkdir -p "src/main/java/$GROUP_DIR"
@@ -345,6 +295,7 @@ GITIGNORE
 
         # Copia libreria util (dev.jms.util) nel progetto
         cp -r "$INSTALLER_DIR/lib/." src/main/java/
+        rm -rf "$INSTALLER_DIR/lib"
 
         cat > pom.xml << 'POMXML_TEMPLATE'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -677,8 +628,6 @@ EOF
 -- Migrazione iniziale
 -- Aggiungere qui la struttura del database (CREATE TABLE, ecc.)
 INITSQL
-
-        echo "Struttura Java creata"
 
         # --- Svelte 5 ---
         mkdir -p svelte/src
@@ -1198,15 +1147,11 @@ HOMECOMPONENT
 </div>
 HOMELAYOUT
 
-        echo "Struttura Svelte 5 creata"
     fi
 
     # Installa dipendenze npm nel container
-    echo "Installazione dipendenze frontend..."
-    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install"
+    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install --silent" >/dev/null 2>&1
 
-    # Configura cmd nel PATH del container
-    echo "Configurazione cmd nel PATH..."
     mkdir -p bin
     cp "$INSTALLER_DIR/cmd" bin/cmd
     sed -i "s|com\.example|$GROUP_ID|g" bin/cmd
@@ -1215,56 +1160,22 @@ HOMELAYOUT
         ln -sf /workspace/bin/cmd /usr/local/bin/cmd
         chmod +x /workspace/bin/cmd
     "
-    echo "✓ cmd disponibile nel PATH del container"
+    # Alias shell
+    docker exec "$DEV_CONTAINER" sh -c "
+        grep -qxF \"alias cls='clear'\" /root/.bashrc || echo \"alias cls='clear'\" >> /root/.bashrc
+    "
 
     # README
     echo "# $PROJECT_NAME" > README.md
-    echo "✓ README.md aggiornato"
 
     # Rimuove .git del repo originale
     if [ -d .git ]; then
         rm -rf .git
-        echo "✓ .git rimosso"
     fi
 
     # Rimuove cmd dalla root (è stato copiato in bin/cmd)
     rm -f cmd
-    echo "✓ cmd spostato in bin/"
 
-    echo ""
-    echo "=========================================="
-    echo "Ambiente di sviluppo pronto!"
-    echo "=========================================="
-    echo ""
-    echo "Container: $DEV_CONTAINER"
-    echo "Network:   $DEV_NETWORK"
-    echo ""
-    echo "Porte:"
-    echo "  Undertow (API):  localhost:$API_PORT_HOST  -> container:$API_PORT"
-    echo "  Vite (frontend): localhost:$VITE_PORT_HOST -> container:$VITE_PORT"
-    echo ""
-    echo "Entra nel container:"
-    echo "  docker exec -it $DEV_CONTAINER bash"
-    echo ""
-    echo "Comandi disponibili (dentro il container):"
-    echo "  cmd app build        # compila → target/service.jar"
-    echo "  cmd app start        # avvia backend in background"
-    echo "  cmd app stop         # ferma backend"
-    echo "  cmd app status       # stato backend"
-    echo "  cmd app run          # avvia backend in foreground"
-    echo "  cmd svelte build     # build → src/main/resources/static/"
-    echo "  cmd svelte run       # Vite dev server con proxy API"
-    echo "  cmd db               # CLI PostgreSQL (richiede --postgres)"
-    echo "  cmd git push         # commit + push"
-    echo "  cmd --help           # tutti i comandi"
-    echo ""
-    echo "Dev workflow consigliato:"
-    echo "  terminale 1: cmd app start"
-    echo "  terminale 2: cmd svelte run"
-    echo "  browser:     http://localhost:$VITE_PORT_HOST"
-    echo ""
-    echo "Altri comandi:"
-    echo "  ./install.sh --postgres   # Installa PostgreSQL"
-    echo ""
+    echo "Installazione completata"
     exit 0
 fi
