@@ -1,6 +1,6 @@
-package dev.springtools.util.excel;
+package dev.jms.util.excel;
 
-import dev.springtools.util.excel.strategy.MappingStrategy;
+import dev.jms.util.excel.strategy.MappingStrategy;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,7 +12,7 @@ public class ColumnMapper
 
   public ColumnMapper(MappingStrategy strategy)
   {
-    this.strategy = strategy != null ? strategy : new dev.springtools.util.excel.strategy.DefaultMappingStrategy();
+    this.strategy = strategy != null ? strategy : new dev.jms.util.excel.strategy.DefaultMappingStrategy();
   }
 
   /**

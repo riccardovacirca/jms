@@ -1,6 +1,5 @@
-package dev.springtools.util.excel.strategy;
+package dev.jms.util.excel.strategy;
 
-import java.util.Map;
 
 public class DefaultMappingStrategy implements MappingStrategy
 {
@@ -12,10 +11,4 @@ public class DefaultMappingStrategy implements MappingStrategy
     return header;
   }
 
-  // rimuovi mapHeader(Map<String,String>) se non esiste nell’interfaccia
-  // oppure implementalo senza @Override se vuoi un metodo di utilità
-  public Map<String, String> mapHeaders(Map<String, String> headers)
-  {
-    return headers; // restituisce mappa invariata
-  }
 }

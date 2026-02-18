@@ -1,4 +1,4 @@
-package dev.springtools.util.excel;
+package dev.jms.util.excel;
 
 /** Rappresenta l'esito di un'importazione Excel. */
 public class ImportResult

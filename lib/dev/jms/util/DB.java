@@ -4,9 +4,7 @@
  * Licensed under Exclusive Free Beta License
  * See LICENSE.md for full terms
  */
-package dev.springtools.util;
-
-import org.springframework.jdbc.datasource.DataSourceUtils;
+package dev.jms.util;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -17,7 +15,7 @@ import java.util.Set;
 
 /**
  * Java database abstraction layer.
- * Spring is used ONLY as a DataSource provider.
+ * Thin wrapper over plain JDBC with HikariCP as DataSource provider.
  * No annotations, no AOP, no hidden behavior.
  */
 public class DB
@@ -45,7 +43,7 @@ public class DB
     if (connection.get() != null) {
       return;
     }
-    Connection c = DataSourceUtils.getConnection(dataSource);
+    Connection c = dataSource.getConnection();
     connection.set(c);
   }
 
@@ -53,7 +51,7 @@ public class DB
   {
     Connection c = connection.get();
     if (c != null) {
-      DataSourceUtils.releaseConnection(c, dataSource);
+      try { c.close(); } catch (Exception ignored) {}
       connection.remove();
       lastGeneratedKey.remove();
     }
