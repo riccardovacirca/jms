@@ -32,6 +32,7 @@ Usage: jms COMMAND [OPTIONS]
 
 App (Java Undertow):
   app build                Compile Java backend (Maven)
+  app dev                  Dev mode: watch src/, compile on change, hot-restart
   app run                  Run in foreground
   app start                Start in background
   app stop                 Stop background process
@@ -172,6 +173,98 @@ app_restart() {
     app_stop
     sleep 1
     app_start
+}
+
+app_dev() {
+    load_env
+    cd "$WORKSPACE"
+
+    command -v inotifywait >/dev/null 2>&1 || \
+        error "inotifywait not found. Install: apt-get install -y inotify-tools"
+
+    local DEV_LOG="$APP_LOG_FILE"
+    local DEV_CP_FILE="$WORKSPACE/.dev-classpath"
+    local DEV_PID=""
+    local TAIL_PID=""
+
+    _dev_classpath() {
+        info "[dev] Resolving dependency classpath..."
+        mvn -q dependency:build-classpath -Dmdep.outputFile="$DEV_CP_FILE" \
+            || error "[dev] Failed to resolve classpath"
+        info "[dev] Classpath cached → .dev-classpath"
+    }
+
+    _dev_start() {
+        printf '\n=== %s restart ===\n' "$(date '+%H:%M:%S')" >> "$DEV_LOG"
+        local CP="$WORKSPACE/target/classes:$(cat "$DEV_CP_FILE")"
+        java -cp "$CP" com.example.App >> "$DEV_LOG" 2>&1 &
+        DEV_PID=$!
+        echo "$DEV_PID" > "$APP_PID_FILE"
+        sleep 1
+        if kill -0 "$DEV_PID" 2>/dev/null; then
+            success "[dev] App started (PID: $DEV_PID)"
+        else
+            warn "[dev] App failed to start — check $DEV_LOG"
+        fi
+    }
+
+    _dev_stop() {
+        if [ -n "$DEV_PID" ] && kill -0 "$DEV_PID" 2>/dev/null; then
+            kill "$DEV_PID" 2>/dev/null || true
+            local C=0
+            while kill -0 "$DEV_PID" 2>/dev/null && [ $C -lt 10 ]; do
+                sleep 0.5; C=$((C+1))
+            done
+            kill -9 "$DEV_PID" 2>/dev/null || true
+            sleep 0.5  # attendi rilascio porta OS
+        fi
+        rm -f "$APP_PID_FILE"
+        DEV_PID=""
+    }
+
+    _dev_cleanup() {
+        _dev_stop
+        [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null || true
+        printf '\n'
+        info "[dev] Dev mode stopped"
+        exit 0
+    }
+
+    trap '_dev_cleanup' INT TERM
+
+    # Classpath: resolve on first run or when pom.xml is newer
+    if [ ! -f "$DEV_CP_FILE" ] || [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
+        _dev_classpath
+    fi
+
+    info "[dev] Compiling..."
+    mvn -q compile -DskipTests || error "Initial compilation failed"
+
+    > "$DEV_LOG"
+    tail -F "$DEV_LOG" &
+    TAIL_PID=$!
+
+    info "[dev] Watching src/ for changes (Ctrl+C to stop)"
+    info "Internal: http://localhost:${API_PORT:-8080}/"
+    info "External: http://localhost:${API_PORT_HOST:-2310}/"
+
+    _dev_start
+
+    while true; do
+        inotifywait -r -q -e modify,close_write,create,delete,moved_to \
+            "$WORKSPACE/src/" "$WORKSPACE/pom.xml" 2>/dev/null || true
+        sleep 0.3
+        info "[dev] Change detected — recompiling..."
+        if [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
+            _dev_classpath
+        fi
+        if mvn -q compile -DskipTests; then
+            _dev_stop
+            _dev_start
+        else
+            warn "[dev] Compilation failed — keeping running version"
+        fi
+    done
 }
 
 app_status() {
@@ -658,12 +751,13 @@ case "$1" in
     app)
         case "$2" in
             build)   app_build ;;
+            dev)     app_dev ;;
             run)     app_run ;;
             start)   app_start ;;
             stop)    app_stop ;;
             restart) app_restart ;;
             status)  app_status ;;
-            *) error "Unknown app command: $2. Use: build, run, start, stop, restart, status" ;;
+            *) error "Unknown app command: $2. Use: build, dev, run, start, stop, restart, status" ;;
         esac
         ;;
     svelte)

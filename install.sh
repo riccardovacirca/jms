@@ -175,6 +175,10 @@ setup_pgsql_database() {
         return 1
     fi
 
+    echo "  Creazione utente applicazione..."
+    docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
+        -c \"DO \\\$\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PGSQL_USER') THEN CREATE ROLE \\\"$PGSQL_USER\\\" WITH LOGIN PASSWORD '$PGSQL_PASSWORD'; END IF; END \\\$\\\$;\"" 2>/dev/null || true
+
     echo "  Configurazione permessi schema..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d \"$PGSQL_NAME\" \
         -c \"GRANT ALL ON SCHEMA public TO \\\"$PGSQL_USER\\\";\"" 2>/dev/null || true
@@ -246,6 +250,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     openjdk-21-jdk \
     maven \
+    inotify-tools \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -302,6 +307,7 @@ GITIGNORE
         # --- Java / Undertow ---
         mkdir -p src/main/java/com/example
         mkdir -p src/main/resources/static
+        mkdir -p src/main/resources/db/migration
 
         cat > pom.xml << 'POMXML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -323,6 +329,7 @@ GITIGNORE
         <undertow.version>2.3.12.Final</undertow.version>
         <hikari.version>5.1.0</hikari.version>
         <postgresql.version>42.7.3</postgresql.version>
+        <flyway.version>10.20.0</flyway.version>
     </properties>
 
     <dependencies>
@@ -341,33 +348,50 @@ GITIGNORE
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.6.0</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>com.example.App</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                    <finalName>service</finalName>
-                    <appendAssemblyId>false</appendAssemblyId>
-                </configuration>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.2</version>
                 <executions>
                     <execution>
-                        <id>make-assembly</id>
                         <phase>package</phase>
                         <goals>
-                            <goal>single</goal>
+                            <goal>shade</goal>
                         </goals>
+                        <configuration>
+                            <finalName>service</finalName>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.example.App</mainClass>
+                                </transformer>
+                                <!-- Merges META-INF/services files (required for Flyway 10 ServiceLoader) -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -431,6 +455,7 @@ import io.undertow.server.handlers.PathHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
+import org.flywaydb.core.Flyway;
 
 import java.sql.Connection;
 
@@ -443,6 +468,7 @@ public class App {
         int port = config.getInt("server.port", 8080);
 
         initDataSource(config);
+        runMigrations();
 
         // Serve static files bundled in JAR from src/main/resources/static/
         // (populated by 'npm run build' in the svelte/ project)
@@ -517,6 +543,23 @@ public class App {
             System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
         }
     }
+
+    private static void runMigrations() {
+        if (dataSource == null) {
+            System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
+            return;
+        }
+        try {
+            Flyway flyway = Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .load();
+            int applied = flyway.migrate().migrationsExecuted;
+            System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
+        } catch (Exception e) {
+            System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
+        }
+    }
 }
 APPJAVA
 
@@ -542,6 +585,13 @@ db.password=${PGSQL_PASSWORD}
 db.pool.size=10
 EOF
 
+        # Migrazione iniziale Flyway
+        MIGRATION_TS=$(date '+%Y%m%d_%H%M%S')
+        cat > "src/main/resources/db/migration/V${MIGRATION_TS}__init.sql" << 'INITSQL'
+-- Migrazione iniziale
+-- Aggiungere qui la struttura del database (CREATE TABLE, ecc.)
+INITSQL
+
         echo "Struttura Java creata"
 
         # --- Svelte 5 ---
@@ -562,7 +612,7 @@ EOF
     "bootstrap": "^5.3.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.0.0",
     "vite": "^6.0.0"
   }
@@ -740,7 +790,8 @@ STOREJS
       <HeaderLayout />
       <main class="p-4 flex-grow-1 bg-light">
         {#if privateComponent}
-          <svelte:component this={privateComponent} />
+          {@const PrivateComponent = privateComponent}
+          <PrivateComponent />
         {:else}
           <p class="text-muted">Modulo non trovato.</p>
         {/if}
@@ -843,13 +894,14 @@ HEADERSTOREJS
 
 <header class="app-header d-flex align-items-center px-3 border-bottom bg-white">
   {#if $contextHeader}
+    {@const ContextHeader = $contextHeader}
     <button class="btn btn-sm btn-outline-secondary me-1" onclick={toggleDropdown}>
-      <svelte:component this={$contextHeader} {...$contextHeaderProps} isDropdown={false} />
+      <ContextHeader {...$contextHeaderProps} isDropdown={false} />
       ▾
     </button>
     {#if dropdownOpen}
       <div class="context-dropdown shadow-sm border rounded p-1">
-        <svelte:component this={$contextHeader} {...$contextHeaderProps} isDropdown={true} onClose={closeDropdown} />
+        <ContextHeader {...$contextHeaderProps} isDropdown={true} onClose={closeDropdown} />
       </div>
     {/if}
   {:else}
@@ -919,9 +971,8 @@ SIDEBARSTOREJS
   </ul>
 
   {#if $contextSidebar}
-    <div class="mt-3 border-top pt-2">
-      <svelte:component this={$contextSidebar} {...$contextSidebarProps} />
-    </div>
+    {@const ContextSidebar = $contextSidebar}
+    <div class="mt-3 border-top pt-2"><ContextSidebar {...$contextSidebarProps} /></div>
   {/if}
 </nav>
 
@@ -986,12 +1037,12 @@ AUTHSTOREJS
   {/if}
 
   <div class="mb-3">
-    <label class="form-label">Username</label>
-    <input class="form-control" bind:value={username} onkeydown={handleKeydown} disabled={$loading} />
+    <label class="form-label" for="login-username">Username</label>
+    <input id="login-username" class="form-control" bind:value={username} onkeydown={handleKeydown} disabled={$loading} />
   </div>
   <div class="mb-3">
-    <label class="form-label">Password</label>
-    <input type="password" class="form-control" bind:value={password} onkeydown={handleKeydown} disabled={$loading} />
+    <label class="form-label" for="login-password">Password</label>
+    <input id="login-password" type="password" class="form-control" bind:value={password} onkeydown={handleKeydown} disabled={$loading} />
   </div>
 
   <button class="btn btn-primary w-100" onclick={handleSubmit}
@@ -1066,7 +1117,7 @@ HOMELAYOUT
 
     # Installa dipendenze npm nel container
     echo "Installazione dipendenze frontend..."
-    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install" 2>/dev/null || true
+    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install"
 
     # Configura jms nel PATH del container
     echo "Configurazione jms nel PATH..."
