@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
+INSTALLER_DIR=$(dirname "$0")
+
 # Mostra help
 show_help() {
     cat << EOF
@@ -195,7 +197,9 @@ setup_pgsql_database() {
     done
 
     if ! docker exec "$DEV_CONTAINER" pg_isready -h"$PGSQL_CONTAINER" -U"$PGSQL_ROOT_USER" >/dev/null 2>&1; then
-        echo "  [WARN] PostgreSQL non raggiungibile"
+        echo "  [ERRORE] PostgreSQL non raggiungibile dopo 5 tentativi."
+        echo "  Causa probabile: container '$PGSQL_CONTAINER' non avviato o rete '$DEV_NETWORK' non configurata."
+        echo "  Verifica con: docker ps -a --filter name=$PGSQL_CONTAINER"
         return 1
     fi
 
@@ -1203,7 +1207,6 @@ HOMELAYOUT
 
     # Configura cmd nel PATH del container
     echo "Configurazione cmd nel PATH..."
-    INSTALLER_DIR=$(dirname "$0")
     mkdir -p bin
     cp "$INSTALLER_DIR/cmd" bin/cmd
     sed -i "s|com\.example|$GROUP_ID|g" bin/cmd
