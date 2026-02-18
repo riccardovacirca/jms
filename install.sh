@@ -7,13 +7,16 @@ show_help() {
 Uso: ./install.sh [OPZIONE]
 
 Opzioni:
-  (nessuna)      Crea ambiente di sviluppo completo
-  --postgres     Installa container PostgreSQL
-  --help, -h     Mostra questo messaggio
+  (nessuna)               Crea ambiente di sviluppo completo
+  --groupid <id>          GroupId Maven (default: com.example)
+  --postgres              Installa container PostgreSQL
+  --help, -h              Mostra questo messaggio
 
 Esempi:
-  ./install.sh              # Prima installazione
-  ./install.sh --postgres   # Aggiungi PostgreSQL
+  ./install.sh                               # Prima installazione
+  ./install.sh --groupid io.mycompany        # GroupId personalizzato
+  ./install.sh --postgres                    # Aggiungi PostgreSQL
+  ./install.sh --groupid io.mycompany --postgres
 EOF
     exit 0
 }
@@ -103,6 +106,27 @@ DEV_CONTAINER="$PROJECT_NAME"
 PGSQL_CONTAINER="$PROJECT_NAME-postgres"
 PGSQL_VOLUME="$PROJECT_NAME-postgres-data"
 
+# Parsing argomenti — estrae --groupid e ricostruisce $@
+GROUP_ID="com.example"
+_NEWARGS=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --groupid)
+            [ -n "$2" ] || { echo "ERRORE: --groupid richiede un valore (es. io.mycompany)"; exit 1; }
+            GROUP_ID="$2"
+            shift 2
+            ;;
+        *)
+            _NEWARGS="${_NEWARGS:+$_NEWARGS }$1"
+            shift
+            ;;
+    esac
+done
+# shellcheck disable=SC2086
+[ -n "$_NEWARGS" ] && set -- $_NEWARGS || set --
+
+GROUP_DIR=$(echo "$GROUP_ID" | tr '.' '/')
+
 # --help
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     show_help
@@ -178,6 +202,12 @@ setup_pgsql_database() {
     echo "  Creazione utente applicazione..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
         -c \"DO \\\$\\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PGSQL_USER') THEN CREATE ROLE \\\"$PGSQL_USER\\\" WITH LOGIN PASSWORD '$PGSQL_PASSWORD'; END IF; END \\\$\\\$;\"" 2>/dev/null || true
+
+    echo "  Creazione database applicazione..."
+    docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
+        -c \"SELECT 1 FROM pg_database WHERE datname = '$PGSQL_NAME'\" | grep -q 1 || \
+         PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d postgres \
+        -c \"CREATE DATABASE \\\"$PGSQL_NAME\\\";\"" 2>/dev/null || true
 
     echo "  Configurazione permessi schema..."
     docker exec "$DEV_CONTAINER" sh -c "PGPASSWORD=\"$PGSQL_ROOT_PASSWORD\" psql -h\"$PGSQL_CONTAINER\" -U\"$PGSQL_ROOT_USER\" -d \"$PGSQL_NAME\" \
@@ -305,11 +335,14 @@ GITIGNORE
         echo "Creazione struttura progetto..."
 
         # --- Java / Undertow ---
-        mkdir -p src/main/java/com/example
+        mkdir -p "src/main/java/$GROUP_DIR"
         mkdir -p src/main/resources/static
         mkdir -p src/main/resources/db/migration
 
-        cat > pom.xml << 'POMXML'
+        # Copia libreria util (dev.jms.util) nel progetto
+        cp -r "$INSTALLER_DIR/lib/." src/main/java/
+
+        cat > pom.xml << 'POMXML_TEMPLATE'
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -330,6 +363,7 @@ GITIGNORE
         <hikari.version>5.1.0</hikari.version>
         <postgresql.version>42.7.3</postgresql.version>
         <flyway.version>10.20.0</flyway.version>
+        <jackson.version>2.17.2</jackson.version>
     </properties>
 
     <dependencies>
@@ -357,6 +391,11 @@ GITIGNORE
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
             <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
     </dependencies>
 
@@ -398,170 +437,213 @@ GITIGNORE
         </plugins>
     </build>
 </project>
-POMXML
+POMXML_TEMPLATE
+        sed -i "s|com\.example|$GROUP_ID|g" pom.xml
 
-        cat > src/main/java/com/example/Config.java << 'CONFIGJAVA'
+        cat > "src/main/java/$GROUP_DIR/Config.java" << 'CONFIGJAVA'
 package com.example;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-/**
- * Carica la configurazione da application.properties (classpath).
- * Le variabili d'ambiente hanno precedenza: "db.host" controlla prima DB_HOST.
- */
 public class Config {
 
-    private final Properties props = new Properties();
+  private final Properties props = new Properties();
 
-    public Config() {
-        try (InputStream in = Config.class.getClassLoader()
-                .getResourceAsStream("application.properties")) {
-            if (in != null) {
-                props.load(in);
-            } else {
-                System.err.println("[warn] application.properties non trovato nel classpath");
-            }
-        } catch (IOException e) {
-            System.err.println("[warn] Errore lettura application.properties: " + e.getMessage());
-        }
+  public Config() {
+    try (InputStream in = Config.class.getClassLoader()
+        .getResourceAsStream("application.properties")) {
+      if (in != null) {
+        props.load(in);
+      } else {
+        System.err.println("[warn] application.properties non trovato nel classpath");
+      }
+    } catch (IOException e) {
+      System.err.println("[warn] Errore lettura application.properties: " + e.getMessage());
     }
+  }
 
-    public String get(String key, String defaultValue) {
-        String envKey = key.toUpperCase().replace('.', '_');
-        String envVal = System.getenv(envKey);
-        if (envVal != null && !envVal.isBlank()) return envVal;
-        return props.getProperty(key, defaultValue);
-    }
+  public String get(String key, String defaultValue) {
+    String envKey = key.toUpperCase().replace('.', '_');
+    String envVal = System.getenv(envKey);
+    if (envVal != null && !envVal.isBlank()) return envVal;
+    return props.getProperty(key, defaultValue);
+  }
 
-    public int getInt(String key, int defaultValue) {
-        try {
-            return Integer.parseInt(get(key, String.valueOf(defaultValue)));
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
+  public int getInt(String key, int defaultValue) {
+    try {
+      return Integer.parseInt(get(key, String.valueOf(defaultValue)));
+    } catch (NumberFormatException e) {
+      return defaultValue;
     }
+  }
 }
 CONFIGJAVA
+        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/Config.java"
 
-        cat > src/main/java/com/example/App.java << 'APPJAVA'
+        cat > "src/main/java/$GROUP_DIR/App.java" << 'APPJAVA'
 package com.example;
 
+import com.example.handler.DbTestHandler;
+import com.example.handler.HelloHandler;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.undertow.Undertow;
 import io.undertow.server.handlers.PathHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
-import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
-
-import java.sql.Connection;
 
 public class App {
 
-    private static HikariDataSource dataSource;
+  private static HikariDataSource dataSource;
 
-    public static void main(String[] args) {
-        Config config = new Config();
-        int port = config.getInt("server.port", 8080);
+  public static void main(String[] args) {
+    Config config = new Config();
+    int port = config.getInt("server.port", 8080);
 
-        initDataSource(config);
-        runMigrations();
+    initDataSource(config);
+    runMigrations();
 
-        // Serve static files bundled in JAR from src/main/resources/static/
-        // (populated by 'npm run build' in the svelte/ project)
-        ResourceHandler staticHandler = new ResourceHandler(
-            new ClassPathResourceManager(App.class.getClassLoader(), "static")
-        ).setWelcomeFiles("index.html");
+    // File statici bundled nel JAR (generati da 'cmd svelte build')
+    ResourceHandler staticHandler = new ResourceHandler(
+      new ClassPathResourceManager(App.class.getClassLoader(), "static")
+    ).setWelcomeFiles("index.html");
 
-        PathHandler paths = new PathHandler(staticHandler)
-            .addPrefixPath("/api/hello", exchange -> {
-                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-                exchange.getResponseSender().send(
-                    "{\"message\":\"Hello from Undertow!\",\"status\":\"ok\"}"
-                );
-            })
-            .addPrefixPath("/api/db/test", exchange -> {
-                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-                if (dataSource == null) {
-                    exchange.setStatusCode(503);
-                    exchange.getResponseSender().send(
-                        "{\"status\":\"error\",\"message\":\"DataSource non inizializzato — verificare application.properties\"}"
-                    );
-                    return;
-                }
-                try (Connection conn = dataSource.getConnection()) {
-                    String version = conn.getMetaData().getDatabaseProductVersion();
-                    exchange.getResponseSender().send(
-                        "{\"status\":\"ok\",\"message\":\"Connessione riuscita\",\"db\":\"" + version + "\"}"
-                    );
-                } catch (Exception e) {
-                    exchange.setStatusCode(500);
-                    exchange.getResponseSender().send(
-                        "{\"status\":\"error\",\"message\":\"" + e.getMessage().replace("\"", "'") + "\"}"
-                    );
-                }
-            });
+    PathHandler paths = new PathHandler(staticHandler)
+      .addPrefixPath("/api/hello", new HelloHandler())
+      .addPrefixPath("/api/db/test", new DbTestHandler(dataSource));
 
-        // Registrare i propri handler qui:
-        // .addPrefixPath("/api/items", new ItemHandler())
+    // Aggiungere qui i propri handler:
+    // .addPrefixPath("/api/items", new ItemHandler(dataSource))
 
-        Undertow server = Undertow.builder()
-            .addHttpListener(port, "0.0.0.0")
-            .setHandler(paths)
-            .build();
+    Undertow server = Undertow.builder()
+      .addHttpListener(port, "0.0.0.0")
+      .setHandler(paths)
+      .build();
 
-        server.start();
-        System.out.println("[info] Server in ascolto sulla porta " + port);
+    server.start();
+    System.out.println("[info] Server in ascolto sulla porta " + port);
+  }
+
+  private static void initDataSource(Config config) {
+    String host     = config.get("db.host", "");
+    String dbPort   = config.get("db.port", "5432");
+    String name     = config.get("db.name", "");
+    String user     = config.get("db.user", "");
+    String password = config.get("db.password", "");
+    int    poolSize = config.getInt("db.pool.size", 10);
+
+    if (host.isBlank() || name.isBlank() || user.isBlank()) {
+      System.out.println("[info] Database non configurato, pool non inizializzato");
+      return;
     }
 
-    private static void initDataSource(Config config) {
-        String host     = config.get("db.host", "");
-        String dbPort   = config.get("db.port", "5432");
-        String name     = config.get("db.name", "");
-        String user     = config.get("db.user", "");
-        String password = config.get("db.password", "");
-        int    poolSize = config.getInt("db.pool.size", 10);
-
-        if (host.isBlank() || name.isBlank() || user.isBlank()) {
-            System.out.println("[info] Database non configurato, pool non inizializzato");
-            return;
-        }
-
-        try {
-            HikariConfig hc = new HikariConfig();
-            hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
-            hc.setUsername(user);
-            hc.setPassword(password);
-            hc.setMaximumPoolSize(poolSize);
-            hc.setInitializationFailTimeout(-1); // non blocca l'avvio se il DB non è disponibile
-            dataSource = new HikariDataSource(hc);
-            System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
-        } catch (Exception e) {
-            System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
-        }
+    try {
+      HikariConfig hc = new HikariConfig();
+      hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
+      hc.setUsername(user);
+      hc.setPassword(password);
+      hc.setMaximumPoolSize(poolSize);
+      hc.setInitializationFailTimeout(-1);
+      dataSource = new HikariDataSource(hc);
+      System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
+    } catch (Exception e) {
+      System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
     }
+  }
 
-    private static void runMigrations() {
-        if (dataSource == null) {
-            System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
-            return;
-        }
-        try {
-            Flyway flyway = Flyway.configure()
-                .dataSource(dataSource)
-                .locations("classpath:db/migration")
-                .load();
-            int applied = flyway.migrate().migrationsExecuted;
-            System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
-        } catch (Exception e) {
-            System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
-        }
+  private static void runMigrations() {
+    if (dataSource == null) {
+      System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
+      return;
     }
+    try {
+      Flyway flyway = Flyway.configure()
+        .dataSource(dataSource)
+        .locations("classpath:db/migration")
+        .load();
+      int applied = flyway.migrate().migrationsExecuted;
+      System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
+    } catch (Exception e) {
+      System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
+    }
+  }
 }
 APPJAVA
+        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/App.java"
+
+        mkdir -p "src/main/java/$GROUP_DIR/handler"
+
+        cat > "src/main/java/$GROUP_DIR/handler/HelloHandler.java" << 'HELLOJAVA'
+package com.example.handler;
+
+import dev.jms.util.Json;
+import io.undertow.server.HttpHandler;
+import io.undertow.server.HttpServerExchange;
+import io.undertow.util.Headers;
+
+import java.util.Map;
+
+public class HelloHandler implements HttpHandler {
+
+  @Override
+  public void handleRequest(HttpServerExchange exchange) {
+    exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+    exchange.getResponseSender().send(
+      Json.encode(Map.of("status", "ok", "message", "Hello from Undertow!"))
+    );
+  }
+}
+HELLOJAVA
+        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/HelloHandler.java"
+
+        cat > "src/main/java/$GROUP_DIR/handler/DbTestHandler.java" << 'DBTESTJAVA'
+package com.example.handler;
+
+import com.zaxxer.hikari.HikariDataSource;
+import dev.jms.util.Json;
+import io.undertow.server.HttpHandler;
+import io.undertow.server.HttpServerExchange;
+import io.undertow.util.Headers;
+
+import java.sql.Connection;
+import java.util.Map;
+
+public class DbTestHandler implements HttpHandler {
+
+  private final HikariDataSource dataSource;
+
+  public DbTestHandler(HikariDataSource dataSource) {
+    this.dataSource = dataSource;
+  }
+
+  @Override
+  public void handleRequest(HttpServerExchange exchange) {
+    exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+    if (dataSource == null) {
+      exchange.setStatusCode(503);
+      exchange.getResponseSender().send(
+        Json.encode(Map.of("status", "error", "message", "DataSource non inizializzato"))
+      );
+      return;
+    }
+    try (Connection conn = dataSource.getConnection()) {
+      String version = conn.getMetaData().getDatabaseProductVersion();
+      exchange.getResponseSender().send(
+        Json.encode(Map.of("status", "ok", "message", "Connessione riuscita", "db", version))
+      );
+    } catch (Exception e) {
+      exchange.setStatusCode(500);
+      exchange.getResponseSender().send(
+        Json.encode(Map.of("status", "error", "message", e.getMessage()))
+      );
+    }
+  }
+}
+DBTESTJAVA
+        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/DbTestHandler.java"
 
         # application.properties — generato con i valori del .env corrente
         # L'utente può modificarlo manualmente; le variabili d'ambiente hanno precedenza
@@ -1119,16 +1201,18 @@ HOMELAYOUT
     echo "Installazione dipendenze frontend..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install"
 
-    # Configura jms nel PATH del container
-    echo "Configurazione jms nel PATH..."
+    # Configura cmd nel PATH del container
+    echo "Configurazione cmd nel PATH..."
+    INSTALLER_DIR=$(dirname "$0")
     mkdir -p bin
-    cp jms bin/jms
-    chmod +x bin/jms
+    cp "$INSTALLER_DIR/cmd" bin/cmd
+    sed -i "s|com\.example|$GROUP_ID|g" bin/cmd
+    chmod +x bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
-        ln -sf /workspace/bin/jms /usr/local/bin/jms
-        chmod +x /workspace/bin/jms
+        ln -sf /workspace/bin/cmd /usr/local/bin/cmd
+        chmod +x /workspace/bin/cmd
     "
-    echo "✓ jms disponibile nel PATH del container"
+    echo "✓ cmd disponibile nel PATH del container"
 
     # README
     echo "# $PROJECT_NAME" > README.md
@@ -1139,6 +1223,10 @@ HOMELAYOUT
         rm -rf .git
         echo "✓ .git rimosso"
     fi
+
+    # Rimuove cmd dalla root (è stato copiato in bin/cmd)
+    rm -f cmd
+    echo "✓ cmd spostato in bin/"
 
     echo ""
     echo "=========================================="
@@ -1156,20 +1244,20 @@ HOMELAYOUT
     echo "  docker exec -it $DEV_CONTAINER bash"
     echo ""
     echo "Comandi disponibili (dentro il container):"
-    echo "  jms app build        # compila → target/service.jar"
-    echo "  jms app start        # avvia backend in background"
-    echo "  jms app stop         # ferma backend"
-    echo "  jms app status       # stato backend"
-    echo "  jms app run          # avvia backend in foreground"
-    echo "  jms svelte build     # build → src/main/resources/static/"
-    echo "  jms svelte run       # Vite dev server con proxy API"
-    echo "  jms db               # CLI PostgreSQL (richiede --postgres)"
-    echo "  jms git push         # commit + push"
-    echo "  jms --help           # tutti i comandi"
+    echo "  cmd app build        # compila → target/service.jar"
+    echo "  cmd app start        # avvia backend in background"
+    echo "  cmd app stop         # ferma backend"
+    echo "  cmd app status       # stato backend"
+    echo "  cmd app run          # avvia backend in foreground"
+    echo "  cmd svelte build     # build → src/main/resources/static/"
+    echo "  cmd svelte run       # Vite dev server con proxy API"
+    echo "  cmd db               # CLI PostgreSQL (richiede --postgres)"
+    echo "  cmd git push         # commit + push"
+    echo "  cmd --help           # tutti i comandi"
     echo ""
     echo "Dev workflow consigliato:"
-    echo "  terminale 1: jms app start"
-    echo "  terminale 2: jms svelte run"
+    echo "  terminale 1: cmd app start"
+    echo "  terminale 2: cmd svelte run"
     echo "  browser:     http://localhost:$VITE_PORT_HOST"
     echo ""
     echo "Altri comandi:"
