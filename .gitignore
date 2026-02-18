@@ -3,5 +3,5 @@
 !lib/**
 !README.md
 !install.sh
-!jms
+!cmd
 !.gitignore
