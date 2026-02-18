@@ -321,6 +321,8 @@ GITIGNORE
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <undertow.version>2.3.12.Final</undertow.version>
+        <hikari.version>5.1.0</hikari.version>
+        <postgresql.version>42.7.3</postgresql.version>
     </properties>
 
     <dependencies>
@@ -328,6 +330,16 @@ GITIGNORE
             <groupId>io.undertow</groupId>
             <artifactId>undertow-core</artifactId>
             <version>${undertow.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikari.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
         </dependency>
     </dependencies>
 
@@ -364,19 +376,73 @@ GITIGNORE
 </project>
 POMXML
 
+        cat > src/main/java/com/example/Config.java << 'CONFIGJAVA'
+package com.example;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
+/**
+ * Carica la configurazione da application.properties (classpath).
+ * Le variabili d'ambiente hanno precedenza: "db.host" controlla prima DB_HOST.
+ */
+public class Config {
+
+    private final Properties props = new Properties();
+
+    public Config() {
+        try (InputStream in = Config.class.getClassLoader()
+                .getResourceAsStream("application.properties")) {
+            if (in != null) {
+                props.load(in);
+            } else {
+                System.err.println("[warn] application.properties non trovato nel classpath");
+            }
+        } catch (IOException e) {
+            System.err.println("[warn] Errore lettura application.properties: " + e.getMessage());
+        }
+    }
+
+    public String get(String key, String defaultValue) {
+        String envKey = key.toUpperCase().replace('.', '_');
+        String envVal = System.getenv(envKey);
+        if (envVal != null && !envVal.isBlank()) return envVal;
+        return props.getProperty(key, defaultValue);
+    }
+
+    public int getInt(String key, int defaultValue) {
+        try {
+            return Integer.parseInt(get(key, String.valueOf(defaultValue)));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+}
+CONFIGJAVA
+
         cat > src/main/java/com/example/App.java << 'APPJAVA'
 package com.example;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import io.undertow.Undertow;
 import io.undertow.server.handlers.PathHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
 
+import java.sql.Connection;
+
 public class App {
 
+    private static HikariDataSource dataSource;
+
     public static void main(String[] args) {
-        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
+        Config config = new Config();
+        int port = config.getInt("server.port", 8080);
+
+        initDataSource(config);
 
         // Serve static files bundled in JAR from src/main/resources/static/
         // (populated by 'npm run build' in the svelte/ project)
@@ -390,9 +456,30 @@ public class App {
                 exchange.getResponseSender().send(
                     "{\"message\":\"Hello from Undertow!\",\"status\":\"ok\"}"
                 );
+            })
+            .addPrefixPath("/api/db/test", exchange -> {
+                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+                if (dataSource == null) {
+                    exchange.setStatusCode(503);
+                    exchange.getResponseSender().send(
+                        "{\"status\":\"error\",\"message\":\"DataSource non inizializzato — verificare application.properties\"}"
+                    );
+                    return;
+                }
+                try (Connection conn = dataSource.getConnection()) {
+                    String version = conn.getMetaData().getDatabaseProductVersion();
+                    exchange.getResponseSender().send(
+                        "{\"status\":\"ok\",\"message\":\"Connessione riuscita\",\"db\":\"" + version + "\"}"
+                    );
+                } catch (Exception e) {
+                    exchange.setStatusCode(500);
+                    exchange.getResponseSender().send(
+                        "{\"status\":\"error\",\"message\":\"" + e.getMessage().replace("\"", "'") + "\"}"
+                    );
+                }
             });
 
-        // Register your handlers here:
+        // Registrare i propri handler qui:
         // .addPrefixPath("/api/items", new ItemHandler())
 
         Undertow server = Undertow.builder()
@@ -401,10 +488,59 @@ public class App {
             .build();
 
         server.start();
-        System.out.println("[info] Server listening on port " + port);
+        System.out.println("[info] Server in ascolto sulla porta " + port);
+    }
+
+    private static void initDataSource(Config config) {
+        String host     = config.get("db.host", "");
+        String dbPort   = config.get("db.port", "5432");
+        String name     = config.get("db.name", "");
+        String user     = config.get("db.user", "");
+        String password = config.get("db.password", "");
+        int    poolSize = config.getInt("db.pool.size", 10);
+
+        if (host.isBlank() || name.isBlank() || user.isBlank()) {
+            System.out.println("[info] Database non configurato, pool non inizializzato");
+            return;
+        }
+
+        try {
+            HikariConfig hc = new HikariConfig();
+            hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
+            hc.setUsername(user);
+            hc.setPassword(password);
+            hc.setMaximumPoolSize(poolSize);
+            hc.setInitializationFailTimeout(-1); // non blocca l'avvio se il DB non è disponibile
+            dataSource = new HikariDataSource(hc);
+            System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
+        } catch (Exception e) {
+            System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+        }
     }
 }
 APPJAVA
+
+        # application.properties — generato con i valori del .env corrente
+        # L'utente può modificarlo manualmente; le variabili d'ambiente hanno precedenza
+        cat > src/main/resources/application.properties << EOF
+# ============================================================
+# Configurazione applicazione — modificare manualmente se necessario
+# Le variabili d'ambiente hanno precedenza (es. DB_HOST sovrascrive db.host)
+# ============================================================
+
+# Server
+server.port=${API_PORT:-8080}
+
+# Database (PostgreSQL)
+# In sviluppo: db.host è il nome del container sulla rete Docker
+# In produzione: sostituire con hostname o IP del server PostgreSQL
+db.host=${PGSQL_CONTAINER}
+db.port=${PGSQL_PORT:-5432}
+db.name=${PGSQL_NAME}
+db.user=${PGSQL_USER}
+db.password=${PGSQL_PASSWORD}
+db.pool.size=10
+EOF
 
         echo "Struttura Java creata"
 
