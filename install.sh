@@ -415,7 +415,7 @@ GITIGNORE
     </build>
 </project>
 POMXML_TEMPLATE
-        sed -i "s|com\.example|$GROUP_ID|g" pom.xml
+        sed -i '' "s|com\.example|$GROUP_ID|g" pom.xml
 
         cat > "src/main/java/$GROUP_DIR/Config.java" << 'CONFIGJAVA'
 package com.example;
@@ -457,7 +457,7 @@ public class Config {
   }
 }
 CONFIGJAVA
-        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/Config.java"
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/Config.java"
 
         cat > "src/main/java/$GROUP_DIR/App.java" << 'APPJAVA'
 package com.example;
@@ -550,7 +550,7 @@ public class App {
   }
 }
 APPJAVA
-        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/App.java"
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/App.java"
 
         mkdir -p "src/main/java/$GROUP_DIR/handler"
 
@@ -573,7 +573,7 @@ public class HelloHandler implements Handler
   }
 }
 HELLOJAVA
-        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/HelloHandler.java"
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/HelloHandler.java"
 
         cat > "src/main/java/$GROUP_DIR/handler/DbTestHandler.java" << 'DBTESTJAVA'
 package com.example.handler;
@@ -610,7 +610,7 @@ public class DbTestHandler implements Handler
   }
 }
 DBTESTJAVA
-        sed -i "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/DbTestHandler.java"
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/DbTestHandler.java"
 
         # application.properties — generato con i valori del .env corrente
         # L'utente può modificarlo manualmente; le variabili d'ambiente hanno precedenza
@@ -1200,7 +1200,7 @@ HOMELAYOUT
     echo "Setting up cmd tool..."
     mkdir -p bin
     cp "$INSTALLER_DIR/cmd" bin/cmd
-    sed -i "s|com\.example|$GROUP_ID|g" bin/cmd
+    sed -i '' "s|com\.example|$GROUP_ID|g" bin/cmd
     chmod +x bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
         ln -sf /workspace/bin/cmd /usr/local/bin/cmd
