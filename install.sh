@@ -33,6 +33,7 @@ generate_env_file() {
 # ========================================
 PROJECT_NAME=PROJECT_DIR_PLACEHOLDER
 JAVA_VERSION=21
+ARTIFACT_VERSION=1.0.0
 
 # ========================================
 # Development
