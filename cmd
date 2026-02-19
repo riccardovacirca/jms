@@ -252,6 +252,7 @@ app_dev() {
 
     while true; do
         inotifywait -r -q -e modify,close_write,create,delete,moved_to \
+            --exclude '.*/resources/static(/.*)?$' \
             "$WORKSPACE/src/" "$WORKSPACE/pom.xml" 2>/dev/null || true
         sleep 0.3
         info "[dev] Change detected — recompiling..."
