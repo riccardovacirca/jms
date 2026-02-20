@@ -75,7 +75,7 @@ HELPEOF
 
 APP_JAR="$WORKSPACE/target/service.jar"
 APP_PID_FILE="/run/service.pid"
-APP_LOG_FILE="/var/log/service.log"
+APP_LOG_FILE="/app/logs/service.log"
 
 app_is_running() {
     if [ -f "$APP_PID_FILE" ]; then

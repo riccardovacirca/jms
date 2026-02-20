@@ -4,34 +4,100 @@
 # Release Script - Production Image Export
 # =============================================================================
 #
-# IMPORTANT: This script must be run from the HOST machine, NOT inside the container
-# Reason: Docker commands are not available inside the development container
+# IMPORTANTE: eseguire dalla macchina HOST, NON dentro il container di sviluppo.
+# I comandi Docker non sono disponibili all'interno del container.
 #
-# Usage: ./bin/release.sh [-v|--vers <version>]
+# Usage: ./release.sh [-v|--vers <version>]
 #
 # Options:
-#   -v, --vers <version>   Specify release version (default: ARTIFACT_VERSION from .env)
+#   -v, --vers <version>   Versione del release (default: ARTIFACT_VERSION da .env)
 #
 # Examples:
-#   ./bin/release.sh              # Uses version from .env (e.g., 0.0.1-SNAPSHOT)
-#   ./bin/release.sh -v 1.0.0     # Creates crm-v1.0.0.tar.gz
+#   ./release.sh              # Usa ARTIFACT_VERSION da .env (es. 1.0.0)
+#   ./release.sh -v 1.2.0     # Forza una versione specifica
 #
-# What this script does:
-# 1. Build Spring Boot application (Maven)
-# 2. Build Svelte GUI (Vite)
-# 3. Create optimized Docker image for production
-# 4. Export image to tar file
-# 5. Generate install.sh script for target server
-# 6. Package everything into release.tar.gz
+# -----------------------------------------------------------------------------
+# PROCEDURA DI RELEASE
+# -----------------------------------------------------------------------------
 #
-# Output: release.tar.gz containing:
-#   - crm-image.tar (Docker image)
-#   - install.sh (installation script for production server)
+# Questo script esegue automaticamente i seguenti passi:
 #
-# Production Server Requirements:
-# - Docker installed
-# - Minimal resources: 512MB RAM, 1 CPU core (staging/beta-test mode)
-# - Port 8080 available
+#   1. Build Java (Maven)      — compila il backend dentro il container di sviluppo
+#                                e produce target/service.jar (fat JAR via Shade plugin)
+#   2. Build Svelte (Vite)     — compila il frontend e lo deposita in
+#                                src/main/resources/static/ (bundled nel JAR al passo 1)
+#   3. Dockerfile produzione   — genera un Dockerfile temporaneo basato su
+#                                ubuntu:24.04 + openjdk-21-jre-headless
+#   4. Docker image            — costruisce l'immagine di produzione con tag
+#                                <project>-app:latest e <project>-app:<version>
+#   5. Export tar              — esporta l'immagine in <project>-image.tar
+#   6. install.sh              — genera lo script di installazione per il server
+#                                di destinazione (vedi sezione INSTALLAZIONE)
+#      Package finale          — impacchetta tar + install.sh in
+#                                release/<project>-v<version>.tar.gz
+#
+# Output: release/<project>-v<version>.tar.gz contenente:
+#   - <project>-image.tar   (immagine Docker completa, standalone)
+#   - install.sh            (script di installazione per il server di destinazione)
+#
+# -----------------------------------------------------------------------------
+# INSTALLAZIONE SUL SERVER DI DESTINAZIONE
+# -----------------------------------------------------------------------------
+#
+# Trasferire il package e installare:
+#
+#   scp release/<project>-v<version>.tar.gz user@server:/tmp/
+#   ssh user@server
+#   cd /tmp && tar -xzf <project>-v<version>.tar.gz
+#   ./install.sh
+#
+# install.sh esegue sul server:
+#   1. docker load          — carica l'immagine dal tar nel Docker locale
+#   2. docker network       — crea la rete <project>-net se non esiste
+#   3. docker run           — avvia il container di produzione
+#
+# Requisiti sul server di destinazione:
+#   - Docker installato e running
+#   - Utente nel gruppo docker (non richiede sudo)
+#   - Porta RELEASE_PORT (default 8080) disponibile
+#   - Almeno 512 MB RAM disponibili
+#
+# -----------------------------------------------------------------------------
+# POLICY LOG
+# -----------------------------------------------------------------------------
+#
+# I log dell'applicazione sono scritti da logback in /app/logs/ dentro
+# il container (file: service.log, rotazione giornaliera con compressione gzip).
+#
+# Sviluppo:
+#   - /app/logs/ è montato via bind mount su ./logs/ nella cartella progetto
+#   - I log sono direttamente accessibili sul filesystem dell'host
+#   - La cartella ./logs/ è esclusa da git (.gitignore)
+#
+# Produzione:
+#   - /app/logs/ è montato su un Docker named volume: <project>-logs
+#   - Il volume è gestito da Docker, non richiede directory di sistema
+#   - Sopravvive ai restart e agli aggiornamenti del container
+#   - Accesso ai log: docker logs <project>-production
+#                     oppure: docker exec <project>-production ls /app/logs/
+#
+# -----------------------------------------------------------------------------
+# POLICY NETWORK
+# -----------------------------------------------------------------------------
+#
+# Il container di produzione utilizza la stessa rete Docker del container
+# di sviluppo (<project>-net), in modo da poter raggiungere gli altri
+# servizi sulla rete (es. PostgreSQL) tramite hostname del container.
+#
+# La rete viene creata automaticamente da install.sh se non esiste.
+#
+# -----------------------------------------------------------------------------
+# REQUISITI MACCHINA DI SVILUPPO (per eseguire questo script)
+# -----------------------------------------------------------------------------
+#
+#   - Docker installato e running
+#   - Container di sviluppo attivo (./install.sh deve essere stato eseguito)
+#   - File .env presente nella root del progetto
 #
 # =============================================================================
 
@@ -59,7 +125,7 @@ while [[ $# -gt 0 ]]; do
             echo "Opzione sconosciuta: $1"
             echo "Uso: $0 [-v|--vers <versione>]"
             echo ""
-            echo "Se -v non specificata, usa ARTIFACT_VERSION da .env (default: 1.0.0)"
+            echo "Se -v non specificata, usa ARTIFACT_VERSION da .env"
             exit 1
             ;;
     esac
@@ -69,10 +135,10 @@ done
 # Configuration
 # =============================================================================
 
-WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
+WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
 RELEASE_DIR="$WORKSPACE/release"
 IMAGE_TAG="latest"
-TAR_NAME="crm-image.tar"
+JAR_FILE="$WORKSPACE/target/service.jar"
 
 # =============================================================================
 # Pre-flight checks
@@ -103,11 +169,10 @@ if [ -f "$WORKSPACE/.env" ]; then
     set +a
 else
     warn ".env file not found. Using default values."
-    PROJECT_NAME="crm"
-    ARTIFACT_VERSION="1.0-SNAPSHOT"
+    PROJECT_NAME="app"
 fi
 
-# Use VERSION from argument or ARTIFACT_VERSION from .env
+# Use VERSION from argument or default
 if [ -z "$VERSION" ]; then
     VERSION="${ARTIFACT_VERSION:-1.0.0}"
     info "Using version from .env: $VERSION"
@@ -116,22 +181,21 @@ else
 fi
 
 # Set release configuration with defaults if not in .env
-: ${RELEASE_JRE_IMAGE:=eclipse-temurin:21-jre-alpine}
+: ${RELEASE_IMAGE:=ubuntu:24.04}
 : ${RELEASE_MEMORY_LIMIT:=512m}
 : ${RELEASE_MEMORY_RESERVATION:=256m}
 : ${RELEASE_CPU_LIMIT:=1.0}
 : ${RELEASE_CPU_RESERVATION:=0.5}
 : ${RELEASE_PORT:=8080}
-: ${RELEASE_JVM_XMS:=256m}
-: ${RELEASE_JVM_XMX:=512m}
-: ${RELEASE_JVM_METASPACE:=128m}
 : ${RELEASE_APP_USER:=appuser}
 : ${RELEASE_APP_USER_UID:=1001}
 : ${RELEASE_APP_USER_GID:=1001}
 
 # Derived variables
 IMAGE_NAME="${PROJECT_NAME}-app"
+TAR_NAME="${PROJECT_NAME}-image.tar"
 RELEASE_PACKAGE="${PROJECT_NAME}-v${VERSION}.tar.gz"
+DEV_NETWORK="${PROJECT_NAME}${DEV_NETWORK_SUFFIX:--net}"
 
 info "Project: $PROJECT_NAME"
 info "Version: $VERSION"
@@ -152,10 +216,10 @@ mkdir -p "$RELEASE_DIR"
 success "Release directory prepared: $RELEASE_DIR"
 
 # =============================================================================
-# Step 1: Build Spring Boot Application
+# Step 1: Build Java Application
 # =============================================================================
 
-info "Step 1/6: Building Spring Boot application..."
+info "Step 1/6: Building Java application (Undertow/Maven)..."
 
 # DEBUG: If this fails, check:
 # - Maven is installed: mvn --version
@@ -164,17 +228,15 @@ info "Step 1/6: Building Spring Boot application..."
 # - Java version matches pom.xml requirements
 
 cd "$WORKSPACE"
-docker exec crm bash -c "cd /usr/src/app && bin/cmd app build" || {
-    error "Failed to build Spring Boot application. Check Maven logs above."
+docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd app build" || {
+    error "Failed to build Java application. Check Maven logs above."
 }
-
-JAR_FILE="$WORKSPACE/target/${PROJECT_NAME}-${ARTIFACT_VERSION}.jar"
 
 if [ ! -f "$JAR_FILE" ]; then
     error "JAR file not found: $JAR_FILE. Build may have failed silently."
 fi
 
-success "Spring Boot application built: $JAR_FILE"
+success "Java application built: $JAR_FILE"
 
 # =============================================================================
 # Step 2: Build Svelte GUI
@@ -184,11 +246,11 @@ info "Step 2/6: Building Svelte GUI..."
 
 # DEBUG: If this fails, check:
 # - Node.js and npm are installed in container
-# - gui/package.json exists and is valid
-# - All npm dependencies are installed: cd gui && npm install
-# - Vite config is correct: gui/vite.config.js
+# - svelte/package.json exists and is valid
+# - All npm dependencies are installed: cd svelte && npm install
+# - Vite config is correct: svelte/vite.config.js
 
-docker exec crm bash -c "cd /usr/src/app && bin/cmd gui build" || {
+docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd svelte build" || {
     error "Failed to build Svelte GUI. Check npm/vite logs above."
 }
 
@@ -207,32 +269,39 @@ success "Svelte GUI built: $STATIC_DIR"
 info "Step 3/6: Creating production Dockerfile..."
 
 # DEBUG: This Dockerfile uses:
-# - eclipse-temurin:21-jre-alpine for minimal image size
+# - ubuntu:24.04 with openjdk-21-jre-headless for consistency with dev environment
 # - Non-root user for security
 # - Health check endpoint
 # If image build fails:
-# - Check if base image is available: docker pull eclipse-temurin:21-jre-alpine
+# - Check if base image is available: docker pull ubuntu:24.04
 # - Verify JAR file path is correct
 # - Check EXPOSE port matches application.properties
 
 cat > "$RELEASE_DIR/Dockerfile" << DOCKERFILE_EOF
-# Production Dockerfile for CRM Application
-# Uses minimal JRE image for smaller size and better security
+# Production Dockerfile
+# Uses Ubuntu 24.04 with OpenJDK 21 JRE
 
-FROM ${RELEASE_JRE_IMAGE}
+FROM ${RELEASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    openjdk-21-jre-headless \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup -g ${RELEASE_APP_USER_GID} -S ${RELEASE_APP_USER} && \\
-    adduser -u ${RELEASE_APP_USER_UID} -S ${RELEASE_APP_USER} -G ${RELEASE_APP_USER}
+RUN groupadd -g ${RELEASE_APP_USER_GID} ${RELEASE_APP_USER} && \\
+    useradd -u ${RELEASE_APP_USER_UID} -g ${RELEASE_APP_USER} -s /bin/sh -M ${RELEASE_APP_USER}
 
 # Copy application JAR
 COPY app.jar /app/app.jar
 
-# Create directories for data and logs
-RUN mkdir -p /app/data /app/logs && \\
+# Create log directory
+RUN mkdir -p /app/logs && \\
     chown -R ${RELEASE_APP_USER}:${RELEASE_APP_USER} /app
 
 # Switch to non-root user
@@ -243,18 +312,10 @@ EXPOSE ${RELEASE_PORT}
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \\
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${RELEASE_PORT}/api/status/health || exit 1
-
-# Set JVM options for limited resources (staging/beta environment)
-# -Xms${RELEASE_JVM_XMS}: Initial heap size
-# -Xmx${RELEASE_JVM_XMX}: Maximum heap size (matches container memory limit)
-# -XX:MaxMetaspaceSize=${RELEASE_JVM_METASPACE}: Metaspace limit
-# -XX:+UseSerialGC: Serial GC for low memory footprint
-# These settings prioritize stability over performance for underprovisioned servers
-ENV JAVA_OPTS="-Xms${RELEASE_JVM_XMS} -Xmx${RELEASE_JVM_XMX} -XX:MaxMetaspaceSize=${RELEASE_JVM_METASPACE} -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom"
+    CMD curl -f http://localhost:${RELEASE_PORT}/api/status/health || exit 1
 
 # Run application
-ENTRYPOINT ["sh", "-c", "java \$JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 DOCKERFILE_EOF
 
 success "Production Dockerfile created"
@@ -321,7 +382,7 @@ info "Step 6/6: Generating installation script..."
 # - Check Docker service is running: systemctl status docker
 # - Verify port 8080 is available: netstat -tuln | grep 8080
 # - Check disk space on production: df -h
-# - Verify tar file was transferred correctly: md5sum crm-image.tar
+# - Verify tar file was transferred correctly: md5sum ${TAR_NAME}
 
 cat > "$RELEASE_DIR/install.sh" << INSTALL_EOF
 #!/bin/bash
@@ -338,7 +399,7 @@ cat > "$RELEASE_DIR/install.sh" << INSTALL_EOF
 # - At least 1GB disk space
 # - At least ${RELEASE_MEMORY_LIMIT} RAM available
 #
-# Usage: sudo ./install.sh (or ./install.sh if running as root)
+# Usage: ./install.sh
 #
 # =============================================================================
 
@@ -351,9 +412,9 @@ success() { printf '\\033[0;32m✓ SUCCESS: %s\\033[0m\\n' "\$1"; }
 
 # Configuration
 CONTAINER_NAME="${PROJECT_NAME}-production"
-IMAGE_TAR="crm-image.tar"
-DATA_DIR="/var/lib/${PROJECT_NAME}/data"
-LOGS_DIR="/var/lib/${PROJECT_NAME}/logs"
+IMAGE_TAR="${TAR_NAME}"
+LOG_VOLUME="${PROJECT_NAME}-logs"
+NETWORK="${DEV_NETWORK}"
 APP_PORT="${RELEASE_PORT}"
 APP_USER_UID="${RELEASE_APP_USER_UID}"
 APP_USER_GID="${RELEASE_APP_USER_GID}"
@@ -364,13 +425,8 @@ MEMORY_RESERVATION="${RELEASE_MEMORY_RESERVATION}"
 CPU_LIMIT="${RELEASE_CPU_LIMIT}"
 CPU_RESERVATION="${RELEASE_CPU_RESERVATION}"
 
-info "CRM Application - Production Installation"
+info "${PROJECT_NAME} Application - Production Installation"
 info "=========================================="
-
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    error "Please run as root (use sudo)"
-fi
 
 # Check Docker
 if ! command -v docker >/dev/null 2>&1; then
@@ -382,20 +438,20 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # Check if image tar exists
-if [ ! -f "$IMAGE_TAR" ]; then
-    error "Image file not found: $IMAGE_TAR"
+if [ ! -f "\$IMAGE_TAR" ]; then
+    error "Image file not found: \$IMAGE_TAR"
 fi
 
 info "Loading Docker image..."
-docker load -i "$IMAGE_TAR" || error "Failed to load Docker image"
+docker load -i "\$IMAGE_TAR" || error "Failed to load Docker image"
 success "Docker image loaded"
 
-# Create data directories
-info "Creating data directories..."
-mkdir -p "\$DATA_DIR" "\$LOGS_DIR"
-chown -R "\$APP_USER_UID:\$APP_USER_GID" "\$DATA_DIR" "\$LOGS_DIR"
-chmod 755 "\$DATA_DIR" "\$LOGS_DIR"
-success "Data directories created"
+# Create network if not exists
+if ! docker network ls --format '{{.Name}}' | grep -q "^\${NETWORK}\$"; then
+    info "Creating Docker network \${NETWORK}..."
+    docker network create "\$NETWORK" >/dev/null
+    success "Network created: \$NETWORK"
+fi
 
 # Stop and remove existing container if exists
 if docker ps -a --format '{{.Names}}' | grep -q "^\${CONTAINER_NAME}\$"; then
@@ -414,14 +470,13 @@ info "  Port: \$APP_PORT"
 docker run -d \\
     --name "\$CONTAINER_NAME" \\
     --restart unless-stopped \\
+    --network="\$NETWORK" \\
     --memory="\$MEMORY_LIMIT" \\
     --memory-reservation="\$MEMORY_RESERVATION" \\
     --cpus="\$CPU_LIMIT" \\
     --cpu-shares=512 \\
     -p "\${APP_PORT}:${RELEASE_PORT}" \\
-    -v "\${DATA_DIR}:/app/data" \\
-    -v "\${LOGS_DIR}:/app/logs" \\
-    -e SPRING_PROFILES_ACTIVE=production \\
+    -v "\${LOG_VOLUME}:/app/logs" \\
     ${IMAGE_NAME}:latest || error "Failed to start container"
 
 success "Container started: \$CONTAINER_NAME"
@@ -429,8 +484,9 @@ success "Container started: \$CONTAINER_NAME"
 # Wait for application to be ready
 info "Waiting for application to start (max 60 seconds)..."
 COUNTER=0
-while [ \$COUNTER -lt 60 ]; do
-    if docker exec "\$CONTAINER_NAME" wget --no-verbose --tries=1 --spider http://localhost:${RELEASE_PORT}/api/status/health 2>/dev/null; then
+while [ \$COUNTER -lt 30 ]; do
+    STATUS=\$(docker inspect -f '{{.State.Status}}' "\$CONTAINER_NAME" 2>/dev/null)
+    if [ "\$STATUS" = "running" ]; then
         success "Application is ready!"
         break
     fi
@@ -438,8 +494,8 @@ while [ \$COUNTER -lt 60 ]; do
     COUNTER=\$((COUNTER + 2))
 done
 
-if [ \$COUNTER -ge 60 ]; then
-    error "Application failed to start within 60 seconds. Check logs: docker logs \$CONTAINER_NAME"
+if [ "\$STATUS" != "running" ]; then
+    error "Application failed to start. Check logs: docker logs \$CONTAINER_NAME"
 fi
 
 # Display status
@@ -450,15 +506,14 @@ info "Application Details:"
 info "  Container: \$CONTAINER_NAME"
 info "  Status: \$(docker inspect -f '{{.State.Status}}' \$CONTAINER_NAME)"
 info "  URL: http://localhost:\${APP_PORT}"
-info "  Data: \$DATA_DIR"
-info "  Logs: \$LOGS_DIR"
+info "  Log volume: \$LOG_VOLUME"
 echo ""
 info "Useful commands:"
 info "  View logs:    docker logs -f \$CONTAINER_NAME"
 info "  Stop:         docker stop \$CONTAINER_NAME"
 info "  Start:        docker start \$CONTAINER_NAME"
 info "  Restart:      docker restart \$CONTAINER_NAME"
-info "  Shell access: docker exec -it \$CONTAINER_NAME sh"
+info "  Shell access: docker exec -it \$CONTAINER_NAME bash"
 info "  Remove:       docker stop \$CONTAINER_NAME && docker rm \$CONTAINER_NAME"
 echo ""
 INSTALL_EOF
@@ -513,15 +568,15 @@ echo ""
 info "2. On production server, extract and install:"
 info "   cd /tmp"
 info "   tar -xzf $RELEASE_PACKAGE"
-info "   ./install.sh  # (no sudo needed if running as root)"
+info "   ./install.sh"
 echo ""
 info "Production container configuration:"
 info "  Container name: ${PROJECT_NAME}-production"
 info "  Memory: ${RELEASE_MEMORY_LIMIT} (reserved: ${RELEASE_MEMORY_RESERVATION})"
 info "  CPU: ${RELEASE_CPU_LIMIT} cores (reserved: ${RELEASE_CPU_RESERVATION})"
 info "  Port: ${RELEASE_PORT}"
+info "  Network: ${DEV_NETWORK}"
 info "  User: ${RELEASE_APP_USER} (UID: ${RELEASE_APP_USER_UID}, GID: ${RELEASE_APP_USER_GID})"
-info "  JVM: -Xms${RELEASE_JVM_XMS} -Xmx${RELEASE_JVM_XMX}"
 info "  Mode: Staging/Beta-test (optimized for limited resources)"
 echo ""
 info "Docker images created:"

@@ -1,4 +1,115 @@
 #!/bin/sh
+# =============================================================================
+# Install Script - Development Environment Setup
+# =============================================================================
+#
+# Usage: ./install.sh [OPTIONS]
+#
+# Options:
+#   (nessuna)               Crea o riavvia l'ambiente di sviluppo completo
+#   --groupid <id>          Maven GroupId (default: com.example)
+#   --postgres              Aggiunge il container PostgreSQL
+#   --help, -h              Mostra questo messaggio
+#
+# Examples:
+#   ./install.sh                                # Primo install o riavvio
+#   ./install.sh --groupid io.mycompany         # GroupId personalizzato
+#   ./install.sh --postgres                     # Aggiunge PostgreSQL
+#   ./install.sh --groupid io.mycompany --postgres
+#
+# -----------------------------------------------------------------------------
+# PROCEDURA DI INSTALL (primo avvio)
+# -----------------------------------------------------------------------------
+#
+# Al primo avvio (nessun container esistente) lo script esegue:
+#
+#   1. .env                 — genera il file di configurazione nella root
+#                             del progetto se non esiste già
+#   2. Docker network       — crea la rete <project>-net per la comunicazione
+#                             tra i container (dev, postgres, produzione)
+#   3. Dockerfile.dev       — genera un Dockerfile temporaneo basato su
+#                             ubuntu:24.04 con: git, curl, nano, openjdk-21-jdk,
+#                             maven, inotify-tools, nodejs
+#   4. Docker image         — costruisce l'immagine <project>-dev:latest
+#   5. Docker container     — avvia il container di sviluppo con:
+#                               - bind mount PWD → /workspace (sorgenti)
+#                               - bind mount ./logs/ → /app/logs (log applicazione)
+#                               - porte API e Vite esposte sull'host
+#   6. Scaffolding          — genera la struttura del progetto solo se pom.xml
+#                             non esiste: pom.xml, App.java, handler di esempio,
+#                             logback.xml, application.properties, struttura Svelte 5
+#   7. npm install          — installa le dipendenze frontend nel container
+#   8. cmd tool             — copia bin/cmd nel container e lo registra come
+#                             comando globale /usr/local/bin/cmd
+#
+# Al riavvio (container già esistente ma fermo):
+#   - Se il container esiste ma è fermo: docker start
+#   - Se il container è già running: nessuna azione
+#
+# -----------------------------------------------------------------------------
+# PROCEDURA DI INSTALL (--postgres)
+# -----------------------------------------------------------------------------
+#
+# Aggiunge PostgreSQL all'ambiente di sviluppo esistente:
+#
+#   1. Verifica che PGSQL_ENABLED=y sia impostato in .env
+#   2. Verifica che il container di sviluppo sia in esecuzione
+#   3. Crea il container PostgreSQL (<project>-postgres) sulla stessa rete
+#   4. Attende che PostgreSQL sia pronto (pg_isready)
+#   5. Crea il database e l'utente applicativo con i permessi necessari
+#
+# -----------------------------------------------------------------------------
+# POLICY LOG
+# -----------------------------------------------------------------------------
+#
+# I log dell'applicazione sono scritti da logback in /app/logs/ dentro
+# il container (file: service.log, rotazione giornaliera con compressione gzip).
+#
+# In sviluppo /app/logs/ è montato via bind mount su ./logs/ nella cartella
+# del progetto host, rendendo i log direttamente accessibili sul filesystem.
+# La cartella ./logs/ viene creata automaticamente prima del docker run
+# con i permessi dell'utente corrente (compatibile con macOS e Linux).
+# La cartella è esclusa da git tramite .gitignore.
+#
+# -----------------------------------------------------------------------------
+# POLICY NETWORK
+# -----------------------------------------------------------------------------
+#
+# Tutti i container del progetto (sviluppo, postgres, produzione) condividono
+# la stessa rete Docker: <project>-net.
+# Questo consente la comunicazione tra i container tramite hostname
+# (es. il container di sviluppo raggiunge postgres come "hello-postgres").
+# La rete viene creata automaticamente se non esiste.
+#
+# -----------------------------------------------------------------------------
+# STRUTTURA DELL'AMBIENTE DI SVILUPPO
+# -----------------------------------------------------------------------------
+#
+#   Host (macOS/Linux)                Container: <project>
+#   ──────────────────                ──────────────────────────────
+#   ./              ──bind mount──►   /workspace      (sorgenti)
+#   ./logs/         ──bind mount──►   /app/logs/      (log applicazione)
+#   localhost:2310  ◄─port mapping─   :8080           (Undertow API)
+#   localhost:2350  ◄─port mapping─   :5173           (Vite dev server)
+#
+# -----------------------------------------------------------------------------
+# COMANDI DISPONIBILI DOPO L'INSTALL
+# -----------------------------------------------------------------------------
+#
+# Entrare nel container:
+#   docker exec -it <project> bash
+#
+# Comandi disponibili dentro il container (tramite cmd):
+#   cmd app build       — compila il backend (Maven)
+#   cmd app dev         — avvia in modalità sviluppo con hot reload (inotifywait)
+#   cmd app run         — avvia il backend compilato in foreground
+#   cmd app start       — avvia il backend compilato in background
+#   cmd svelte run      — avvia il dev server Vite con proxy API
+#   cmd svelte build    — compila il frontend per la produzione
+#   cmd db              — apre la CLI PostgreSQL interattiva
+#   cmd git push/pull   — operazioni git con credenziali da .env
+#
+# =============================================================================
 set -e
 
 INSTALLER_DIR=$(dirname "$0")
@@ -256,15 +367,19 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
+
+RUN mkdir -p /app/logs
 DOCKERFILE
 
         echo "Building development image..."
         docker build -t "$PROJECT_NAME-dev:latest" -f docker/Dockerfile.dev .
 
+        mkdir -p logs
         echo "Starting development container..."
         docker run -it -d \
             --name "$DEV_CONTAINER" \
             -v "$PWD":/workspace \
+            -v "$PWD/logs":/app/logs \
             -w /workspace \
             -p "$API_PORT_HOST:$API_PORT" \
             -p "$VITE_PORT_HOST:$VITE_PORT" \
@@ -290,6 +405,9 @@ docker/
 
 # Environment (contiene credenziali)
 .env
+
+# Log (directory di log del container, non tracciata)
+logs/
 GITIGNORE
     if [ ! -f pom.xml ]; then
         echo "Scaffolding project..."
@@ -645,10 +763,10 @@ EOF
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/var/log/service.log</file>
+        <file>/app/logs/service.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <!-- Rotazione giornaliera, compressione gzip, 30 giorni di storico -->
-            <fileNamePattern>/var/log/service.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <fileNamePattern>/app/logs/service.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
