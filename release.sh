@@ -242,25 +242,25 @@ success "Java application built: $JAR_FILE"
 # Step 2: Build Svelte GUI
 # =============================================================================
 
-info "Step 2/6: Building Svelte GUI..."
+info "Step 2/6: Building Vite frontend..."
 
 # DEBUG: If this fails, check:
 # - Node.js and npm are installed in container
-# - svelte/package.json exists and is valid
-# - All npm dependencies are installed: cd svelte && npm install
-# - Vite config is correct: svelte/vite.config.js
+# - vite/package.json exists and is valid
+# - All npm dependencies are installed: cd vite && npm install
+# - Vite config is correct: vite/vite.config.js
 
-docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd svelte build" || {
-    error "Failed to build Svelte GUI. Check npm/vite logs above."
+docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd vite build" || {
+    error "Failed to build Vite frontend. Check npm/vite logs above."
 }
 
 STATIC_DIR="$WORKSPACE/src/main/resources/static"
 
 if [ ! -d "$STATIC_DIR" ] || [ -z "$(ls -A $STATIC_DIR)" ]; then
-    error "Static files not found in $STATIC_DIR. GUI build may have failed."
+    error "Static files not found in $STATIC_DIR. Frontend build may have failed."
 fi
 
-success "Svelte GUI built: $STATIC_DIR"
+success "Vite frontend built: $STATIC_DIR"
 
 # =============================================================================
 # Step 3: Create Production Dockerfile
@@ -300,8 +300,8 @@ RUN groupadd -g ${RELEASE_APP_USER_GID} ${RELEASE_APP_USER} && \\
 # Copy application JAR
 COPY app.jar /app/app.jar
 
-# Create log directory
-RUN mkdir -p /app/logs && \\
+# Create log and config directories
+RUN mkdir -p /app/logs /app/config && \\
     chown -R ${RELEASE_APP_USER}:${RELEASE_APP_USER} /app
 
 # Switch to non-root user
@@ -374,7 +374,17 @@ success "Docker image exported: $TAR_NAME (Size: $TAR_SIZE)"
 # Step 6: Generate Installation Script
 # =============================================================================
 
-info "Step 6/6: Generating installation script..."
+info "Step 6/6: Generating installation script and configuration file..."
+
+# Copy application.properties into release directory
+PROPS_SRC="$WORKSPACE/src/main/resources/application.properties"
+if [ ! -f "$PROPS_SRC" ]; then
+    error "application.properties not found: $PROPS_SRC"
+fi
+cp "$PROPS_SRC" "$RELEASE_DIR/application.properties"
+success "Configuration file copied: application.properties"
+
+
 
 # DEBUG: This script will be run on the production server
 # If installation fails on production:
@@ -467,6 +477,12 @@ info "  Memory limit: \$MEMORY_LIMIT"
 info "  CPU limit: \$CPU_LIMIT"
 info "  Port: \$APP_PORT"
 
+if [ ! -f "application.properties" ]; then
+    error "application.properties non trovato. Il file deve essere nella stessa cartella di install.sh."
+fi
+
+info "  Config: application.properties"
+
 docker run -d \\
     --name "\$CONTAINER_NAME" \\
     --restart unless-stopped \\
@@ -477,6 +493,7 @@ docker run -d \\
     --cpu-shares=512 \\
     -p "\${APP_PORT}:${RELEASE_PORT}" \\
     -v "\${LOG_VOLUME}:/app/logs" \\
+    --mount type=bind,source=\$(pwd)/application.properties,target=/app/config/application.properties,readonly \\
     ${IMAGE_NAME}:latest || error "Failed to start container"
 
 success "Container started: \$CONTAINER_NAME"
@@ -528,7 +545,7 @@ success "Installation script generated: install.sh"
 info "Packaging release..."
 
 cd "$RELEASE_DIR"
-tar -czf "$RELEASE_PACKAGE" "$TAR_NAME" install.sh || {
+tar -czf "$RELEASE_PACKAGE" "$TAR_NAME" install.sh application.properties || {
     error "Failed to create release package"
 }
 
@@ -548,6 +565,7 @@ rm -f "$RELEASE_DIR/app.jar"
 rm -f "$RELEASE_DIR/Dockerfile"
 rm -f "$RELEASE_DIR/$TAR_NAME"
 rm -f "$RELEASE_DIR/install.sh"
+rm -f "$RELEASE_DIR/application.properties"
 
 # =============================================================================
 # Summary

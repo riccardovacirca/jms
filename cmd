@@ -39,9 +39,9 @@ App (Java Undertow):
   app restart              Restart background process
   app status               Show status
 
-Svelte (Vite):
-  svelte build             Build Svelte for production → src/main/resources/static/
-  svelte run               Run Vite dev server (foreground, with API proxy)
+Vite:
+  vite build               Build for production → src/main/resources/static/
+  vite run                 Run Vite dev server (foreground, with API proxy)
 
 Git:
   git push [-r <path>]     Stage, commit and push
@@ -296,32 +296,32 @@ app_status() {
 }
 
 # ============================================================================
-# Svelte Operations (Vite)
+# Vite Operations
 # ============================================================================
 
-SVELTE_DIR="$WORKSPACE/svelte"
+VITE_DIR="$WORKSPACE/vite"
 
-svelte_build() {
+vite_build() {
     load_env
 
-    [ -d "$SVELTE_DIR" ] || error "Svelte directory not found: $SVELTE_DIR"
+    [ -d "$VITE_DIR" ] || error "Vite directory not found: $VITE_DIR"
 
-    info "Building Svelte application..."
-    cd "$SVELTE_DIR"
+    info "Building Vite application..."
+    cd "$VITE_DIR"
     npm run build
-    success "Svelte build completed → src/main/resources/static/"
+    success "Vite build completed → src/main/resources/static/"
 }
 
-svelte_run() {
+vite_run() {
     load_env
 
-    [ -d "$SVELTE_DIR" ] || error "Svelte directory not found: $SVELTE_DIR"
+    [ -d "$VITE_DIR" ] || error "Vite directory not found: $VITE_DIR"
 
     info "Starting Vite dev server (foreground)..."
     info "URL: http://localhost:${VITE_PORT:-5173}/"
     info "API proxy: /api → http://localhost:${API_PORT:-8080}"
     info "Press Ctrl+C to stop"
-    cd "$SVELTE_DIR"
+    cd "$VITE_DIR"
     npm run dev -- --host 0.0.0.0
 }
 
@@ -761,11 +761,11 @@ case "$1" in
             *) error "Unknown app command: $2. Use: build, dev, run, start, stop, restart, status" ;;
         esac
         ;;
-    svelte)
+    vite)
         case "$2" in
-            build) svelte_build ;;
-            run)   svelte_run ;;
-            *) error "Unknown svelte command: $2. Use: build, run" ;;
+            build) vite_build ;;
+            run)   vite_run ;;
+            *) error "Unknown vite command: $2. Use: build, run" ;;
         esac
         ;;
     git)
