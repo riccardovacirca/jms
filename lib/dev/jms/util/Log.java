@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
  */
 public class Log
 {
-
   private final Logger logger;
 
   private Log(Class<?> clazz)
@@ -22,17 +21,53 @@ public class Log
     return new Log(clazz);
   }
 
-  public void info(String msg)                   { logger.info(msg); }
-  public void info(String msg, Object... args)   { logger.info(msg, args); }
+  public void info(String msg)
+  {
+    logger.info(msg);
+  }
 
-  public void warn(String msg)                   { logger.warn(msg); }
-  public void warn(String msg, Object... args)   { logger.warn(msg, args); }
-  public void warn(String msg, Throwable t)      { logger.warn(msg, t); }
+  public void info(String msg, Object... args)
+  {
+    logger.info(msg, args);
+  }
 
-  public void error(String msg)                  { logger.error(msg); }
-  public void error(String msg, Object... args)  { logger.error(msg, args); }
-  public void error(String msg, Throwable t)     { logger.error(msg, t); }
+  public void warn(String msg)
+  {
+    logger.warn(msg);
+  }
 
-  public void debug(String msg)                  { logger.debug(msg); }
-  public void debug(String msg, Object... args)  { logger.debug(msg, args); }
+  public void warn(String msg, Object... args)
+  {
+    logger.warn(msg, args);
+  }
+
+  public void warn(String msg, Throwable t)
+  {
+    logger.warn(msg, t);
+  }
+
+  public void error(String msg)
+  {
+    logger.error(msg);
+  }
+
+  public void error(String msg, Object... args)
+  {
+    logger.error(msg, args);
+  }
+
+  public void error(String msg, Throwable t)
+  {
+    logger.error(msg, t);
+  }
+
+  public void debug(String msg)
+  {
+    logger.debug(msg);
+  }
+
+  public void debug(String msg, Object... args)
+  {
+    logger.debug(msg, args);
+  }
 }

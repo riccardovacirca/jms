@@ -395,7 +395,7 @@ DOCKERFILE
     cat > .gitignore << 'GITIGNORE'
 # Build artifacts
 target/
-svelte/node_modules/
+frontend/node_modules/
 
 # Vite build output (generato da 'npm run build', non tracciato)
 src/main/resources/static/
@@ -475,6 +475,11 @@ GITIGNORE
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>4.4.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>
@@ -581,41 +586,66 @@ CONFIGJAVA
         cat > "src/main/java/$GROUP_DIR/App.java" << 'APPJAVA'
 package com.example;
 
-import com.example.handler.DbTestHandler;
-import com.example.handler.HelloHandler;
+import com.example.handler.LoginHandler;
+import com.example.handler.LogoutHandler;
+import com.example.handler.RefreshHandler;
+import com.example.handler.SessionHandler;
+import dev.jms.util.Auth;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import javax.sql.DataSource;
+import dev.jms.util.Handler;
 import dev.jms.util.HandlerAdapter;
 import io.undertow.Undertow;
-import io.undertow.server.handlers.PathHandler;
+import io.undertow.server.HttpHandler;
+import io.undertow.server.handlers.PathTemplateHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
+import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
+import java.io.InputStream;
 
-public class App {
-
+public class App
+{
   private static HikariDataSource dataSource;
 
-  public static void main(String[] args) {
-    Config config = new Config();
-    int port = config.getInt("server.port", 8080);
+  public static void main(String[] args)
+  {
+    Config config;
+    int port;
+    ResourceHandler staticHandler;
+    PathTemplateHandler paths;
+    Undertow server;
+
+    config = new Config();
+    port = config.getInt("server.port", 8080);
 
     initDataSource(config);
     runMigrations();
 
-    // File statici bundled nel JAR (generati da 'cmd svelte build')
-    ResourceHandler staticHandler = new ResourceHandler(
-      new ClassPathResourceManager(App.class.getClassLoader(), "static")
-    ).setWelcomeFiles("index.html");
+    Auth.init(
+      config.get("jwt.secret", "dev-secret-change-in-production"),
+      config.getInt("jwt.access.expiry.seconds", 900)
+    );
 
-    PathHandler paths = new PathHandler(staticHandler)
-      .addPrefixPath("/api/hello", new HandlerAdapter(new HelloHandler()))
-      .addPrefixPath("/api/db/test", new HandlerAdapter(new DbTestHandler(dataSource)));
+    staticHandler = new ResourceHandler(
+      new ClassPathResourceManager(App.class.getClassLoader(), "static")
+    );
+
+    paths = new PathTemplateHandler(staticHandler)
+      .add("/",     redirect("/home"))
+      .add("/home", page("module/home/main.html"))
+      .add("/auth", page("module/auth/main.html"))
+      .add("/api/auth/login",   route(new LoginHandler(),   dataSource))
+      .add("/api/auth/session", route(new SessionHandler(), dataSource))
+      .add("/api/auth/logout",  route(new LogoutHandler(),  dataSource))
+      .add("/api/auth/refresh", route(new RefreshHandler(), dataSource));
 
     // Aggiungere qui i propri handler:
-    // .addPrefixPath("/api/items", new HandlerAdapter(new ItemHandler(dataSource)))
+    // .add("/api/users",      route(new UserHandler(), dataSource))
+    // .add("/api/users/{id}", route(new UserHandler(), dataSource))
 
-    Undertow server = Undertow.builder()
+    server = Undertow.builder()
       .addHttpListener(port, "0.0.0.0")
       .setHandler(paths)
       .build();
@@ -624,47 +654,95 @@ public class App {
     System.out.println("[info] Server in ascolto sulla porta " + port);
   }
 
-  private static void initDataSource(Config config) {
-    String host     = config.get("db.host", "");
-    String dbPort   = config.get("db.port", "5432");
-    String name     = config.get("db.name", "");
-    String user     = config.get("db.user", "");
-    String password = config.get("db.password", "");
-    int    poolSize = config.getInt("db.pool.size", 10);
+  private static HttpHandler page(String filename)
+  {
+    return exchange -> {
+      InputStream in;
+      byte[] bytes;
+      in = App.class.getClassLoader().getResourceAsStream("static/" + filename);
+      if (in == null) {
+        exchange.setStatusCode(404);
+        exchange.endExchange();
+      } else {
+        bytes = in.readAllBytes();
+        in.close();
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/html; charset=UTF-8");
+        exchange.getResponseSender().send(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+      }
+    };
+  }
+
+  private static HttpHandler redirect(String location)
+  {
+    return exchange -> {
+      exchange.setStatusCode(302);
+      exchange.getResponseHeaders().put(Headers.LOCATION, location);
+      exchange.endExchange();
+    };
+  }
+
+  private static HandlerAdapter route(Handler handler)
+  {
+    return new HandlerAdapter(handler);
+  }
+
+  private static HandlerAdapter route(Handler handler, DataSource dataSource)
+  {
+    return new HandlerAdapter(handler, dataSource);
+  }
+
+  private static void initDataSource(Config config)
+  {
+    String host;
+    String dbPort;
+    String name;
+    String user;
+    String password;
+    int poolSize;
+
+    host = config.get("db.host", "");
+    dbPort = config.get("db.port", "5432");
+    name = config.get("db.name", "");
+    user = config.get("db.user", "");
+    password = config.get("db.password", "");
+    poolSize = config.getInt("db.pool.size", 10);
 
     if (host.isBlank() || name.isBlank() || user.isBlank()) {
       System.out.println("[info] Database non configurato, pool non inizializzato");
-      return;
-    }
-
-    try {
-      HikariConfig hc = new HikariConfig();
-      hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
-      hc.setUsername(user);
-      hc.setPassword(password);
-      hc.setMaximumPoolSize(poolSize);
-      hc.setInitializationFailTimeout(-1);
-      dataSource = new HikariDataSource(hc);
-      System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
-    } catch (Exception e) {
-      System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+    } else {
+      try {
+        HikariConfig hc;
+        hc = new HikariConfig();
+        hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
+        hc.setUsername(user);
+        hc.setPassword(password);
+        hc.setMaximumPoolSize(poolSize);
+        hc.setInitializationFailTimeout(-1);
+        dataSource = new HikariDataSource(hc);
+        System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
+      } catch (Exception e) {
+        System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+      }
     }
   }
 
-  private static void runMigrations() {
+  private static void runMigrations()
+  {
     if (dataSource == null) {
       System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
-      return;
-    }
-    try {
-      Flyway flyway = Flyway.configure()
-        .dataSource(dataSource)
-        .locations("classpath:db/migration")
-        .load();
-      int applied = flyway.migrate().migrationsExecuted;
-      System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
-    } catch (Exception e) {
-      System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
+    } else {
+      try {
+        Flyway flyway;
+        int applied;
+        flyway = Flyway.configure()
+          .dataSource(dataSource)
+          .locations("classpath:db/migration")
+          .load();
+        applied = flyway.migrate().migrationsExecuted;
+        System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
+      } catch (Exception e) {
+        System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
+      }
     }
   }
 }
@@ -673,63 +751,239 @@ APPJAVA
 
         mkdir -p "src/main/java/$GROUP_DIR/handler"
 
-        cat > "src/main/java/$GROUP_DIR/handler/HelloHandler.java" << 'HELLOJAVA'
+        cat > "src/main/java/$GROUP_DIR/handler/LoginHandler.java" << 'LOGINJAVA'
 package com.example.handler;
 
+import dev.jms.util.Auth;
+import dev.jms.util.DB;
+import dev.jms.util.Handler;
+import dev.jms.util.HttpRequest;
+import dev.jms.util.HttpResponse;
+import dev.jms.util.Json;
+import dev.jms.util.Log;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+public class LoginHandler implements Handler
+{
+  private static final Log log = Log.get(LoginHandler.class);
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    HashMap<String, Object> body;
+    String username;
+    String password;
+    ArrayList<HashMap<String, Object>> rows;
+
+    body = Json.decode(req.getBody(), HashMap.class);
+    username = (String) body.get("username");
+    password = (String) body.get("password");
+
+    if (username == null || password == null || username.isBlank() || password.isBlank()) {
+      log.warn("Login fallito: credenziali mancanti");
+      res.status(200).contentType("application/json").err(true).log("Credenziali mancanti").out(null).send();
+    } else {
+      rows = db.select("SELECT id, username, password_hash FROM users WHERE username = ?", username);
+      if (rows.isEmpty() || !Auth.verifyPassword(password, (String) rows.get(0).get("password_hash"))) {
+        log.warn("Login fallito: credenziali non valide per utente '{}'", username);
+        res.status(200).contentType("application/json").err(true).log("Credenziali non valide").out(null).send();
+      } else {
+        HashMap<String, Object> user;
+        int userId;
+        String uname;
+        Auth auth;
+        String accessToken;
+        String refreshToken;
+        LocalDateTime expiresAt;
+        HashMap<String, Object> out;
+
+        user = rows.get(0);
+        userId = DB.toInteger(user.get("id"));
+        uname = (String) user.get("username");
+        auth = Auth.get();
+        accessToken = auth.createAccessToken(userId, uname);
+        refreshToken = Auth.generateRefreshToken();
+        expiresAt = LocalDateTime.now().plusSeconds(Auth.REFRESH_EXPIRY);
+
+        db.query("INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+          refreshToken, userId, DB.toSqlTimestamp(expiresAt));
+
+        out = new HashMap<>();
+        out.put("id", userId);
+        out.put("username", uname);
+
+        res.status(200)
+           .contentType("application/json")
+           .cookie("access_token", accessToken, 15 * 60)
+           .cookie("refresh_token", refreshToken, Auth.REFRESH_EXPIRY)
+           .err(false).log(null).out(out)
+           .send();
+      }
+    }
+  }
+}
+LOGINJAVA
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/LoginHandler.java"
+
+        cat > "src/main/java/$GROUP_DIR/handler/SessionHandler.java" << 'SESSIONJAVA'
+package com.example.handler;
+
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import dev.jms.util.Auth;
+import dev.jms.util.DB;
+import dev.jms.util.Handler;
+import dev.jms.util.HttpRequest;
+import dev.jms.util.HttpResponse;
+import dev.jms.util.Log;
+
+import java.util.HashMap;
+
+public class SessionHandler implements Handler
+{
+  private static final Log log = Log.get(SessionHandler.class);
+
+  @Override
+  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    DecodedJWT jwt;
+
+    token = req.getCookie("access_token");
+
+    if (token == null) {
+      log.warn("Sessione rifiutata: cookie access_token assente");
+      res.status(200).contentType("application/json").err(true).log("Non autenticato").out(null).send();
+    } else {
+      jwt = null;
+      try {
+        jwt = Auth.get().verifyAccessToken(token);
+      } catch (JWTVerificationException e) {
+        log.warn("Sessione rifiutata: token non valido o scaduto");
+      }
+
+      if (jwt != null) {
+        HashMap<String, Object> out;
+        out = new HashMap<>();
+        out.put("id", jwt.getSubject());
+        out.put("username", jwt.getClaim("username").asString());
+        res.status(200).contentType("application/json").err(false).log(null).out(out).send();
+      } else {
+        res.status(200).contentType("application/json").err(true).log("Token non valido o scaduto").out(null).send();
+      }
+    }
+  }
+}
+SESSIONJAVA
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/SessionHandler.java"
+
+        cat > "src/main/java/$GROUP_DIR/handler/LogoutHandler.java" << 'LOGOUTJAVA'
+package com.example.handler;
+
+import dev.jms.util.DB;
 import dev.jms.util.Handler;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 
-import java.util.Map;
-
-public class HelloHandler implements Handler
+public class LogoutHandler implements Handler
 {
-
   @Override
-  public void handle(HttpRequest req, HttpResponse res)
+  public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    res.sendJson(Map.of("status", "ok", "message", "Hello from Undertow!"));
+    String refreshToken;
+
+    refreshToken = req.getCookie("refresh_token");
+
+    if (refreshToken != null) {
+      db.query("DELETE FROM refresh_tokens WHERE token = ?", refreshToken);
+    }
+
+    res.status(200)
+       .contentType("application/json")
+       .cookie("access_token", "", 0)
+       .cookie("refresh_token", "", 0)
+       .err(false).log(null).out(null)
+       .send();
   }
 }
-HELLOJAVA
-        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/HelloHandler.java"
+LOGOUTJAVA
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/LogoutHandler.java"
 
-        cat > "src/main/java/$GROUP_DIR/handler/DbTestHandler.java" << 'DBTESTJAVA'
+        cat > "src/main/java/$GROUP_DIR/handler/RefreshHandler.java" << 'REFRESHJAVA'
 package com.example.handler;
 
-import com.zaxxer.hikari.HikariDataSource;
+import dev.jms.util.Auth;
+import dev.jms.util.DB;
 import dev.jms.util.Handler;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Log;
 
-import java.sql.Connection;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 
-public class DbTestHandler implements Handler
+public class RefreshHandler implements Handler
 {
-
-  private final HikariDataSource dataSource;
-
-  public DbTestHandler(HikariDataSource dataSource)
-  {
-    this.dataSource = dataSource;
-  }
+  private static final Log log = Log.get(RefreshHandler.class);
 
   @Override
-  public void handle(HttpRequest req, HttpResponse res) throws Exception
+  public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    if (dataSource == null) {
-      res.status(503).sendJson(Map.of("status", "error", "message", "DataSource non inizializzato"));
-      return;
-    }
-    try (Connection conn = dataSource.getConnection()) {
-      String version = conn.getMetaData().getDatabaseProductVersion();
-      res.sendJson(Map.of("status", "ok", "message", "Connessione riuscita", "db", version));
+    String refreshToken;
+    ArrayList<HashMap<String, Object>> rows;
+
+    refreshToken = req.getCookie("refresh_token");
+
+    if (refreshToken == null) {
+      log.warn("Refresh rifiutato: cookie refresh_token assente");
+      res.status(200).contentType("application/json").err(true).log("Non autenticato").out(null).send();
+    } else {
+      rows = db.select(
+        "SELECT rt.token, u.id, u.username FROM refresh_tokens rt " +
+        "JOIN users u ON u.id = rt.user_id " +
+        "WHERE rt.token = ? AND rt.expires_at > NOW()",
+        refreshToken
+      );
+
+      if (rows.isEmpty()) {
+        log.warn("Refresh rifiutato: token non trovato o scaduto");
+        res.status(200).contentType("application/json").err(true).log("Token non valido o scaduto").out(null).send();
+      } else {
+        HashMap<String, Object> row;
+        int userId;
+        String username;
+        Auth auth;
+        String newRefreshToken;
+        LocalDateTime expiresAt;
+
+        row = rows.get(0);
+        userId = DB.toInteger(row.get("id"));
+        username = (String) row.get("username");
+        auth = Auth.get();
+        newRefreshToken = Auth.generateRefreshToken();
+        expiresAt = LocalDateTime.now().plusSeconds(Auth.REFRESH_EXPIRY);
+
+        db.query("DELETE FROM refresh_tokens WHERE token = ?", refreshToken);
+        db.query("INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+          newRefreshToken, userId, DB.toSqlTimestamp(expiresAt));
+
+        res.status(200)
+           .contentType("application/json")
+           .cookie("access_token", auth.createAccessToken(userId, username), 15 * 60)
+           .cookie("refresh_token", newRefreshToken, Auth.REFRESH_EXPIRY)
+           .err(false).log(null).out(null)
+           .send();
+      }
     }
   }
 }
-DBTESTJAVA
-        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/DbTestHandler.java"
+REFRESHJAVA
+        sed -i '' "s|com\.example|$GROUP_ID|g" "src/main/java/$GROUP_DIR/handler/RefreshHandler.java"
 
         # application.properties — generato con i valori del .env corrente
         # L'utente può modificarlo manualmente; le variabili d'ambiente hanno precedenza
@@ -751,6 +1005,11 @@ db.name=${PGSQL_NAME}
 db.user=${PGSQL_USER}
 db.password=${PGSQL_PASSWORD}
 db.pool.size=10
+
+# JWT
+# jwt.secret deve essere una stringa lunga e casuale — cambiarla in produzione
+jwt.secret=dev-secret-change-in-production
+jwt.access.expiry.seconds=900
 EOF
 
         cat > src/main/resources/logback.xml << 'LOGBACKXML'
@@ -788,17 +1047,31 @@ LOGBACKXML
 
         # Migrazione iniziale Flyway
         MIGRATION_TS=$(date '+%Y%m%d_%H%M%S')
-        cat > "src/main/resources/db/migration/V${MIGRATION_TS}__init.sql" << 'INITSQL'
--- Migrazione iniziale
--- Aggiungere qui la struttura del database (CREATE TABLE, ecc.)
-INITSQL
+        cat > "src/main/resources/db/migration/V${MIGRATION_TS}__auth.sql" << 'AUTHSQL'
+-- Tabella utenti. password_hash contiene "salt:hash" generato con PBKDF2WithHmacSHA256.
+CREATE TABLE users (
+  id            SERIAL PRIMARY KEY,
+  username      VARCHAR(100) UNIQUE NOT NULL,
+  password_hash VARCHAR(255)        NOT NULL,
+  created_at    TIMESTAMP           NOT NULL DEFAULT NOW()
+);
 
-        # --- Svelte 5 ---
-        mkdir -p svelte/src
+-- Refresh token opachi conservati nel DB per consentire la revoca.
+-- Eliminati in cascata se l'utente viene rimosso.
+CREATE TABLE refresh_tokens (
+  token      VARCHAR(128) PRIMARY KEY,
+  user_id    INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMP    NOT NULL,
+  created_at TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+AUTHSQL
 
-        cat > svelte/package.json << 'PACKAGEJSON'
+        # --- Frontend (Vite + Vanilla JS) ---
+        mkdir -p frontend/src
+
+        cat > frontend/package.json << 'PACKAGEJSON'
 {
-  "name": "svelte",
+  "name": "frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -807,34 +1080,17 @@ INITSQL
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "bootstrap": "^5.3.0"
-  },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "svelte": "^5.0.0",
     "vite": "^6.0.0"
   }
 }
 PACKAGEJSON
 
-        cat > svelte/svelte.config.js << 'SVELTECONFIG'
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
-
-export default {
-  preprocess: vitePreprocess()
-}
-SVELTECONFIG
-
-        cat > svelte/vite.config.js << 'VITECONFIG'
+        cat > frontend/vite.config.js << 'VITECONFIG'
 import { defineConfig } from 'vite'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 export default defineConfig({
-  plugins: [svelte()],
   build: {
-    // Build output goes into the Java resources folder
-    // so Undertow can serve it from the classpath in production
     outDir: '../src/main/resources/static',
     emptyOutDir: true
   },
@@ -842,14 +1098,13 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0',
     proxy: {
-      // In dev: proxy /api/* to Undertow — no CORS needed
       '/api': 'http://localhost:8080'
     }
   }
 })
 VITECONFIG
 
-        cat > svelte/index.html << 'INDEXHTML'
+        cat > frontend/index.html << 'INDEXHTML'
 <!doctype html>
 <html lang="it">
   <head>
@@ -864,457 +1119,14 @@ VITECONFIG
 </html>
 INDEXHTML
 
-        # Crea directory moduli
-        mkdir -p svelte/src/util
-        mkdir -p svelte/src/module/header
-        mkdir -p svelte/src/module/sidebar
-        mkdir -p svelte/src/module/auth
-        mkdir -p svelte/src/module/home
-
-        cat > svelte/src/main.js << 'MAINJS'
-import { mount } from 'svelte'
-import Main from './Main.svelte'
-
-const app = mount(Main, {
-  target: document.getElementById('app')
-})
-
-export default app
+        cat > frontend/src/main.js << 'MAINJS'
+// Entry point
 MAINJS
-
-        cat > svelte/src/store.js << 'STOREJS'
-import { writable, derived, get } from 'svelte/store'
-
-export const auth = writable({ isAuthenticated: false, user: null })
-
-// Moduli privati — aggiungere il nome qui quando si crea un nuovo modulo privato
-const privateModules = [
-  // 'dashboard',
-]
-
-const intendedDestination = writable(null)
-
-function createCurrentModule() {
-  const { subscribe, set } = writable({ name: 'home' })
-  return {
-    subscribe,
-    navigate(name) {
-      const a = get(auth)
-      if (privateModules.includes(name) && !a.isAuthenticated) {
-        intendedDestination.set(name)
-        set({ name: 'auth' })
-      } else {
-        set({ name })
-        history.pushState({ module: name }, '', '/' + name)
-      }
-    },
-    initFromURL() {
-      const name = window.location.pathname.replace('/', '') || 'home'
-      set({ name })
-    }
-  }
-}
-
-export const currentModule     = createCurrentModule()
-export const currentModuleName = derived(currentModule, $m => $m.name)
-
-export function navigateAfterLogin() {
-  const dest = get(intendedDestination)
-  intendedDestination.set(null)
-  currentModule.navigate(dest || 'home')
-}
-
-export async function checkAuth() {
-  try {
-    const res = await fetch('/api/auth/session')
-    if (res.ok) {
-      const data = await res.json()
-      auth.set({ isAuthenticated: true, user: data.user })
-    }
-  } catch (_) {}
-}
-
-export async function logout() {
-  try { await fetch('/api/auth/logout', { method: 'POST' }) } finally {
-    auth.set({ isAuthenticated: false, user: null })
-    currentModule.navigate('home')
-  }
-}
-STOREJS
-
-        cat > svelte/src/Main.svelte << 'MAINSVELTE'
-<script>
-  import { onMount } from 'svelte'
-  import { auth, currentModule, currentModuleName, checkAuth } from './store.js'
-  import HomeLayout    from './module/home/Layout.svelte'
-  import AuthLayout    from './module/auth/Layout.svelte'
-  import SidebarLayout from './module/sidebar/Layout.svelte'
-  import HeaderLayout  from './module/header/Layout.svelte'
-  import 'bootstrap/dist/css/bootstrap.min.css'
-
-  // Registro moduli privati — importare e registrare qui ogni nuovo modulo privato
-  // import DashboardLayout from './module/dashboard/Layout.svelte'
-  const privateRegistry = {
-    // dashboard: DashboardLayout,
-  }
-
-  let loading = $state(true)
-  onMount(async () => { await checkAuth(); loading = false })
-
-  const area = $derived(
-    $currentModuleName === 'home' ? 'home'
-    : $currentModuleName === 'auth' ? 'auth'
-    : $auth.isAuthenticated ? 'private'
-    : 'auth'
-  )
-
-  const privateComponent = $derived(privateRegistry[$currentModuleName] ?? null)
-</script>
-
-{#if loading}
-  <div class="d-flex justify-content-center align-items-center min-vh-100">
-    <div class="spinner-border text-primary" role="status"></div>
-  </div>
-
-{:else if area === 'home'}
-  <HomeLayout />
-
-{:else if area === 'auth'}
-  <AuthLayout />
-
-{:else}
-  <div class="d-flex" style="min-height:100vh">
-    <SidebarLayout />
-    <div class="flex-grow-1 d-flex flex-column">
-      <HeaderLayout />
-      <main class="p-4 flex-grow-1 bg-light">
-        {#if privateComponent}
-          {@const PrivateComponent = privateComponent}
-          <PrivateComponent />
-        {:else}
-          <p class="text-muted">Modulo non trovato.</p>
-        {/if}
-      </main>
-    </div>
-  </div>
-{/if}
-MAINSVELTE
-
-        cat > svelte/src/util/fetchWithRefresh.js << 'FETCHWITHREFRESH'
-let refreshing = false
-let refreshPromise = null
-
-async function refreshToken() {
-  const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-  if (!res.ok) { window.location.href = '/'; throw new Error('Session expired') }
-}
-
-export async function fetchWithRefresh(url, options = {}) {
-  options.credentials = 'include'
-  let res = await fetch(url, options)
-  if (res.status === 401 && !url.includes('/api/auth/')) {
-    if (!refreshing) {
-      refreshing = true
-      refreshPromise = refreshToken().finally(() => { refreshing = false })
-    }
-    await refreshPromise
-    res = await fetch(url, options)
-  }
-  return res
-}
-FETCHWITHREFRESH
-
-        cat > svelte/src/util/logger.js << 'LOGGERJS'
-const CONFIG = { consoleEnabled: true, backendEnabled: false, debugToBackend: false }
-
-function fmt(module, level, message, data) {
-  return `[${new Date().toISOString()}] [${level}] [${module}] ${message}${data ? ' ' + JSON.stringify(data) : ''}`
-}
-
-async function send(module, level, message, data) {
-  try {
-    await fetch('/api/logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ module, level, message, data, timestamp: new Date().toISOString() })
-    })
-  } catch (_) {}
-}
-
-function log(module, level, message, data) {
-  if (CONFIG.consoleEnabled) {
-    level === 'ERROR' ? console.error(fmt(module, level, message, data))
-    : level === 'WARN'  ? console.warn(fmt(module, level, message, data))
-    : console.log(fmt(module, level, message, data))
-  }
-  if (CONFIG.backendEnabled && (level !== 'DEBUG' || CONFIG.debugToBackend))
-    send(module, level, message, data)
-}
-
-export const debug       = (m, msg, d) => log(m, 'DEBUG', msg, d)
-export const info        = (m, msg, d) => log(m, 'INFO',  msg, d)
-export const warn        = (m, msg, d) => log(m, 'WARN',  msg, d)
-export const error       = (m, msg, d) => log(m, 'ERROR', msg, d)
-export const action      = (m, act, d) => log(m, 'INFO',  'action:' + act, d)
-export const api         = (m, method, endpoint, d) => log(m, 'DEBUG', method + ' ' + endpoint, d)
-export const apiResponse = (m, endpoint, ok, d)     => log(m, ok ? 'INFO' : 'ERROR', 'response:' + endpoint, d)
-export const configure   = (opts) => Object.assign(CONFIG, opts)
-LOGGERJS
-
-        cat > svelte/src/module/header/store.js << 'HEADERSTOREJS'
-import { writable } from 'svelte/store'
-
-export const contextHeader      = writable(null)
-export const contextHeaderProps = writable({})
-export const contextTitle       = writable('')
-
-export function setContextHeader(component, props = {}, title = '') {
-  contextHeader.set(component)
-  contextHeaderProps.set(props)
-  contextTitle.set(title)
-}
-
-export function clearContextHeader() {
-  contextHeader.set(null)
-  contextHeaderProps.set({})
-  contextTitle.set('')
-}
-HEADERSTOREJS
-
-        cat > svelte/src/module/header/Layout.svelte << 'HEADERLAYOUT'
-<script>
-  import { contextHeader, contextHeaderProps, contextTitle } from './store.js'
-  import { auth, logout } from '../../store.js'
-
-  let dropdownOpen = $state(false)
-  const toggleDropdown = () => { dropdownOpen = !dropdownOpen }
-  const closeDropdown  = () => { dropdownOpen = false }
-</script>
-
-<header class="app-header d-flex align-items-center px-3 border-bottom bg-white">
-  {#if $contextHeader}
-    {@const ContextHeader = $contextHeader}
-    <button class="btn btn-sm btn-outline-secondary me-1" onclick={toggleDropdown}>
-      <ContextHeader {...$contextHeaderProps} isDropdown={false} />
-      ▾
-    </button>
-    {#if dropdownOpen}
-      <div class="context-dropdown shadow-sm border rounded p-1">
-        <ContextHeader {...$contextHeaderProps} isDropdown={true} onClose={closeDropdown} />
-      </div>
-    {/if}
-  {:else}
-    <span class="fw-medium">{$contextTitle}</span>
-  {/if}
-
-  <div class="ms-auto d-flex align-items-center gap-2">
-    {#if $auth.user}
-      <span class="text-muted small">{$auth.user.username}</span>
-      <button class="btn btn-sm btn-outline-danger" onclick={logout}>Esci</button>
-    {/if}
-  </div>
-</header>
-
-<style>
-  .app-header { height: 56px; position: relative; }
-  .context-dropdown {
-    position: absolute; top: 56px; left: 0;
-    z-index: 100; background: #fff; min-width: 180px;
-  }
-</style>
-HEADERLAYOUT
-
-        cat > svelte/src/module/sidebar/store.js << 'SIDEBARSTOREJS'
-import { writable } from 'svelte/store'
-
-export const contextSidebar      = writable(null)
-export const contextSidebarProps = writable({})
-
-export function setContextSidebar(component, props = {}) {
-  contextSidebar.set(component)
-  contextSidebarProps.set(props)
-}
-
-export function clearContextSidebar() {
-  contextSidebar.set(null)
-  contextSidebarProps.set({})
-}
-SIDEBARSTOREJS
-
-        cat > svelte/src/module/sidebar/Layout.svelte << 'SIDEBARLAYOUT'
-<script>
-  import { contextSidebar, contextSidebarProps } from './store.js'
-  import { currentModule } from '../../store.js'
-
-  // Menu — aggiungere una voce per ogni modulo privato
-  const menuItems = [
-    // { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  ]
-</script>
-
-<nav class="app-sidebar d-flex flex-column p-2">
-  <div class="brand px-2 py-3 fw-bold fs-5">App</div>
-
-  <ul class="nav flex-column gap-1">
-    {#each menuItems as item}
-      <li>
-        <button
-          class="nav-link btn btn-link w-100 text-start text-light"
-          class:active={$currentModule.name === item.id}
-          onclick={() => currentModule.navigate(item.id)}
-        >
-          <span class="me-2">{item.icon}</span>{item.label}
-        </button>
-      </li>
-    {/each}
-  </ul>
-
-  {#if $contextSidebar}
-    {@const ContextSidebar = $contextSidebar}
-    <div class="mt-3 border-top pt-2"><ContextSidebar {...$contextSidebarProps} /></div>
-  {/if}
-</nav>
-
-<style>
-  .app-sidebar { width: 220px; min-height: 100vh; background: #212529; color: #fff; }
-  .nav-link { color: #adb5bd; border-radius: 4px; }
-  .nav-link:hover, .nav-link.active { color: #fff; background: #343a40; }
-</style>
-SIDEBARLAYOUT
-
-        cat > svelte/src/module/auth/store.js << 'AUTHSTOREJS'
-import { writable } from 'svelte/store'
-
-export const loading = writable(false)
-export const error   = writable(null)
-
-export async function login(username, password) {
-  loading.set(true)
-  error.set(null)
-  try {
-    const res  = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    })
-    const data = await res.json()
-    if (!res.ok || data.err) throw new Error(data.err || 'Credenziali non valide')
-    return data
-  } catch (e) {
-    error.set(e.message)
-    return null
-  } finally {
-    loading.set(false)
-  }
-}
-AUTHSTOREJS
-
-        cat > svelte/src/module/auth/LoginComponent.svelte << 'LOGINCOMPONENT'
-<script>
-  import { login, loading, error } from './store.js'
-  import { checkAuth, navigateAfterLogin } from '../../store.js'
-
-  let username = $state('')
-  let password = $state('')
-
-  async function handleSubmit() {
-    const data = await login(username, password)
-    if (data) {
-      await checkAuth()
-      navigateAfterLogin()
-    }
-  }
-
-  function handleKeydown(e) { if (e.key === 'Enter') handleSubmit() }
-</script>
-
-<div class="login-box">
-  <h4 class="mb-4">Accedi</h4>
-
-  {#if $error}
-    <div class="alert alert-danger py-2">{$error}</div>
-  {/if}
-
-  <div class="mb-3">
-    <label class="form-label" for="login-username">Username</label>
-    <input id="login-username" class="form-control" bind:value={username} onkeydown={handleKeydown} disabled={$loading} />
-  </div>
-  <div class="mb-3">
-    <label class="form-label" for="login-password">Password</label>
-    <input id="login-password" type="password" class="form-control" bind:value={password} onkeydown={handleKeydown} disabled={$loading} />
-  </div>
-
-  <button class="btn btn-primary w-100" onclick={handleSubmit}
-    disabled={$loading || !username || !password}>
-    {$loading ? 'Accesso in corso...' : 'Accedi'}
-  </button>
-</div>
-
-<style>
-  .login-box { width: 100%; max-width: 360px; }
-</style>
-LOGINCOMPONENT
-
-        cat > svelte/src/module/auth/Layout.svelte << 'AUTHLAYOUT'
-<script>
-  import LoginComponent from './LoginComponent.svelte'
-</script>
-
-<div class="auth-page d-flex align-items-center justify-content-center min-vh-100 bg-light">
-  <LoginComponent />
-</div>
-AUTHLAYOUT
-
-        cat > svelte/src/module/home/store.js << 'HOMESTOREJS'
-import { writable } from 'svelte/store'
-
-// Store del modulo home — aggiungere stato applicativo qui
-HOMESTOREJS
-
-        cat > svelte/src/module/home/HomeComponent.svelte << 'HOMECOMPONENT'
-<script>
-  import { currentModule } from '../../store.js'
-</script>
-
-<div class="text-center py-5">
-  <h1 class="display-5">Benvenuto</h1>
-  <p class="text-muted">Seleziona un modulo per iniziare.</p>
-</div>
-HOMECOMPONENT
-
-        cat > svelte/src/module/home/Layout.svelte << 'HOMELAYOUT'
-<script>
-  import HomeComponent from './HomeComponent.svelte'
-  import { auth, currentModule } from '../../store.js'
-</script>
-
-<div class="min-vh-100 bg-light">
-  <header class="d-flex align-items-center px-4 py-3 bg-white border-bottom">
-    <span class="fw-bold fs-5">App</span>
-    <div class="ms-auto">
-      {#if $auth.isAuthenticated}
-        <button class="btn btn-sm btn-outline-secondary"
-          onclick={() => currentModule.navigate('home')}>
-          {$auth.user?.username}
-        </button>
-      {:else}
-        <button class="btn btn-sm btn-outline-primary"
-          onclick={() => currentModule.navigate('auth')}>
-          Accedi
-        </button>
-      {/if}
-    </div>
-  </header>
-  <main class="container py-5">
-    <HomeComponent />
-  </main>
-</div>
-HOMELAYOUT
 
     fi
 
     echo "Installing npm dependencies..."
-    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/svelte && npm install"
+    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/frontend && npm install"
 
     echo "Setting up cmd tool..."
     mkdir -p bin

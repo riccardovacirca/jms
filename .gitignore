@@ -1,6 +1,10 @@
 *
 !lib/
 !lib/**
+!static/
+!static/**
+!docs/
+!docs/**
 !README.md
 !install.sh
 !release.sh

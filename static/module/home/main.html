@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>App</title>
+  <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="main.css">
+</head>
+<body>
+  <home-layout></home-layout>
+  <script type="module">
+    import { checkAuth } from '/assets/common/js/store.js'
+    import '/module/home/main.js'
+    await checkAuth()
+  </script>
+</body>
+</html>

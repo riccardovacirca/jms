@@ -1,8 +1,26 @@
 package dev.jms.util;
 
-/** Interfaccia funzionale per gli handler HTTP. Riceve request e response già wrappate. */
-@FunctionalInterface
+/** Interfaccia per gli handler HTTP. Sovrascrivere solo i metodi necessari.
+ *  I metodi non implementati rispondono automaticamente con 405 Method Not Allowed. */
 public interface Handler
 {
-  void handle(HttpRequest req, HttpResponse res) throws Exception;
+  default void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
+  }
+
+  default void post(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
+  }
+
+  default void put(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
+  }
+
+  default void delete(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
+  }
 }

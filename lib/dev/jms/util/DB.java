@@ -11,7 +11,6 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Java database abstraction layer.
@@ -20,18 +19,19 @@ import java.util.Set;
  */
 public class DB
 {
-
   private final DataSource dataSource;
 
   /** Connection bound to current thread */
-  private final ThreadLocal<Connection> connection = new ThreadLocal<>();
+  private final ThreadLocal<Connection> connection;
 
   /** Last generated key bound to current thread */
-  private final ThreadLocal<Long> lastGeneratedKey = ThreadLocal.withInitial(() -> -1L);
+  private final ThreadLocal<Long> lastGeneratedKey;
 
   public DB(DataSource dataSource)
   {
     this.dataSource = dataSource;
+    this.connection = new ThreadLocal<>();
+    this.lastGeneratedKey = ThreadLocal.withInitial(() -> -1L);
   }
 
   // =========================
@@ -40,18 +40,21 @@ public class DB
 
   public void open() throws Exception
   {
-    if (connection.get() != null) {
-      return;
+    Connection c;
+    if (connection.get() == null) {
+      c = dataSource.getConnection();
+      connection.set(c);
     }
-    Connection c = dataSource.getConnection();
-    connection.set(c);
   }
 
   public void close()
   {
-    Connection c = connection.get();
+    Connection c;
+    c = connection.get();
     if (c != null) {
-      try { c.close(); } catch (Exception ignored) {}
+      try {
+        c.close();
+      } catch (Exception ignored) {}
       connection.remove();
       lastGeneratedKey.remove();
     }
@@ -59,17 +62,22 @@ public class DB
 
   public boolean connected()
   {
+    Connection c;
+    boolean result;
+    result = false;
     try {
-      Connection c = connection.get();
-      return c != null && !c.isClosed();
+      c = connection.get();
+      result = c != null && !c.isClosed();
     } catch (SQLException e) {
-      return false;
+      result = false;
     }
+    return result;
   }
 
   private Connection requireConnection() throws Exception
   {
-    Connection c = connection.get();
+    Connection c;
+    c = connection.get();
     if (c == null) {
       throw new Exception("Connection not available (call open())");
     }
@@ -82,20 +90,23 @@ public class DB
 
   public void begin() throws Exception
   {
-    Connection c = requireConnection();
+    Connection c;
+    c = requireConnection();
     c.setAutoCommit(false);
   }
 
   public void commit() throws Exception
   {
-    Connection c = requireConnection();
+    Connection c;
+    c = requireConnection();
     c.commit();
     c.setAutoCommit(true);
   }
 
   public void rollback() throws Exception
   {
-    Connection c = requireConnection();
+    Connection c;
+    c = requireConnection();
     c.rollback();
     c.setAutoCommit(true);
   }
@@ -106,28 +117,31 @@ public class DB
 
   public int query(String sql, Object... params) throws Exception
   {
-    Connection c = requireConnection();
+    Connection c;
+    int rows;
 
+    c = requireConnection();
+    rows = 0;
     try (PreparedStatement stmt = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
       bindParameters(stmt, params);
-      int rows = stmt.executeUpdate();
-
+      rows = stmt.executeUpdate();
       try (ResultSet keys = stmt.getGeneratedKeys()) {
         if (keys.next()) {
-          lastGeneratedKey.set(keys.getLong(1));
+          Object key;
+          key = keys.getObject(1);
+          lastGeneratedKey.set(key instanceof Number ? ((Number) key).longValue() : -1L);
         } else {
           lastGeneratedKey.set(-1L);
         }
       }
-
-      return rows;
     }
+    return rows;
   }
 
   public long lastInsertId() throws Exception
   {
-    long id = lastGeneratedKey.get();
+    long id;
+    id = lastGeneratedKey.get();
     if (id == -1) {
       throw new Exception("No auto-generated key available");
     }
@@ -157,7 +171,6 @@ public class DB
 
         while (rs.next()) {
           HashMap<String, Object> r;
-
           r = new HashMap<>();
           for (int i = 1; i <= cols; i++) {
             r.put(meta.getColumnName(i), rs.getObject(i));
@@ -166,7 +179,6 @@ public class DB
         }
       }
     }
-
     return rsSet;
   }
 
@@ -176,10 +188,14 @@ public class DB
 
   public Cursor cursor(String sql, Object... params) throws Exception
   {
-    Connection c = requireConnection();
-    PreparedStatement stmt = c.prepareStatement(sql);
+    Connection c;
+    PreparedStatement stmt;
+    ResultSet rs;
+
+    c = requireConnection();
+    stmt = c.prepareStatement(sql);
     bindParameters(stmt, params);
-    ResultSet rs = stmt.executeQuery();
+    rs = stmt.executeQuery();
     return new Cursor(rs, stmt);
   }
 
@@ -187,13 +203,17 @@ public class DB
   // METADATA
   // =========================
 
-  public Set<String> getTableColumns(String tableName) throws Exception
+  public HashSet<String> getTableColumns(String tableName) throws Exception
   {
-    Connection c = requireConnection();
-    Set<String> columns = new HashSet<>();
+    Connection c;
+    HashSet<String> columns;
+    DatabaseMetaData meta;
+    ResultSet rs;
 
-    DatabaseMetaData meta = c.getMetaData();
-    ResultSet rs = meta.getColumns(null, null, tableName, null);
+    c = requireConnection();
+    columns = new HashSet<>();
+    meta = c.getMetaData();
+    rs = meta.getColumns(null, null, tableName, null);
 
     if (!rs.next()) {
       rs.close();
@@ -204,13 +224,13 @@ public class DB
     }
 
     while (rs.next()) {
-      String name = rs.getString("COLUMN_NAME");
+      String name;
+      name = rs.getString("COLUMN_NAME");
       if (name != null) {
         columns.add(name.toLowerCase());
       }
     }
     rs.close();
-
     return columns;
   }
 
@@ -229,206 +249,126 @@ public class DB
   // Type Conversion Helpers (Java 8+ Time API)
   // ========================================
 
-  /**
-   * Converts SQL Date to Java LocalDate
-   *
-   * @param sqlDate
-   *          SQL Date object from ResultSet
-   * @return LocalDate or null if input is null
-   */
   public static java.time.LocalDate toLocalDate(Object sqlDate)
   {
-    if (sqlDate == null) {
-      return null;
-    }
+    java.time.LocalDate result;
+    result = null;
     if (sqlDate instanceof java.sql.Date) {
-      return ((java.sql.Date) sqlDate).toLocalDate();
+      result = ((java.sql.Date) sqlDate).toLocalDate();
     }
-    return null;
+    return result;
   }
 
-  /**
-   * Converts SQL Time to Java LocalTime
-   *
-   * @param sqlTime
-   *          SQL Time object from ResultSet
-   * @return LocalTime or null if input is null
-   */
   public static java.time.LocalTime toLocalTime(Object sqlTime)
   {
-    if (sqlTime == null) {
-      return null;
-    }
+    java.time.LocalTime result;
+    result = null;
     if (sqlTime instanceof java.sql.Time) {
-      return ((java.sql.Time) sqlTime).toLocalTime();
+      result = ((java.sql.Time) sqlTime).toLocalTime();
     }
-    return null;
+    return result;
   }
 
-  /**
-   * Converts SQL Timestamp to Java LocalDateTime
-   *
-   * @param sqlTimestamp
-   *          SQL Timestamp object from ResultSet
-   * @return LocalDateTime or null if input is null
-   */
   public static java.time.LocalDateTime toLocalDateTime(Object sqlTimestamp)
   {
-    if (sqlTimestamp == null) {
-      return null;
-    }
+    java.time.LocalDateTime result;
+    result = null;
     if (sqlTimestamp instanceof java.sql.Timestamp) {
-      return ((java.sql.Timestamp) sqlTimestamp).toLocalDateTime();
-    }
-    if (sqlTimestamp instanceof String) {
+      result = ((java.sql.Timestamp) sqlTimestamp).toLocalDateTime();
+    } else if (sqlTimestamp instanceof String) {
       try {
-        return java.time.LocalDateTime.parse((String) sqlTimestamp);
+        result = java.time.LocalDateTime.parse((String) sqlTimestamp);
       } catch (Exception e) {
-        return null;
+        result = null;
       }
     }
-    return null;
+    return result;
   }
 
-  /**
-   * Converts Java LocalDate to SQL Date
-   *
-   * @param localDate
-   *          Java LocalDate
-   * @return SQL Date or null if input is null
-   */
   public static java.sql.Date toSqlDate(java.time.LocalDate localDate)
   {
-    if (localDate == null) {
-      return null;
+    java.sql.Date result;
+    result = null;
+    if (localDate != null) {
+      result = java.sql.Date.valueOf(localDate);
     }
-    return java.sql.Date.valueOf(localDate);
+    return result;
   }
 
-  /**
-   * Converts Java LocalTime to SQL Time
-   *
-   * @param localTime
-   *          Java LocalTime
-   * @return SQL Time or null if input is null
-   */
   public static java.sql.Time toSqlTime(java.time.LocalTime localTime)
   {
-    if (localTime == null) {
-      return null;
+    java.sql.Time result;
+    result = null;
+    if (localTime != null) {
+      result = java.sql.Time.valueOf(localTime);
     }
-    return java.sql.Time.valueOf(localTime);
+    return result;
   }
 
-  /**
-   * Converts Java LocalDateTime to SQL Timestamp
-   *
-   * @param localDateTime
-   *          Java LocalDateTime
-   * @return SQL Timestamp or null if input is null
-   */
   public static java.sql.Timestamp toSqlTimestamp(java.time.LocalDateTime localDateTime)
   {
-    if (localDateTime == null) {
-      return null;
+    java.sql.Timestamp result;
+    result = null;
+    if (localDateTime != null) {
+      result = java.sql.Timestamp.valueOf(localDateTime);
     }
-    return java.sql.Timestamp.valueOf(localDateTime);
+    return result;
   }
 
-  /**
-   * Safely casts Object to Long
-   *
-   * @param value
-   *          Object from ResultSet
-   * @return Long or null if input is null or not castable
-   */
   public static Long toLong(Object value)
   {
-    if (value == null) {
-      return null;
-    }
+    Long result;
+    result = null;
     if (value instanceof Long) {
-      return (Long) value;
+      result = (Long) value;
+    } else if (value instanceof Number) {
+      result = ((Number) value).longValue();
     }
-    if (value instanceof Number) {
-      return ((Number) value).longValue();
-    }
-    return null;
+    return result;
   }
 
-  /**
-   * Safely casts Object to Integer
-   *
-   * @param value
-   *          Object from ResultSet
-   * @return Integer or null if input is null or not castable
-   */
   public static Integer toInteger(Object value)
   {
-    if (value == null) {
-      return null;
-    }
+    Integer result;
+    result = null;
     if (value instanceof Integer) {
-      return (Integer) value;
+      result = (Integer) value;
+    } else if (value instanceof Number) {
+      result = ((Number) value).intValue();
     }
-    if (value instanceof Number) {
-      return ((Number) value).intValue();
-    }
-    return null;
+    return result;
   }
 
-  /**
-   * Safely casts Object to Boolean
-   *
-   * @param value
-   *          Object from ResultSet
-   * @return Boolean or null if input is null or not castable
-   */
   public static Boolean toBoolean(Object value)
   {
-    if (value == null) {
-      return null;
-    }
+    Boolean result;
+    result = null;
     if (value instanceof Boolean) {
-      return (Boolean) value;
+      result = (Boolean) value;
+    } else if (value instanceof Number) {
+      result = ((Number) value).intValue() != 0;
     }
-    if (value instanceof Number) {
-      return ((Number) value).intValue() != 0;
-    }
-    return null;
+    return result;
   }
 
-  /**
-   * Safely casts Object to String
-   *
-   * @param value
-   *          Object from ResultSet
-   * @return String or null if input is null
-   */
   public static String toString(Object value)
   {
-    if (value == null) {
-      return null;
+    String result;
+    result = null;
+    if (value != null) {
+      result = value.toString();
     }
-    return value.toString();
+    return result;
   }
 
-  /**
-   * Safely casts Object to BigDecimal
-   *
-   * @param value
-   *          Object from ResultSet
-   * @return BigDecimal or null if input is null or not castable
-   */
   public static java.math.BigDecimal toBigDecimal(Object value)
   {
-    if (value == null) {
-      return null;
-    }
+    java.math.BigDecimal result;
+    result = null;
     if (value instanceof java.math.BigDecimal) {
-      return (java.math.BigDecimal) value;
+      result = (java.math.BigDecimal) value;
     }
-    return null;
+    return result;
   }
 
   // =========================
@@ -476,12 +416,10 @@ public class DB
     {
       try {
         rs.close();
-      } catch (Exception ignored) {
-      }
+      } catch (Exception ignored) {}
       try {
         stmt.close();
-      } catch (Exception ignored) {
-      }
+      } catch (Exception ignored) {}
     }
   }
 }
