@@ -38,3 +38,10 @@ export async function logout() {
     window.location.href = '/home'
   }
 }
+
+// Store del modulo corrente — usato da sidebar-layout per evidenziare la voce attiva.
+// navigate(name) aggiorna lo stato e notifica i sottoscrittori.
+export const currentModule = createStore({ name: null })
+currentModule.navigate = function(name) {
+  this.set({ name })
+}

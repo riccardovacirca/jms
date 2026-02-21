@@ -1,3 +1,6 @@
+import 'bootstrap/dist/css/bootstrap.min.css'
+import './index.css'
+
 class AuthLayout extends HTMLElement {
   constructor() {
     super()

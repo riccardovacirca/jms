@@ -1,4 +1,6 @@
-import { auth, logout } from '../../assets/common/js/store.js'
+import 'bootstrap/dist/css/bootstrap.min.css'
+import './index.css'
+import { auth, logout, checkAuth } from '../store.js'
 
 class HomeLayout extends HTMLElement {
   connectedCallback() {
@@ -34,3 +36,4 @@ class HomeLayout extends HTMLElement {
 }
 
 customElements.define('home-layout', HomeLayout)
+checkAuth()
