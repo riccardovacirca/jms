@@ -336,6 +336,12 @@ fi
 # Creazione container di sviluppo
 if [ "$1" = "--dev" ] || [ -z "$1" ]; then
 
+    # Config runtime — rigenerato ad ogni install dai valori .env correnti
+    mkdir -p config
+    cp "$INSTALLER_DIR/template/application.properties" config/application.properties
+    sed -i '' "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties
+    sed -i '' "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties
+
     if docker ps -a --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
         if ! docker ps --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
             echo "Starting development container..."
@@ -381,6 +387,7 @@ DOCKERFILE
             --name "$DEV_CONTAINER" \
             -v "$PWD":/workspace \
             -v "$PWD/logs":/app/logs \
+            -v "$PWD/config":/app/config \
             -w /workspace \
             -p "$API_PORT_HOST:$API_PORT" \
             -p "$VITE_PORT_HOST:$VITE_PORT" \
@@ -409,6 +416,9 @@ docker/
 
 # Log (directory di log del container, non tracciata)
 logs/
+
+# Config runtime (contiene credenziali, generato da install.sh)
+config/
 GITIGNORE
     if [ ! -f pom.xml ]; then
         echo "Scaffolding project..."
@@ -432,33 +442,6 @@ GITIGNORE
         mkdir -p "src/main/java/$GROUP_DIR/handler"
         cp -r "$INSTALLER_DIR/template/java/handler/." "src/main/java/$GROUP_DIR/handler/"
         find "src/main/java/$GROUP_DIR" -name "*.java" -exec sed -i '' "s|{{APP_PACKAGE}}|$GROUP_ID|g" {} +
-
-        # application.properties — generato con i valori del .env corrente
-        # L'utente può modificarlo manualmente; le variabili d'ambiente hanno precedenza
-        cat > src/main/resources/application.properties << EOF
-# ============================================================
-# Configurazione applicazione — modificare manualmente se necessario
-# Le variabili d'ambiente hanno precedenza (es. DB_HOST sovrascrive db.host)
-# ============================================================
-
-# Server
-server.port=${API_PORT:-8080}
-
-# Database (PostgreSQL)
-# In sviluppo: db.host è il nome del container sulla rete Docker
-# In produzione: sostituire con hostname o IP del server PostgreSQL
-db.host=${PGSQL_CONTAINER}
-db.port=${PGSQL_PORT:-5432}
-db.name=${PGSQL_NAME}
-db.user=${PGSQL_USER}
-db.password=${PGSQL_PASSWORD}
-db.pool.size=10
-
-# JWT
-# jwt.secret deve essere una stringa lunga e casuale — cambiarla in produzione
-jwt.secret=dev-secret-change-in-production
-jwt.access.expiry.seconds=900
-EOF
 
         cat > src/main/resources/logback.xml << 'LOGBACKXML'
 <configuration>
