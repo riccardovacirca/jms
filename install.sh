@@ -408,10 +408,8 @@ GITIGNORE
 LOGBACKXML
 
         # Migrazione iniziale Flyway da template
-        MIGRATION_TS=$(date '+%Y%m%d_%H%M%S')
         for f in "$INSTALLER_DIR/template/sql/"*.sql; do
-            desc="${f##*__}"
-            cp "$f" "src/main/resources/db/migration/V${MIGRATION_TS}__${desc}"
+            cp "$f" "src/main/resources/db/migration/$(basename "$f")"
         done
 
         mkdir -p vite
