@@ -128,6 +128,29 @@ RULE fmt.type-name-spacing
     ArrayList<HashMap<String, Object>> rows;
 ```
 
+```
+RULE fmt.no-alignment-padding
+  applies-to: ogni istruzione (assegnazioni, argomenti di metodo, inizializzazioni)
+  note: è vietato aggiungere spazi extra per allineare verticalmente token sulla colonna;
+        si usa esattamente uno spazio dove richiesto dalla sintassi
+
+  ok: |
+    username = (String) body.get("username");
+    password = (String) body.get("password");
+    rows = db.select(...);
+
+    out.put("id", userId);
+    out.put("username", uname);
+
+  ko: |
+    username = (String) body.get("username");
+    password = (String) body.get("password");
+    rows     = db.select(...);
+
+    out.put("id",       userId);
+    out.put("username", uname);
+```
+
 ---
 
 ## VARIABILI
@@ -234,6 +257,30 @@ RULE flow.single-exit
       }
       res.status(200)...err(false)...send();
     }
+```
+
+---
+
+## DATABASE
+
+```
+RULE db.sql-variable
+  applies-to: ogni chiamata a db.select() e db.query()
+  note: il testo SQL è sempre assegnato a una variabile locale chiamata sql
+        prima di essere passato alla funzione; non si passa la stringa inline
+
+  ok: |
+    sql = "SELECT id, username FROM users WHERE username = ?";
+    rows = db.select(sql, username);
+
+    sql = "INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)";
+    db.query(sql, token, userId, expiresAt);
+
+  ko: |
+    rows = db.select("SELECT id, username FROM users WHERE username = ?", username);
+
+    db.query("INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+      token, userId, expiresAt);
 ```
 
 ---

@@ -648,6 +648,8 @@ db_reset() {
 
     info "Dropping database $PGSQL_NAME..."
     psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+        -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$PGSQL_NAME' AND pid <> pg_backend_pid();" 2>/dev/null || true
+    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
         -c "DROP DATABASE IF EXISTS $PGSQL_NAME;" 2>/dev/null || true
 
     info "Creating database $PGSQL_NAME..."
@@ -682,22 +684,39 @@ sync_run() {
         [ -z "$line" ] && continue
         case "$line" in \#*) continue ;; esac
 
-        ORIG=$(echo "$line" | sed 's/ *-> *.*//')
-        DEST=$(echo "$line" | sed 's/.* -> *//')
+        local left right orig dest tmp sed_expr
+        left="${line% -> *}"
+        right="${line#* -> }"
 
-        [ -n "$ORIG" ] && [ -n "$DEST" ] || continue
+        orig="${left%% (*}"
+        dest="${right%% (*}"
 
-        if [ -f "$ORIG" ]; then
-            CMD="rsync -av $ORIG $DEST"
+        [ -n "$orig" ] && [ -n "$dest" ] || continue
+
+        sed_expr=""
+        case "$right" in
+            *"("*)
+                tmp="${right##*(}"
+                sed_expr="${tmp%)}"
+                ;;
+        esac
+
+        if [ -f "$orig" ]; then
+            rsync -av "$orig" "$dest" || { warn "  Failed: $orig -> $dest"; continue; }
         else
-            CMD="rsync -av --delete $ORIG/ $DEST/"
+            rsync -av --delete "$orig/" "$dest/" || { warn "  Failed: $orig -> $dest"; continue; }
+        fi
+        success "  Synced: $orig -> $dest"
+
+        if [ -n "$sed_expr" ]; then
+            if [ -f "$orig" ]; then
+                sed -i "$sed_expr" "$dest"
+            else
+                find "$dest" -type f -exec sed -i "$sed_expr" {} +
+            fi
+            success "  Applied substitutions to: $dest"
         fi
 
-        if eval "$CMD"; then
-            success "  Synced: $ORIG -> $DEST"
-        else
-            warn "  Failed to sync: $ORIG -> $DEST"
-        fi
     done < "$CONFIG_FILE"
 
     success "Sync completed"

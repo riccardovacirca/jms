@@ -59,13 +59,20 @@ public class Auth
   // ACCESS TOKEN (JWT HS256)
   // -------------------------
 
-  /** Crea un JWT firmato con userId e username come claims. */
-  public String createAccessToken(int userId, String username)
+  /** Crea un JWT firmato con userId, username, ruolo, flag di autorizzazione e must_change_password. */
+  public String createAccessToken(int userId, String username, String ruolo,
+                                  boolean canAdmin, boolean canWrite, boolean canDelete,
+                                  boolean mustChangePassword)
   {
     String result;
     result = JWT.create()
       .withSubject(String.valueOf(userId))
       .withClaim("username", username)
+      .withClaim("ruolo", ruolo)
+      .withClaim("can_admin", canAdmin)
+      .withClaim("can_write", canWrite)
+      .withClaim("can_delete", canDelete)
+      .withClaim("must_change_password", mustChangePassword)
       .withExpiresAt(Date.from(Instant.now().plusSeconds(accessExpiry)))
       .sign(algorithm);
     return result;
