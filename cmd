@@ -87,7 +87,6 @@ app_build() {
     success "Build completed → target/service.jar"
 }
 
-
 app_start() {
     load_env
 
@@ -689,12 +688,12 @@ sync_run() {
         [ -n "$ORIG" ] && [ -n "$DEST" ] || continue
 
         if [ -f "$ORIG" ]; then
-            RSYNC_CMD="rsync -av $ORIG $DEST"
+            CMD="rsync -av $ORIG $DEST"
         else
-            RSYNC_CMD="rsync -av --delete $ORIG/ $DEST/"
+            CMD="rsync -av --delete $ORIG/ $DEST/"
         fi
 
-        if eval "$RSYNC_CMD"; then
+        if eval "$CMD"; then
             success "  Synced: $ORIG -> $DEST"
         else
             warn "  Failed to sync: $ORIG -> $DEST"
