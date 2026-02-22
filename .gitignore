@@ -3,6 +3,8 @@
 !lib/**
 !static/
 !static/**
+!template/
+!template/**
 !docs/
 !docs/**
 !README.md
