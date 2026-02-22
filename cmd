@@ -603,7 +603,7 @@ db_cli() {
     [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
-    local PG_HOST="${PROJECT_NAME}-postgres"
+    local PG_HOST="postgres"
 
     if [ -n "$FILE" ]; then
         [ -f "$FILE" ] || error "File not found: $FILE"
@@ -644,7 +644,7 @@ db_reset() {
     fi
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
-    local PG_HOST="${PROJECT_NAME}-postgres"
+    local PG_HOST="postgres"
 
     info "Dropping database $PGSQL_NAME..."
     psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
@@ -666,6 +666,29 @@ db_reset() {
         info "Restarting application..."
         app_start
     fi
+}
+
+db_setup() {
+    load_env
+    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+
+    export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
+    local PG_HOST="postgres"
+
+    info "Creating role $PGSQL_USER..."
+    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+        -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PGSQL_USER') THEN CREATE ROLE \"$PGSQL_USER\" WITH LOGIN PASSWORD '$PGSQL_PASSWORD'; END IF; END \$\$;"
+
+    info "Creating database $PGSQL_NAME..."
+    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+        -c "SELECT 1 FROM pg_database WHERE datname = '$PGSQL_NAME'" | grep -q 1 || \
+    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+        -c "CREATE DATABASE \"$PGSQL_NAME\" OWNER \"$PGSQL_USER\";"
+
+    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+        -c "GRANT ALL ON SCHEMA public TO \"$PGSQL_USER\";"
+
+    success "Database $PGSQL_NAME configured for user $PGSQL_USER"
 }
 
 # ============================================================================
@@ -781,8 +804,10 @@ case "$1" in
             db_cli "$2"
         elif [ "$1" = "reset" ]; then
             db_reset
+        elif [ "$1" = "setup" ]; then
+            db_setup
         else
-            error "Unknown db option: $1. Use: db, db -f <file>, db reset"
+            error "Unknown db option: $1. Use: db, db -f <file>, db reset, db setup"
         fi
         ;;
     sync)
