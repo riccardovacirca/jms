@@ -336,11 +336,7 @@ fi
 # Creazione container di sviluppo
 if [ "$1" = "--dev" ] || [ -z "$1" ]; then
 
-    # Config runtime — rigenerato ad ogni install dai valori .env correnti
     mkdir -p config
-    cp "$INSTALLER_DIR/template/application.properties" config/application.properties
-    sed -i '' "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties
-    sed -i '' "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties
 
     if docker ps -a --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
         if ! docker ps --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
@@ -431,6 +427,11 @@ GITIGNORE
         # Copia libreria util (dev.jms.util) nel progetto
         cp -r "$INSTALLER_DIR/lib/." src/main/java/
         rm -rf "$INSTALLER_DIR/lib"
+
+        # config/application.properties da template
+        cp "$INSTALLER_DIR/template/application.properties" config/application.properties
+        sed -i '' "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties
+        sed -i '' "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties
 
         # pom.xml da template
         cp "$INSTALLER_DIR/template/pom.xml" pom.xml
@@ -544,6 +545,8 @@ export default defineConfig({
   ]
 })
 VITECONFIG
+
+        rm -rf "$INSTALLER_DIR/template"
 
     fi
 
