@@ -30,42 +30,32 @@ show_help() {
     cat << 'HELPEOF'
 Usage: cmd COMMAND [OPTIONS]
 
-App (Java Undertow):
-  app build                Compile Java backend (Maven)
-  app dev                  Dev mode: watch src/, compile on change, hot-restart
-  app run                  Run in foreground
-  app start                Start in background
-  app stop                 Stop background process
-  app restart              Restart background process
-  app status               Show status
+  app build                        Compile Java backend (Maven)
+  app run                          Watch src/, compile on change, hot-restart
+  app start                        Start in background
+  app stop                         Stop background process
+  app restart                      Restart background process
+  app status                       Show status
 
-Vite:
-  vite build               Build for production → src/main/resources/static/
-  vite run                 Run Vite dev server (foreground, with API proxy)
+  vite build                       Build for production → src/main/resources/static/
+  vite run                         Run Vite dev server (foreground, with API proxy)
 
-Git:
-  git push [-r <path>]     Stage, commit and push
-  git pull [-r <path>]     Pull from remote
-  git sync [-r <path>]     Pull + commit + push
-  git fetch                Initialize repo from remote (no .git required)
-  git branch [-r <path>]   Show current branch name
-  git branch -b <name> [-r <path>] [-f <base-branch>]   Create branch from base (default: main)
-  git merge -b <name> [-r <path>]    Merge branch to main and delete
-  git update               Update git config and remote URL from .env (GIT_USER, GIT_TOKEN)
+  git push [-r <path>]             Stage, commit and push
+  git pull [-r <path>]             Pull from remote
+  git sync [-r <path>]             Pull + commit + push
+  git fetch                        Initialize repo from remote (no .git required)
+  git branch [-r <path>]           Show current branch name
+  git branch -b <name> [-r <path>] [-f <base>]   Create branch from base (default: main)
+  git merge -b <name> [-r <path>]  Merge branch to main and delete
+  git update                       Update git config and remote URL from .env
 
-Database:
-  db                       Open interactive PostgreSQL CLI
-  db -f <file>             Execute SQL or CSV file
-  db reset                 Reset database (drop and recreate)
+  db                               Open interactive PostgreSQL CLI
+  db -f <file>                     Execute SQL or CSV file
+  db reset                         Reset database (drop and recreate)
 
-Sync:
-  sync -r <path>           Sync using .sync config file
+  sync                             Sync using .sync config file in project root
 
-Options:
-  -h, --help               Show this help
-  -r, --repo <path>        Git repo path (default: project root)
-  -b, --branch <name>      Branch name
-  -f, --from <branch>      Base branch (default: main)
+  -h, --help                       Show this help
 HELPEOF
 }
 
@@ -97,24 +87,6 @@ app_build() {
     success "Build completed → target/service.jar"
 }
 
-app_run() {
-    load_env
-
-    if app_is_running; then
-        warn "Application is already running (PID: $(cat $APP_PID_FILE))"
-        info "Use 'cmd app stop' to stop it first"
-        return 0
-    fi
-
-    [ -f "$APP_JAR" ] || error "JAR not found: $APP_JAR. Run 'cmd app build' first."
-
-    info "Starting Java server in foreground..."
-    info "Internal: http://localhost:${API_PORT:-8080}/"
-    info "External: http://localhost:${API_PORT_HOST:-2310}/"
-    info "Press Ctrl+C to stop"
-    cd "$WORKSPACE"
-    java -jar "$APP_JAR"
-}
 
 app_start() {
     load_env
@@ -175,7 +147,7 @@ app_restart() {
     app_start
 }
 
-app_dev() {
+app_run() {
     load_env
     cd "$WORKSPACE"
 
@@ -699,13 +671,11 @@ db_reset() {
 # Sync Operations
 # ============================================================================
 
-sync_repo() {
-    local SYNC_DIR="$1"
-    [ -n "$SYNC_DIR" ] || error "Devi specificare la cartella contenente .sync"
-    [ "${SYNC_DIR#/}" = "$SYNC_DIR" ] && SYNC_DIR="$WORKSPACE/$SYNC_DIR"
+sync_run() {
+    local CONFIG_FILE="$WORKSPACE/.sync"
+    [ -f "$CONFIG_FILE" ] || error "File .sync non trovato in $WORKSPACE"
 
-    local CONFIG_FILE="$SYNC_DIR/.sync"
-    [ -f "$CONFIG_FILE" ] || error "File .sync non trovato in $SYNC_DIR"
+    confirm "Avviare la sincronizzazione da $CONFIG_FILE?" || exit 0
 
     info "Starting sync from $CONFIG_FILE..."
 
@@ -713,28 +683,18 @@ sync_repo() {
         [ -z "$line" ] && continue
         case "$line" in \#*) continue ;; esac
 
-        ORIG=$(echo "$line" | cut -d\; -f1)
-        DEST=$(echo "$line" | cut -d\; -f2)
-        INCLUDE_ENTRIES=$(echo "$line" | cut -d\; -f3)
-        EXCLUDE_ENTRIES=$(echo "$line" | cut -d\; -f4)
+        ORIG=$(echo "$line" | sed 's/ *-> *.*//')
+        DEST=$(echo "$line" | sed 's/.* -> *//')
 
-        info "  Syncing: $ORIG -> $DEST"
+        [ -n "$ORIG" ] && [ -n "$DEST" ] || continue
 
-        INCLUDE_OPTS=""
-        IFS=','
-        for i in $INCLUDE_ENTRIES; do
-            [ -n "$i" ] && INCLUDE_OPTS="$INCLUDE_OPTS --include='$i'"
-        done
-        unset IFS
+        if [ -f "$ORIG" ]; then
+            RSYNC_CMD="rsync -av $ORIG $DEST"
+        else
+            RSYNC_CMD="rsync -av --delete $ORIG/ $DEST/"
+        fi
 
-        EXCLUDE_OPTS=""
-        IFS=','
-        for e in $EXCLUDE_ENTRIES; do
-            [ -n "$e" ] && EXCLUDE_OPTS="$EXCLUDE_OPTS --exclude='$e'"
-        done
-        unset IFS
-
-        if eval rsync -av --delete $INCLUDE_OPTS $EXCLUDE_OPTS "$ORIG/" "$DEST/" >/dev/null 2>&1; then
+        if eval "$RSYNC_CMD"; then
             success "  Synced: $ORIG -> $DEST"
         else
             warn "  Failed to sync: $ORIG -> $DEST"
@@ -752,13 +712,12 @@ case "$1" in
     app)
         case "$2" in
             build)   app_build ;;
-            dev)     app_dev ;;
             run)     app_run ;;
             start)   app_start ;;
             stop)    app_stop ;;
             restart) app_restart ;;
             status)  app_status ;;
-            *) error "Unknown app command: $2. Use: build, dev, run, start, stop, restart, status" ;;
+            *) error "Unknown app command: $2. Use: build, run, start, stop, restart, status" ;;
         esac
         ;;
     vite)
@@ -809,15 +768,7 @@ case "$1" in
         fi
         ;;
     sync)
-        REPO_PATH=""
-        shift 1
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                -r|--repo) REPO_PATH="$2"; shift 2 ;;
-                *) error "Unknown option: $1" ;;
-            esac
-        done
-        sync_repo "$REPO_PATH"
+        sync_run
         ;;
     -h|--help|help|"")
         show_help

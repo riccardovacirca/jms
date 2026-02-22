@@ -1,15 +1,15 @@
-import 'bootstrap/dist/css/bootstrap.min.css'
-import './index.css'
-import { auth, logout, checkAuth } from '../store.js'
+import 'bootstrap/dist/css/bootstrap.min.css';
+import './index.css';
+import { auth, logout, checkAuth } from '../store.js';
 
 class HomeLayout extends HTMLElement {
   connectedCallback() {
-    this._render()
-    auth.subscribe(() => this._render())
+    this._render();
+    auth.subscribe(() => this._render());
   }
 
   _render() {
-    const { isAuthenticated, user } = auth.state
+    const { isAuthenticated, user } = auth.state;
     this.innerHTML = `
       <div class="min-vh-100 bg-light">
         <header class="d-flex align-items-center px-4 py-3 bg-white border-bottom">
@@ -29,11 +29,13 @@ class HomeLayout extends HTMLElement {
           </div>
         </main>
       </div>
-    `
-    this.querySelector('#btn-logout')?.addEventListener('click', logout)
-    this.querySelector('#btn-login')?.addEventListener('click', () => { window.location.href = '/auth' })
+    `;
+    this.querySelector('#btn-logout')?.addEventListener('click', logout);
+    this.querySelector('#btn-login')?.addEventListener('click', () => {
+      window.location.href = '/auth';
+    });
   }
 }
 
-customElements.define('home-layout', HomeLayout)
-checkAuth()
+customElements.define('home-layout', HomeLayout);
+checkAuth();
