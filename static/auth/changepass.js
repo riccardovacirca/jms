@@ -103,7 +103,13 @@ class ChangepassLayout extends HTMLElement {
         });
         const data = await res.json();
         if (!res.ok || data.err) throw new Error(data.log || 'Errore durante il cambio password');
-        window.location.href = '/home/main.html';
+
+        // Password cambiata con successo - esegui logout e reindirizza al login
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } finally {
+          window.location.href = '/auth/login.html';
+        }
       } catch (e) {
         this._error   = e.message;
         this._loading = false;
