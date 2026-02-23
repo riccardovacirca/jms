@@ -195,7 +195,7 @@ GIT_EMAIL=
 GIT_TOKEN=
 EOF
 
-    sed "s|PROJECT_DIR_PLACEHOLDER|$project_dir|g" .env > .env.tmp && mv .env.tmp .env
+    sed "s|PROJECT_DIR_PLACEHOLDER|$project_dir|g" .env > .env.tmp && mv -f .env.tmp .env
 }
 
 # =============================================================================
@@ -360,19 +360,21 @@ GITIGNORE
 
         # config/application.properties da template
         cp "$INSTALLER_DIR/template/application.properties" config/application.properties
-        sed -i '' "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties
-        sed -i '' "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties
+        sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+        sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
         # pom.xml da template
         cp "$INSTALLER_DIR/template/pom.xml" pom.xml
-        sed -i '' "s|{{APP_PACKAGE}}|$GROUP_ID|g" pom.xml
+        sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" pom.xml > pom.xml.tmp && mv -f pom.xml.tmp pom.xml
 
         # Java files da template
         cp "$INSTALLER_DIR/template/java/App.java" "src/main/java/$GROUP_DIR/App.java"
         cp "$INSTALLER_DIR/template/java/Config.java" "src/main/java/$GROUP_DIR/Config.java"
         mkdir -p "src/main/java/$GROUP_DIR/handler"
         cp -r "$INSTALLER_DIR/template/java/handler/." "src/main/java/$GROUP_DIR/handler/"
-        find "src/main/java/$GROUP_DIR" -name "*.java" -exec sed -i '' "s|{{APP_PACKAGE}}|$GROUP_ID|g" {} +
+        find "src/main/java/$GROUP_DIR" -name "*.java" -type f | while read -r file; do
+            sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" "$file" > "$file.tmp" && mv -f "$file.tmp" "$file"
+        done
 
         cat > src/main/resources/logback.xml << 'LOGBACKXML'
 <configuration>
@@ -445,9 +447,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'src/index.html'),
-        auth:  resolve(__dirname, 'src/auth/index.html'),
-        home:  resolve(__dirname, 'src/home/index.html'),
+        index:      resolve(__dirname, 'src/index.html'),
+        login:      resolve(__dirname, 'src/auth/login.html'),
+        changepass: resolve(__dirname, 'src/auth/changepass.html'),
+        home:       resolve(__dirname, 'src/home/main.html'),
       }
     }
   },
@@ -463,8 +466,8 @@ export default defineConfig({
       name: 'route-rewrite',
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
-          if (req.url === '/home') req.url = '/home/index.html'
-          else if (req.url === '/auth') req.url = '/auth/index.html'
+          if (req.url === '/home') req.url = '/home/main.html'
+          else if (req.url === '/auth') req.url = '/auth/login.html'
           next()
         })
       }
@@ -490,7 +493,7 @@ VITECONFIG
     echo "Setting up cmd tool..."
     mkdir -p bin
     cp "$INSTALLER_DIR/cmd" bin/cmd
-    sed -i '' "s|com\.example|$GROUP_ID|g" bin/cmd
+    sed "s|com\.example|$GROUP_ID|g" bin/cmd > bin/cmd.tmp && mv -f bin/cmd.tmp bin/cmd
     chmod +x bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
         ln -sf /workspace/bin/cmd /usr/local/bin/cmd
