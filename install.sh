@@ -9,12 +9,14 @@
 #   (nessuna)               Crea o riavvia l'ambiente di sviluppo completo
 #   --groupid <id>          Maven GroupId (default: com.example)
 #   --postgres              Installa il container PostgreSQL
+#   -n, --name <name>       Nome del container PostgreSQL (default: postgres)
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
 #   ./install.sh                                # Primo install o riavvio
 #   ./install.sh --groupid io.mycompany         # GroupId personalizzato
 #   ./install.sh --postgres                     # Installa PostgreSQL
+#   ./install.sh --postgres -n mydb             # Installa PostgreSQL con nome custom
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -124,12 +126,14 @@ Options:
   (none)                  Create complete development environment
   --groupid <id>          Maven GroupId (default: com.example)
   --postgres              Install PostgreSQL container
+  -n, --name <name>       PostgreSQL container name (default: postgres)
   --help, -h              Show this message
 
 Examples:
   ./install.sh                               # First install
   ./install.sh --groupid io.mycompany        # Custom GroupId
   ./install.sh --postgres                    # Install PostgreSQL
+  ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
 EOF
     exit 0
 }
@@ -203,17 +207,31 @@ EOF
 # =============================================================================
 
 install_postgres() {
+    local CONTAINER_NAME="postgres"
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -n|--name)
+                [ -n "$2" ] || { echo "ERRORE: -n|--name richiede un valore"; exit 1; }
+                CONTAINER_NAME="$2"
+                shift 2
+                ;;
+            *) shift ;;
+        esac
+    done
+
     local IMAGE="${PGSQL_IMAGE:-postgres:16}"
     local ROOT_USER="${PGSQL_ROOT_USER:-postgres}"
     local ROOT_PASSWORD="${PGSQL_ROOT_PASSWORD:-postgres}"
     local PORT_HOST="${PGSQL_PORT_HOST:-5432}"
 
-    if docker ps -a --format "{{.Names}}" | grep -q "^postgres$"; then
-        if docker ps --format "{{.Names}}" | grep -q "^postgres$"; then
-            echo "PostgreSQL container is already running"
+    if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+        if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+            echo "PostgreSQL container '$CONTAINER_NAME' is already running"
         else
-            echo "Starting PostgreSQL container..."
-            docker start postgres
+            echo "Starting PostgreSQL container '$CONTAINER_NAME'..."
+            docker start "$CONTAINER_NAME"
         fi
         echo "Done"
         exit 0
@@ -224,12 +242,12 @@ install_postgres() {
         docker pull "$IMAGE"
     fi
 
-    echo "Creating PostgreSQL container..."
-    docker run -d --name "postgres" \
+    echo "Creating PostgreSQL container '$CONTAINER_NAME'..."
+    docker run -d --name "$CONTAINER_NAME" \
         -e POSTGRES_USER="$ROOT_USER" \
         -e POSTGRES_PASSWORD="$ROOT_PASSWORD" \
         -p "$PORT_HOST:5432" \
-        -v "postgres-data:/var/lib/postgresql/data" \
+        -v "${CONTAINER_NAME}-data:/var/lib/postgresql/data" \
         "$IMAGE" >/dev/null
 
     echo "Done"
@@ -517,7 +535,8 @@ VITECONFIG
 
 case "$1" in
     --postgres)
-        install_postgres
+        shift
+        install_postgres "$@"
         ;;
     --help|-h)
         show_help
