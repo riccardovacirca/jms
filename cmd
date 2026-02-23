@@ -603,7 +603,8 @@ db_cli() {
     [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
-    local PG_HOST="postgres"
+    local PG_HOST="${PGSQL_HOST:-postgres}"
+    local PG_PORT="${PGSQL_PORT:-5432}"
 
     if [ -n "$FILE" ]; then
         [ -f "$FILE" ] || error "File not found: $FILE"
@@ -613,19 +614,19 @@ db_cli() {
             local TABLE_NAME
             TABLE_NAME=$(basename "$FILE" .csv)
             info "Loading CSV into table: $TABLE_NAME"
-            psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
                 -c "\\COPY $TABLE_NAME FROM '$FILE' WITH (FORMAT CSV, HEADER true, DELIMITER ';')"
             success "CSV file loaded"
         elif [ "$FILE_EXT" = "sql" ]; then
             info "Executing SQL file: $FILE"
-            psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" -f "$FILE"
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" -f "$FILE"
             success "SQL file executed"
         else
             error "Unsupported file type. Use .sql or .csv"
         fi
     else
         info "Connecting to PostgreSQL ($PGSQL_NAME)..."
-        psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME"
+        psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME"
     fi
 }
 
@@ -644,20 +645,21 @@ db_reset() {
     fi
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
-    local PG_HOST="postgres"
+    local PG_HOST="${PGSQL_HOST:-postgres}"
+    local PG_PORT="${PGSQL_PORT:-5432}"
 
     info "Dropping database $PGSQL_NAME..."
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$PGSQL_NAME' AND pid <> pg_backend_pid();" 2>/dev/null || true
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "DROP DATABASE IF EXISTS $PGSQL_NAME;" 2>/dev/null || true
 
     info "Creating database $PGSQL_NAME..."
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "CREATE DATABASE $PGSQL_NAME;" || error "Failed to create database"
 
     info "Granting privileges to $PGSQL_USER..."
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
         -c "GRANT ALL ON SCHEMA public TO \"$PGSQL_USER\";" 2>/dev/null || true
 
     success "Database reset completed"
@@ -673,19 +675,20 @@ db_setup() {
     [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
-    local PG_HOST="postgres"
+    local PG_HOST="${PGSQL_HOST:-postgres}"
+    local PG_PORT="${PGSQL_PORT:-5432}"
 
     info "Creating role $PGSQL_USER..."
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$PGSQL_USER') THEN CREATE ROLE \"$PGSQL_USER\" WITH LOGIN PASSWORD '$PGSQL_PASSWORD'; END IF; END \$\$;"
 
     info "Creating database $PGSQL_NAME..."
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "SELECT 1 FROM pg_database WHERE datname = '$PGSQL_NAME'" | grep -q 1 || \
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d postgres \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
         -c "CREATE DATABASE \"$PGSQL_NAME\" OWNER \"$PGSQL_USER\";"
 
-    psql -h "$PG_HOST" -p 5432 -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
         -c "GRANT ALL ON SCHEMA public TO \"$PGSQL_USER\";"
 
     success "Database $PGSQL_NAME configured for user $PGSQL_USER"

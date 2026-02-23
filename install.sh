@@ -189,6 +189,7 @@ RELEASE_APP_USER_GID=1001
 # ========================================
 PGSQL_ENABLED=y
 PGSQL_IMAGE=postgres:16
+PGSQL_HOST=postgres
 PGSQL_PORT=5432
 PGSQL_PORT_HOST=2340
 PGSQL_ROOT_USER=postgres
@@ -392,6 +393,7 @@ GITIGNORE
         cp "$INSTALLER_DIR/template/application.properties" config/application.properties
         sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
         sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+        sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
         # pom.xml da template
         cp "$INSTALLER_DIR/template/pom.xml" pom.xml
