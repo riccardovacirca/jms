@@ -10,6 +10,7 @@
 #   --groupid <id>          Maven GroupId (default: com.example)
 #   --postgres              Installa il container PostgreSQL
 #   -n, --name <name>       Nome del container PostgreSQL (default: postgres)
+#   -p, --port <port>       Porta host per PostgreSQL (default: 5432)
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
@@ -17,6 +18,8 @@
 #   ./install.sh --groupid io.mycompany         # GroupId personalizzato
 #   ./install.sh --postgres                     # Installa PostgreSQL
 #   ./install.sh --postgres -n mydb             # Installa PostgreSQL con nome custom
+#   ./install.sh --postgres -p 5433             # Installa PostgreSQL su porta custom
+#   ./install.sh --postgres -n mydb -p 5433     # Nome e porta custom
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -127,6 +130,7 @@ Options:
   --groupid <id>          Maven GroupId (default: com.example)
   --postgres              Install PostgreSQL container
   -n, --name <name>       PostgreSQL container name (default: postgres)
+  -p, --port <port>       PostgreSQL host port (default: 5432)
   --help, -h              Show this message
 
 Examples:
@@ -134,6 +138,8 @@ Examples:
   ./install.sh --groupid io.mycompany        # Custom GroupId
   ./install.sh --postgres                    # Install PostgreSQL
   ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
+  ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
+  ./install.sh --postgres -n mydb -p 5433    # Custom name and port
 EOF
     exit 0
 }
@@ -208,6 +214,7 @@ EOF
 
 install_postgres() {
     local CONTAINER_NAME="postgres"
+    local PORT_HOST=""
 
     # Parse arguments
     while [ $# -gt 0 ]; do
@@ -217,6 +224,11 @@ install_postgres() {
                 CONTAINER_NAME="$2"
                 shift 2
                 ;;
+            -p|--port)
+                [ -n "$2" ] || { echo "ERRORE: -p|--port richiede un valore"; exit 1; }
+                PORT_HOST="$2"
+                shift 2
+                ;;
             *) shift ;;
         esac
     done
@@ -224,7 +236,7 @@ install_postgres() {
     local IMAGE="${PGSQL_IMAGE:-postgres:16}"
     local ROOT_USER="${PGSQL_ROOT_USER:-postgres}"
     local ROOT_PASSWORD="${PGSQL_ROOT_PASSWORD:-postgres}"
-    local PORT_HOST="${PGSQL_PORT_HOST:-5432}"
+    PORT_HOST="${PORT_HOST:-${PGSQL_PORT_HOST:-5432}}"
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
         if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
