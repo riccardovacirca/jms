@@ -37,8 +37,8 @@ Usage: cmd COMMAND [OPTIONS]
   app restart                      Restart background process
   app status                       Show status
 
-  vite build                       Build for production → src/main/resources/static/
-  vite run                         Run Vite dev server (foreground, with API proxy)
+  gui build                        Build for production → src/main/resources/static/
+  gui run                          Run Vite dev server (foreground, with API proxy)
 
   git push [-r <path>]             Stage, commit and push
   git pull [-r <path>]             Pull from remote
@@ -761,11 +761,11 @@ case "$1" in
             *) error "Unknown app command: $2. Use: build, run, start, stop, restart, status" ;;
         esac
         ;;
-    vite)
+    gui)
         case "$2" in
             build) vite_build ;;
             run)   vite_run ;;
-            *) error "Unknown vite command: $2. Use: build, run" ;;
+            *) error "Unknown gui command: $2. Use: build, run" ;;
         esac
         ;;
     git)

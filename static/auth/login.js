@@ -1,7 +1,7 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
-import './index.css';
+import './auth.css';
 
-class AuthLayout extends HTMLElement {
+class LoginLayout extends HTMLElement {
   constructor() {
     super();
     this._loading = false;
@@ -52,7 +52,12 @@ class AuthLayout extends HTMLElement {
         });
         const data = await res.json();
         if (!res.ok || data.err) throw new Error(data.log || 'Credenziali non valide');
-        window.location.href = '/home';
+
+        if (data.out.must_change_password) {
+          window.location.href = '/auth/changepass.html';
+        } else {
+          window.location.href = '/home/main.html';
+        }
       } catch (e) {
         this._error   = e.message;
         this._loading = false;
@@ -69,4 +74,4 @@ class AuthLayout extends HTMLElement {
   }
 }
 
-customElements.define('auth-layout', AuthLayout);
+customElements.define('login-layout', LoginLayout);

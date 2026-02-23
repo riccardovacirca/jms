@@ -1,5 +1,5 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
-import './index.css';
+import './home.css';
 import { auth, logout, checkAuth } from '../store.js';
 
 class HomeLayout extends HTMLElement {
@@ -10,6 +10,12 @@ class HomeLayout extends HTMLElement {
 
   _render() {
     const { isAuthenticated, user } = auth.state;
+
+    if (isAuthenticated && user?.must_change_password) {
+      window.location.href = '/auth/changepass.html';
+      return;
+    }
+
     this.innerHTML = `
       <div class="min-vh-100 bg-light">
         <header class="d-flex align-items-center px-4 py-3 bg-white border-bottom">
@@ -32,7 +38,7 @@ class HomeLayout extends HTMLElement {
     `;
     this.querySelector('#btn-logout')?.addEventListener('click', logout);
     this.querySelector('#btn-login')?.addEventListener('click', () => {
-      window.location.href = '/auth';
+      window.location.href = '/auth/login.html';
     });
   }
 }

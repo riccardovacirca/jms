@@ -155,7 +155,7 @@ const refreshState = {
 
 /**
  * Tenta di rinnovare il token di accesso chiamando /api/auth/refresh.
- * Se il refresh fallisce, reindirizza a /auth (sessione scaduta).
+ * Se il refresh fallisce, reindirizza a /auth/login.html (sessione scaduta).
  * @returns {Promise<void>}
  */
 async function refreshToken() {
@@ -164,7 +164,7 @@ async function refreshToken() {
     credentials: 'include'
   });
   if (!res.ok) {
-    window.location.href = '/auth';
+    window.location.href = '/auth/login.html';
     throw new Error('Session expired');
   }
 }

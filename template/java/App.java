@@ -18,7 +18,6 @@ import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
-import java.io.InputStream;
 
 public class App
 {
@@ -48,9 +47,7 @@ public class App
     );
 
     paths = new PathTemplateHandler(staticHandler)
-      .add("/",     redirect("/home"))
-      .add("/home", page("home/index.html"))
-      .add("/auth", page("auth/index.html"))
+      .add("/",     redirect("/home/main.html"))
       .add("/api/auth/login",   route(new LoginHandler(),   dataSource))
       .add("/api/auth/session", route(new SessionHandler(), dataSource))
       .add("/api/auth/logout",  route(new LogoutHandler(),  dataSource))
@@ -68,24 +65,6 @@ public class App
 
     server.start();
     System.out.println("[info] Server in ascolto sulla porta " + port);
-  }
-
-  private static HttpHandler page(String filename)
-  {
-    return exchange -> {
-      InputStream in;
-      byte[] bytes;
-      in = App.class.getClassLoader().getResourceAsStream("static/" + filename);
-      if (in == null) {
-        exchange.setStatusCode(404);
-        exchange.endExchange();
-      } else {
-        bytes = in.readAllBytes();
-        in.close();
-        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/html; charset=UTF-8");
-        exchange.getResponseSender().send(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-      }
-    };
   }
 
   private static HttpHandler redirect(String location)
