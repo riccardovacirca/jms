@@ -11,6 +11,7 @@
 #   --postgres              Installa il container PostgreSQL
 #   -n, --name <name>       Nome del container PostgreSQL (default: postgres)
 #   -p, --port <port>       Porta host per PostgreSQL (default: 5432)
+#   --network <network>     Network Docker per PostgreSQL (default: bridge)
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
@@ -19,7 +20,8 @@
 #   ./install.sh --postgres                     # Installa PostgreSQL
 #   ./install.sh --postgres -n mydb             # Installa PostgreSQL con nome custom
 #   ./install.sh --postgres -p 5433             # Installa PostgreSQL su porta custom
-#   ./install.sh --postgres -n mydb -p 5433     # Nome e porta custom
+#   ./install.sh --postgres --network hola-net  # Installa su network custom
+#   ./install.sh --postgres -n mydb -p 5433 --network hola-net  # Tutti i parametri custom
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -131,6 +133,7 @@ Options:
   --postgres              Install PostgreSQL container
   -n, --name <name>       PostgreSQL container name (default: postgres)
   -p, --port <port>       PostgreSQL host port (default: 5432)
+  --network <network>     Docker network for PostgreSQL (default: bridge)
   --help, -h              Show this message
 
 Examples:
@@ -139,7 +142,8 @@ Examples:
   ./install.sh --postgres                    # Install PostgreSQL
   ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
   ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
-  ./install.sh --postgres -n mydb -p 5433    # Custom name and port
+  ./install.sh --postgres --network hola-net # Install on custom network
+  ./install.sh --postgres -n mydb -p 5433 --network hola-net  # All custom parameters
 EOF
     exit 0
 }
@@ -216,6 +220,7 @@ EOF
 install_postgres() {
     local CONTAINER_NAME="postgres"
     local PORT_HOST=""
+    local NETWORK=""
 
     # Parse arguments
     while [ $# -gt 0 ]; do
@@ -228,6 +233,11 @@ install_postgres() {
             -p|--port)
                 [ -n "$2" ] || { echo "ERRORE: -p|--port richiede un valore"; exit 1; }
                 PORT_HOST="$2"
+                shift 2
+                ;;
+            --network)
+                [ -n "$2" ] || { echo "ERRORE: --network richiede un valore"; exit 1; }
+                NETWORK="$2"
                 shift 2
                 ;;
             *) shift ;;
@@ -256,12 +266,27 @@ install_postgres() {
     fi
 
     echo "Creating PostgreSQL container '$CONTAINER_NAME'..."
-    docker run -d --name "$CONTAINER_NAME" \
-        -e POSTGRES_USER="$ROOT_USER" \
-        -e POSTGRES_PASSWORD="$ROOT_PASSWORD" \
-        -p "$PORT_HOST:5432" \
-        -v "${CONTAINER_NAME}-data:/var/lib/postgresql/data" \
-        "$IMAGE" >/dev/null
+
+    # Build docker run command
+    local DOCKER_CMD="docker run -d --name \"$CONTAINER_NAME\""
+    DOCKER_CMD="$DOCKER_CMD -e POSTGRES_USER=\"$ROOT_USER\""
+    DOCKER_CMD="$DOCKER_CMD -e POSTGRES_PASSWORD=\"$ROOT_PASSWORD\""
+    DOCKER_CMD="$DOCKER_CMD -p \"$PORT_HOST:5432\""
+    DOCKER_CMD="$DOCKER_CMD -v \"${CONTAINER_NAME}-data:/var/lib/postgresql/data\""
+
+    # Add network if specified
+    if [ -n "$NETWORK" ]; then
+        # Check if network exists
+        if ! docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$"; then
+            echo "ERRORE: Network '$NETWORK' non esistente. Crearla prima con: docker network create $NETWORK"
+            exit 1
+        fi
+        DOCKER_CMD="$DOCKER_CMD --network \"$NETWORK\""
+    fi
+
+    DOCKER_CMD="$DOCKER_CMD \"$IMAGE\""
+
+    eval "$DOCKER_CMD" >/dev/null
 
     echo "Done"
 }
