@@ -101,6 +101,91 @@ public class Auth
   }
 
   // -------------------------
+  // PASSWORD POLICY
+  // -------------------------
+
+  private static final String LOWER   = "abcdefghijklmnopqrstuvwxyz";
+  private static final String UPPER   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  private static final String DIGITS  = "0123456789";
+  private static final String SPECIAL = "!@#$%&*?+-_=";
+
+  /**
+   * Verifica la policy password.
+   * Ritorna null se valida, altrimenti una stringa con la motivazione del rifiuto.
+   * Policy: 8-32 caratteri, almeno una minuscola, una maiuscola, un cifra, un carattere speciale.
+   */
+  public static String validatePassword(String password)
+  {
+    boolean hasLower;
+    boolean hasUpper;
+    boolean hasDigit;
+    boolean hasSpecial;
+
+    if (password == null || password.length() < 8) {
+      return "La password deve avere almeno 8 caratteri";
+    }
+    if (password.length() > 32) {
+      return "La password non può superare i 32 caratteri";
+    }
+    hasLower   = false;
+    hasUpper   = false;
+    hasDigit   = false;
+    hasSpecial = false;
+    for (char c : password.toCharArray()) {
+      if      (Character.isLowerCase(c)) hasLower   = true;
+      else if (Character.isUpperCase(c)) hasUpper   = true;
+      else if (Character.isDigit(c))     hasDigit   = true;
+      else                               hasSpecial = true;
+    }
+    if (!hasLower)   return "La password deve contenere almeno una lettera minuscola";
+    if (!hasUpper)   return "La password deve contenere almeno una lettera maiuscola";
+    if (!hasDigit)   return "La password deve contenere almeno un numero";
+    if (!hasSpecial) return "La password deve contenere almeno un carattere speciale";
+    return null;
+  }
+
+  /** Genera una password casuale di 12 caratteri conforme alla policy. */
+  public static String generatePassword()
+  {
+    SecureRandom rnd;
+    char[] pwd;
+    String all;
+    int i;
+    int j;
+    char tmp;
+
+    rnd = new SecureRandom();
+    pwd = new char[12];
+    pwd[0] = LOWER.charAt(rnd.nextInt(LOWER.length()));
+    pwd[1] = UPPER.charAt(rnd.nextInt(UPPER.length()));
+    pwd[2] = DIGITS.charAt(rnd.nextInt(DIGITS.length()));
+    pwd[3] = SPECIAL.charAt(rnd.nextInt(SPECIAL.length()));
+    all = LOWER + UPPER + DIGITS + SPECIAL;
+    for (i = 4; i < 12; i++) {
+      pwd[i] = all.charAt(rnd.nextInt(all.length()));
+    }
+    for (i = 11; i > 0; i--) {
+      j = rnd.nextInt(i + 1);
+      tmp = pwd[i]; pwd[i] = pwd[j]; pwd[j] = tmp;
+    }
+    return new String(pwd);
+  }
+
+  /** Genera un PIN numerico di 8 cifre per la 2FA. */
+  public static String generatePin()
+  {
+    SecureRandom rnd;
+    StringBuilder sb;
+
+    rnd = new SecureRandom();
+    sb  = new StringBuilder(8);
+    for (int i = 0; i < 8; i++) {
+      sb.append(rnd.nextInt(10));
+    }
+    return sb.toString();
+  }
+
+  // -------------------------
   // PASSWORD HASHING (PBKDF2)
   // -------------------------
 

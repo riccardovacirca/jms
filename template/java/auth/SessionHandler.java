@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.handler;
+package {{APP_PACKAGE}}.auth;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;

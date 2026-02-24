@@ -1,10 +1,12 @@
 package {{APP_PACKAGE}};
 
-import {{APP_PACKAGE}}.handler.ChangePasswordHandler;
-import {{APP_PACKAGE}}.handler.LoginHandler;
-import {{APP_PACKAGE}}.handler.LogoutHandler;
-import {{APP_PACKAGE}}.handler.RefreshHandler;
-import {{APP_PACKAGE}}.handler.SessionHandler;
+import {{APP_PACKAGE}}.auth.ChangePasswordHandler;
+import {{APP_PACKAGE}}.auth.ForgotPasswordHandler;
+import {{APP_PACKAGE}}.auth.LoginHandler;
+import {{APP_PACKAGE}}.auth.LogoutHandler;
+import {{APP_PACKAGE}}.auth.RefreshHandler;
+import {{APP_PACKAGE}}.auth.SessionHandler;
+import {{APP_PACKAGE}}.auth.TwoFactorHandler;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
@@ -51,8 +53,10 @@ public class App
       .add("/api/auth/login",   route(new LoginHandler(),   DB.getDataSource()))
       .add("/api/auth/session", route(new SessionHandler(), DB.getDataSource()))
       .add("/api/auth/logout",  route(new LogoutHandler(),  DB.getDataSource()))
-      .add("/api/auth/refresh",         route(new RefreshHandler(),        DB.getDataSource()))
-      .add("/api/auth/change-password", route(new ChangePasswordHandler(), DB.getDataSource()));
+      .add("/api/auth/refresh",          route(new RefreshHandler(),         DB.getDataSource()))
+      .add("/api/auth/change-password",  route(new ChangePasswordHandler(),  DB.getDataSource()))
+      .add("/api/auth/forgot-password",  route(new ForgotPasswordHandler(),  DB.getDataSource()))
+      .add("/api/auth/2fa",              route(new TwoFactorHandler(),        DB.getDataSource()));
 
     // Aggiungere qui i propri handler:
     // .add("/api/users",      route(new UserHandler(), dataSource))

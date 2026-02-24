@@ -48,7 +48,7 @@
 #                               - bind mount ./config/ → /app/config (configurazione)
 #                               - porte API e Vite esposte sull'host
 #   6. Scaffolding          — genera la struttura del progetto solo se pom.xml
-#                             non esiste: pom.xml, App.java, handler, migration SQL,
+#                             non esiste: pom.xml, App.java, auth, migration SQL,
 #                             logback.xml, application.properties, struttura Vite
 #   7. npm install          — installa le dipendenze vite nel container
 #   8. cmd tool             — copia bin/cmd nel container e lo registra come
@@ -539,8 +539,8 @@ GITIGNORE
 
         # Java files da template
         cp "$INSTALLER_DIR/template/java/App.java" "src/main/java/$GROUP_DIR/App.java"
-        mkdir -p "src/main/java/$GROUP_DIR/handler"
-        cp -r "$INSTALLER_DIR/template/java/handler/." "src/main/java/$GROUP_DIR/handler/"
+        mkdir -p "src/main/java/$GROUP_DIR/auth"
+        cp -r "$INSTALLER_DIR/template/java/auth/." "src/main/java/$GROUP_DIR/auth/"
         find "src/main/java/$GROUP_DIR" -name "*.java" -type f | while read -r file; do
             sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" "$file" > "$file.tmp" && mv -f "$file.tmp" "$file"
         done

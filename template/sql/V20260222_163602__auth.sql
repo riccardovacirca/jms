@@ -42,3 +42,15 @@ CREATE TABLE refresh_tokens (
   expires_at TIMESTAMP    NOT NULL,
   created_at TIMESTAMP    NOT NULL DEFAULT NOW()
 );
+
+-- PIN temporanei per autenticazione a due fattori via mail.
+-- challenge_token: cookie opaco restituito al client dopo le credenziali.
+-- Eliminati in cascata se l'utente viene rimosso.
+CREATE TABLE auth_pins (
+  id              BIGSERIAL    PRIMARY KEY,
+  challenge_token VARCHAR(64)  NOT NULL UNIQUE,
+  user_id         INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pin_hash        VARCHAR(255) NOT NULL,
+  expires_at      TIMESTAMP    NOT NULL,
+  created_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+);

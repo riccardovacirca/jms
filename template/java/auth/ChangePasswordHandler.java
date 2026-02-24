@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.handler;
+package {{APP_PACKAGE}}.auth;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
@@ -55,20 +55,27 @@ public class ChangePasswordHandler implements Handler
           log.warn("Cambio password rifiutato: campi mancanti");
           res.status(200).contentType("application/json").err(true).log("Campi obbligatori mancanti").out(null).send();
         } else {
-          userId = Integer.parseInt(jwt.getSubject());
-          sql = "SELECT password_hash FROM users WHERE id = ? AND attivo = true";
-          rows = db.select(sql, userId);
-
-          if (rows.isEmpty() || !Auth.verifyPassword(currentPassword, (String) rows.get(0).get("password_hash"))) {
-            log.warn("Cambio password rifiutato: password corrente non valida per userId {}", userId);
-            res.status(200).contentType("application/json").err(true).log("Password corrente non valida").out(null).send();
+          String policyError;
+          policyError = Auth.validatePassword(newPassword);
+          if (policyError != null) {
+            log.warn("Cambio password rifiutato: policy non rispettata per userId {}", jwt.getSubject());
+            res.status(200).contentType("application/json").err(true).log(policyError).out(null).send();
           } else {
-            newHash = Auth.hashPassword(newPassword);
-            sql = "UPDATE users SET password_hash = ?, must_change_password = false WHERE id = ?";
-            db.query(sql, newHash, userId);
+            userId = Integer.parseInt(jwt.getSubject());
+            sql = "SELECT password_hash FROM users WHERE id = ? AND attivo = true";
+            rows = db.select(sql, userId);
 
-            log.info("Password aggiornata per userId {}", userId);
-            res.status(200).contentType("application/json").err(false).log(null).out(null).send();
+            if (rows.isEmpty() || !Auth.verifyPassword(currentPassword, (String) rows.get(0).get("password_hash"))) {
+              log.warn("Cambio password rifiutato: password corrente non valida per userId {}", userId);
+              res.status(200).contentType("application/json").err(true).log("Password corrente non valida").out(null).send();
+            } else {
+              newHash = Auth.hashPassword(newPassword);
+              sql = "UPDATE users SET password_hash = ?, must_change_password = false WHERE id = ?";
+              db.query(sql, newHash, userId);
+
+              log.info("Password aggiornata per userId {}", userId);
+              res.status(200).contentType("application/json").err(false).log(null).out(null).send();
+            }
           }
         }
       }

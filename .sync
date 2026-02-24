@@ -5,8 +5,6 @@
 /workspace/install.sh -> /workspace/jms/install.sh
 /workspace/release.sh -> /workspace/jms/release.sh
 /workspace/vite/src/auth -> /workspace/jms/static/auth
-/workspace/vite/src/header -> /workspace/jms/static/header
-/workspace/vite/src/sidebar -> /workspace/jms/static/sidebar
 /workspace/vite/src/home -> /workspace/jms/static/home
 /workspace/vite/src/index.html -> /workspace/jms/static/index.html
 /workspace/vite/src/store.js -> /workspace/jms/static/store.js

@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.handler;
+package {{APP_PACKAGE}}.auth;
 
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
