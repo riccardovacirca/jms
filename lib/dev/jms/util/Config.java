@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}};
+package dev.jms.util;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -6,14 +6,21 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-public class Config {
-
+/**
+ * Carica la configurazione applicativa da /app/config/application.properties.
+ * Le variabili d'ambiente hanno precedenza sulle chiavi del file (es. DB_HOST sovrascrive db.host).
+ */
+public class Config
+{
   private final Properties props = new Properties();
 
   private static final String EXTERNAL_CONFIG = "/app/config/application.properties";
 
-  public Config() {
-    File external = new File(EXTERNAL_CONFIG);
+  public Config()
+  {
+    File external;
+
+    external = new File(EXTERNAL_CONFIG);
     if (!external.exists()) {
       System.err.println("[error] File di configurazione non trovato: " + EXTERNAL_CONFIG);
       System.exit(1);
@@ -27,14 +34,19 @@ public class Config {
     }
   }
 
-  public String get(String key, String defaultValue) {
-    String envKey = key.toUpperCase().replace('.', '_');
-    String envVal = System.getenv(envKey);
+  public String get(String key, String defaultValue)
+  {
+    String envKey;
+    String envVal;
+
+    envKey = key.toUpperCase().replace('.', '_');
+    envVal = System.getenv(envKey);
     if (envVal != null && !envVal.isBlank()) return envVal;
     return props.getProperty(key, defaultValue);
   }
 
-  public int getInt(String key, int defaultValue) {
+  public int getInt(String key, int defaultValue)
+  {
     try {
       return Integer.parseInt(get(key, String.valueOf(defaultValue)));
     } catch (NumberFormatException e) {

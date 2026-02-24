@@ -6,11 +6,11 @@ import {{APP_PACKAGE}}.handler.LogoutHandler;
 import {{APP_PACKAGE}}.handler.RefreshHandler;
 import {{APP_PACKAGE}}.handler.SessionHandler;
 import dev.jms.util.Auth;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import javax.sql.DataSource;
+import dev.jms.util.Config;
+import dev.jms.util.DB;
 import dev.jms.util.Handler;
 import dev.jms.util.HandlerAdapter;
+import dev.jms.util.Mail;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.PathTemplateHandler;
@@ -21,8 +21,6 @@ import org.flywaydb.core.Flyway;
 
 public class App
 {
-  private static HikariDataSource dataSource;
-
   public static void main(String[] args)
   {
     Config config;
@@ -34,7 +32,7 @@ public class App
     config = new Config();
     port = config.getInt("server.port", 8080);
 
-    initDataSource(config);
+    DB.init(config);
     runMigrations();
 
     Auth.init(
@@ -42,17 +40,19 @@ public class App
       config.getInt("jwt.access.expiry.seconds", 900)
     );
 
+    Mail.init(config);
+
     staticHandler = new ResourceHandler(
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
     );
 
     paths = new PathTemplateHandler(staticHandler)
       .add("/",     redirect("/home/main.html"))
-      .add("/api/auth/login",   route(new LoginHandler(),   dataSource))
-      .add("/api/auth/session", route(new SessionHandler(), dataSource))
-      .add("/api/auth/logout",  route(new LogoutHandler(),  dataSource))
-      .add("/api/auth/refresh",         route(new RefreshHandler(),        dataSource))
-      .add("/api/auth/change-password", route(new ChangePasswordHandler(), dataSource));
+      .add("/api/auth/login",   route(new LoginHandler(),   DB.getDataSource()))
+      .add("/api/auth/session", route(new SessionHandler(), DB.getDataSource()))
+      .add("/api/auth/logout",  route(new LogoutHandler(),  DB.getDataSource()))
+      .add("/api/auth/refresh",         route(new RefreshHandler(),        DB.getDataSource()))
+      .add("/api/auth/change-password", route(new ChangePasswordHandler(), DB.getDataSource()));
 
     // Aggiungere qui i propri handler:
     // .add("/api/users",      route(new UserHandler(), dataSource))
@@ -81,56 +81,21 @@ public class App
     return new HandlerAdapter(handler);
   }
 
-  private static HandlerAdapter route(Handler handler, DataSource dataSource)
+  private static HandlerAdapter route(Handler handler, javax.sql.DataSource dataSource)
   {
     return new HandlerAdapter(handler, dataSource);
   }
 
-  private static void initDataSource(Config config)
-  {
-    String host;
-    String dbPort;
-    String name;
-    String user;
-    String password;
-    int poolSize;
-
-    host = config.get("db.host", "");
-    dbPort = config.get("db.port", "5432");
-    name = config.get("db.name", "");
-    user = config.get("db.user", "");
-    password = config.get("db.password", "");
-    poolSize = config.getInt("db.pool.size", 10);
-
-    if (host.isBlank() || name.isBlank() || user.isBlank()) {
-      System.out.println("[info] Database non configurato, pool non inizializzato");
-    } else {
-      try {
-        HikariConfig hc;
-        hc = new HikariConfig();
-        hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
-        hc.setUsername(user);
-        hc.setPassword(password);
-        hc.setMaximumPoolSize(poolSize);
-        hc.setInitializationFailTimeout(-1);
-        dataSource = new HikariDataSource(hc);
-        System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
-      } catch (Exception e) {
-        System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
-      }
-    }
-  }
-
   private static void runMigrations()
   {
-    if (dataSource == null) {
+    if (!DB.isConfigured()) {
       System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
     } else {
       try {
         Flyway flyway;
         int applied;
         flyway = Flyway.configure()
-          .dataSource(dataSource)
+          .dataSource(DB.getDataSource())
           .locations("classpath:db/migration")
           .load();
         applied = flyway.migrate().migrationsExecuted;

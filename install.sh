@@ -22,6 +22,11 @@
 #   ./install.sh --postgres -p 5433             # Installa PostgreSQL su porta custom
 #   ./install.sh --postgres --network hola-net  # Installa su network custom
 #   ./install.sh --postgres -n mydb -p 5433 --network hola-net  # Tutti i parametri custom
+#   ./install.sh --mailpit                      # Installa Mailpit (SMTP fake + web UI)
+#   ./install.sh --mailpit -n mymail            # Installa Mailpit con nome custom
+#   ./install.sh --mailpit -p 2025              # Installa Mailpit con porta SMTP custom
+#   ./install.sh --mailpit --ui-port 9025       # Installa Mailpit con porta web UI custom
+#   ./install.sh --mailpit --network hola-net   # Installa su network custom
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -62,6 +67,20 @@
 #
 # Dopo l'installazione usare 'cmd db setup' per creare il database e l'utente
 # applicativo specifici del progetto.
+#
+# -----------------------------------------------------------------------------
+# PROCEDURA DI INSTALL (--mailpit)
+# -----------------------------------------------------------------------------
+#
+# Installa un container Mailpit standalone per il test locale dell'invio email.
+# Mailpit è un server SMTP "finto": cattura le email senza spedirle davvero
+# e le espone in una web UI.
+#
+# Porte esposte sull'host:
+#   - SMTP:   1025  (usare come mail.host=mailpit, mail.port=1025 in application.properties)
+#   - Web UI: 8025  (aprire http://localhost:8025 per visualizzare le email)
+#
+# Non richiede .env. Non invia email reali.
 #
 # -----------------------------------------------------------------------------
 # POLICY LOG
@@ -134,6 +153,11 @@ Options:
   -n, --name <name>       PostgreSQL container name (default: postgres)
   -p, --port <port>       PostgreSQL host port (default: 5432)
   --network <network>     Docker network for PostgreSQL (default: bridge)
+  --mailpit               Install Mailpit container (fake SMTP + web UI)
+  -n, --name <name>       Mailpit container name (default: mailpit)
+  -p, --port <port>       Mailpit SMTP host port (default: 1025)
+  --ui-port <port>        Mailpit web UI host port (default: 8025)
+  --network <network>     Docker network for Mailpit (default: bridge)
   --help, -h              Show this message
 
 Examples:
@@ -144,6 +168,10 @@ Examples:
   ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
   ./install.sh --postgres --network hola-net # Install on custom network
   ./install.sh --postgres -n mydb -p 5433 --network hola-net  # All custom parameters
+  ./install.sh --mailpit                     # Install Mailpit
+  ./install.sh --mailpit -p 2025             # Install Mailpit with custom SMTP port
+  ./install.sh --mailpit --ui-port 9025      # Install Mailpit with custom UI port
+  ./install.sh --mailpit --network hola-net  # Install Mailpit on custom network
 EOF
     exit 0
 }
@@ -292,6 +320,87 @@ install_postgres() {
 }
 
 # =============================================================================
+# install_mailpit — container Mailpit standalone (SMTP fake + web UI)
+# =============================================================================
+
+install_mailpit() {
+    local CONTAINER_NAME="mailpit"
+    local SMTP_PORT_HOST=""
+    local UI_PORT_HOST=""
+    local NETWORK=""
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -n|--name)
+                [ -n "$2" ] || { echo "ERRORE: -n|--name richiede un valore"; exit 1; }
+                CONTAINER_NAME="$2"
+                shift 2
+                ;;
+            -p|--port)
+                [ -n "$2" ] || { echo "ERRORE: -p|--port richiede un valore"; exit 1; }
+                SMTP_PORT_HOST="$2"
+                shift 2
+                ;;
+            --ui-port)
+                [ -n "$2" ] || { echo "ERRORE: --ui-port richiede un valore"; exit 1; }
+                UI_PORT_HOST="$2"
+                shift 2
+                ;;
+            --network)
+                [ -n "$2" ] || { echo "ERRORE: --network richiede un valore"; exit 1; }
+                NETWORK="$2"
+                shift 2
+                ;;
+            *) shift ;;
+        esac
+    done
+
+    local IMAGE="axllent/mailpit"
+    SMTP_PORT_HOST="${SMTP_PORT_HOST:-1025}"
+    UI_PORT_HOST="${UI_PORT_HOST:-8025}"
+
+    if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+        if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+            echo "Mailpit container '$CONTAINER_NAME' is already running"
+        else
+            echo "Starting Mailpit container '$CONTAINER_NAME'..."
+            docker start "$CONTAINER_NAME"
+        fi
+        echo "Done"
+        exit 0
+    fi
+
+    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
+        echo "Pulling Mailpit image..."
+        docker pull "$IMAGE"
+    fi
+
+    echo "Creating Mailpit container '$CONTAINER_NAME'..."
+
+    # Build docker run command
+    local DOCKER_CMD="docker run -d --name \"$CONTAINER_NAME\""
+    DOCKER_CMD="$DOCKER_CMD -p \"$SMTP_PORT_HOST:1025\""
+    DOCKER_CMD="$DOCKER_CMD -p \"$UI_PORT_HOST:8025\""
+
+    # Add network if specified
+    if [ -n "$NETWORK" ]; then
+        # Check if network exists
+        if ! docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$"; then
+            echo "ERRORE: Network '$NETWORK' non esistente. Crearla prima con: docker network create $NETWORK"
+            exit 1
+        fi
+        DOCKER_CMD="$DOCKER_CMD --network \"$NETWORK\""
+    fi
+
+    DOCKER_CMD="$DOCKER_CMD \"$IMAGE\""
+
+    eval "$DOCKER_CMD" >/dev/null
+
+    echo "Done"
+}
+
+# =============================================================================
 # install_dev — ambiente di sviluppo completo
 # =============================================================================
 
@@ -334,6 +443,10 @@ install_dev() {
 
         if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
             docker network connect "$DEV_NETWORK" "postgres" 2>/dev/null || true
+        fi
+
+        if docker ps --format '{{.Names}}' | grep -q "^mailpit$"; then
+            docker network connect "$DEV_NETWORK" "mailpit" 2>/dev/null || true
         fi
 
         mkdir -p docker
@@ -426,7 +539,6 @@ GITIGNORE
 
         # Java files da template
         cp "$INSTALLER_DIR/template/java/App.java" "src/main/java/$GROUP_DIR/App.java"
-        cp "$INSTALLER_DIR/template/java/Config.java" "src/main/java/$GROUP_DIR/Config.java"
         mkdir -p "src/main/java/$GROUP_DIR/handler"
         cp -r "$INSTALLER_DIR/template/java/handler/." "src/main/java/$GROUP_DIR/handler/"
         find "src/main/java/$GROUP_DIR" -name "*.java" -type f | while read -r file; do
@@ -576,6 +688,10 @@ case "$1" in
     --postgres)
         shift
         install_postgres "$@"
+        ;;
+    --mailpit)
+        shift
+        install_mailpit "$@"
         ;;
     --help|-h)
         show_help

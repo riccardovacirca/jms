@@ -6,6 +6,8 @@
  */
 package dev.jms.util;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.ArrayList;
@@ -19,6 +21,8 @@ import java.util.HashSet;
  */
 public class DB
 {
+  private static HikariDataSource sharedDataSource;
+
   private final DataSource dataSource;
 
   /** Connection bound to current thread */
@@ -32,6 +36,61 @@ public class DB
     this.dataSource = dataSource;
     this.connection = new ThreadLocal<>();
     this.lastGeneratedKey = ThreadLocal.withInitial(() -> -1L);
+  }
+
+  // =========================
+  // STATIC INIT
+  // =========================
+
+  /**
+   * Da chiamare una volta in App.main() prima di avviare il server.
+   * Non inizializza se db.host, db.name o db.user sono assenti.
+   */
+  public static void init(Config config)
+  {
+    String host;
+    String name;
+    String user;
+    String dbPort;
+    String password;
+    int poolSize;
+    HikariConfig hc;
+
+    host = config.get("db.host", "");
+    name = config.get("db.name", "");
+    user = config.get("db.user", "");
+
+    if (host.isBlank() || name.isBlank() || user.isBlank()) {
+      System.out.println("[info] Database non configurato, pool non inizializzato");
+      return;
+    }
+
+    dbPort   = config.get("db.port", "5432");
+    password = config.get("db.password", "");
+    poolSize = config.getInt("db.pool.size", 10);
+
+    try {
+      hc = new HikariConfig();
+      hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
+      hc.setUsername(user);
+      hc.setPassword(password);
+      hc.setMaximumPoolSize(poolSize);
+      hc.setInitializationFailTimeout(-1);
+      sharedDataSource = new HikariDataSource(hc);
+      System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
+    } catch (Exception e) {
+      System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+    }
+  }
+
+  public static boolean isConfigured()
+  {
+    return sharedDataSource != null;
+  }
+
+  public static DataSource getDataSource()
+  {
+    return sharedDataSource;
   }
 
   // =========================
