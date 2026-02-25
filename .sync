@@ -1,4 +1,5 @@
 /workspace/.sync -> /workspace/jms/.sync
+/workspace/.vscode/launch.json -> /workspace/jms/template/.vscode/launch.json
 /workspace/src/main/java/dev/jms/util -> /workspace/jms/lib/dev/jms/util
 /workspace/docs/dsl -> /workspace/jms/docs/dsl
 /workspace/bin/cmd -> /workspace/jms/cmd

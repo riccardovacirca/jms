@@ -1,5 +1,6 @@
-package {{APP_PACKAGE}}.auth;
+package {{APP_PACKAGE}}.auth.handler;
 
+import {{APP_PACKAGE}}.auth.dao.RefreshTokenDAO;
 import dev.jms.util.DB;
 import dev.jms.util.Handler;
 import dev.jms.util.HttpRequest;
@@ -15,7 +16,7 @@ public class LogoutHandler implements Handler
     refreshToken = req.getCookie("refresh_token");
 
     if (refreshToken != null) {
-      db.query("DELETE FROM refresh_tokens WHERE token = ?", refreshToken);
+      new RefreshTokenDAO(db).delete(refreshToken);
     }
 
     res.status(200)

@@ -1,12 +1,12 @@
 package {{APP_PACKAGE}};
 
-import {{APP_PACKAGE}}.auth.ChangePasswordHandler;
-import {{APP_PACKAGE}}.auth.ForgotPasswordHandler;
-import {{APP_PACKAGE}}.auth.LoginHandler;
-import {{APP_PACKAGE}}.auth.LogoutHandler;
-import {{APP_PACKAGE}}.auth.RefreshHandler;
-import {{APP_PACKAGE}}.auth.SessionHandler;
-import {{APP_PACKAGE}}.auth.TwoFactorHandler;
+import {{APP_PACKAGE}}.auth.handler.ChangePasswordHandler;
+import {{APP_PACKAGE}}.auth.handler.ForgotPasswordHandler;
+import {{APP_PACKAGE}}.auth.handler.LoginHandler;
+import {{APP_PACKAGE}}.auth.handler.LogoutHandler;
+import {{APP_PACKAGE}}.auth.handler.RefreshHandler;
+import {{APP_PACKAGE}}.auth.handler.SessionHandler;
+import {{APP_PACKAGE}}.auth.handler.TwoFactorHandler;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;

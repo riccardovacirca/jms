@@ -118,6 +118,7 @@
 #   ./config/       ──bind mount──►   /app/config/    (configurazione runtime)
 #   localhost:2310  ◄─port mapping─   :8080           (Undertow API)
 #   localhost:2350  ◄─port mapping─   :5173           (Vite dev server)
+#   localhost:5005  ◄─port mapping─   :5005           (JDWP debugger)
 #
 # -----------------------------------------------------------------------------
 # COMANDI DISPONIBILI DOPO L'INSTALL
@@ -202,6 +203,10 @@ API_PORT_HOST=2310
 # Vite (dev server with proxy)
 VITE_PORT=5173
 VITE_PORT_HOST=2350
+
+# Java Debug (JDWP)
+DEBUG_PORT=5005
+DEBUG_PORT_HOST=5005
 
 # ========================================
 # Release
@@ -487,6 +492,8 @@ DOCKERFILE
             -w /workspace \
             -p "$API_PORT_HOST:$API_PORT" \
             -p "$VITE_PORT_HOST:$VITE_PORT" \
+            -p "$DEBUG_PORT_HOST:$DEBUG_PORT" \
+            -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$DEBUG_PORT" \
             --network "$DEV_NETWORK" \
             "$PROJECT_NAME-dev:latest" \
             tail -f /dev/null >/dev/null
@@ -577,6 +584,10 @@ GITIGNORE
 
 </configuration>
 LOGBACKXML
+
+        # .vscode/launch.json da template
+        mkdir -p .vscode
+        cp "$INSTALLER_DIR/template/.vscode/launch.json" .vscode/launch.json
 
         # Migrazione iniziale Flyway da template
         for f in "$INSTALLER_DIR/template/sql/"*.sql; do

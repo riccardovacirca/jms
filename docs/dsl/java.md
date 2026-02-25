@@ -339,6 +339,36 @@ RULE error.log-level
 
 ---
 
+## DOCUMENTAZIONE
+
+```
+RULE doc.javadoc
+  applies-to: classi pubbliche, metodi pubblici, metodi package-private
+  note: ogni classe pubblica e ogni metodo pubblico o package-private ha un commento Javadoc
+        che descrive lo scopo; i metodi privati lo hanno se la logica non è auto-esplicativa;
+        il commento descrive il "cosa" e il "perché", non il "come";
+        per i metodi che restituiscono null si indica esplicitamente la condizione
+
+  ok: |
+    /**
+     * Cerca l'utente per username includendo passwordHash ed email.
+     * Usato nel flusso di login per la verifica delle credenziali.
+     * Restituisce null se l'utente non esiste o è disabilitato.
+     */
+    public UserAuthDTO findForLogin(String username) throws Exception
+
+    /** Inserisce un nuovo refresh token. */
+    public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
+
+  ko: |
+    public UserAuthDTO findForLogin(String username) throws Exception   // nessun commento
+
+    // commento in linea invece di Javadoc
+    public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
+```
+
+---
+
 ## FORMATO RISPOSTA HTTP
 
 ```
