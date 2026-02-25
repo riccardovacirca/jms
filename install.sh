@@ -493,7 +493,6 @@ DOCKERFILE
             -p "$API_PORT_HOST:$API_PORT" \
             -p "$VITE_PORT_HOST:$VITE_PORT" \
             -p "$DEBUG_PORT_HOST:$DEBUG_PORT" \
-            -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$DEBUG_PORT" \
             --network "$DEV_NETWORK" \
             "$PROJECT_NAME-dev:latest" \
             tail -f /dev/null >/dev/null

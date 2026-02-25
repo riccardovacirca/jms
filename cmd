@@ -32,6 +32,7 @@ Usage: cmd COMMAND [OPTIONS]
 
   app build                        Compile Java backend (Maven)
   app run                          Watch src/, compile on change, hot-restart
+  app debug                        Watch src/, compile on change, hot-restart WITH remote debug on :5005
   app start                        Start in background
   app stop                         Stop background process
   app restart                      Restart background process
@@ -147,6 +148,19 @@ app_restart() {
 }
 
 app_run() {
+    _app_run_common ""
+}
+
+app_debug() {
+    load_env
+    local DEBUG_PORT="${DEBUG_PORT:-5005}"
+    info "[debug] Remote debug enabled on port $DEBUG_PORT"
+    info "[debug] Attach your debugger to localhost:$DEBUG_PORT"
+    _app_run_common "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$DEBUG_PORT"
+}
+
+_app_run_common() {
+    local JAVA_DEBUG_OPTS="$1"
     load_env
     cd "$WORKSPACE"
 
@@ -168,7 +182,7 @@ app_run() {
     _dev_start() {
         printf '\n=== %s restart ===\n' "$(date '+%H:%M:%S')" >> "$DEV_LOG"
         local CP="$WORKSPACE/target/classes:$(cat "$DEV_CP_FILE")"
-        java -cp "$CP" com.example.App >> "$DEV_LOG" 2>&1 &
+        java $JAVA_DEBUG_OPTS -cp "$CP" com.example.App >> "$DEV_LOG" 2>&1 &
         DEV_PID=$!
         echo "$DEV_PID" > "$APP_PID_FILE"
         sleep 1
@@ -757,11 +771,12 @@ case "$1" in
         case "$2" in
             build)   app_build ;;
             run)     app_run ;;
+            debug)   app_debug ;;
             start)   app_start ;;
             stop)    app_stop ;;
             restart) app_restart ;;
             status)  app_status ;;
-            *) error "Unknown app command: $2. Use: build, run, start, stop, restart, status" ;;
+            *) error "Unknown app command: $2. Use: build, run, debug, start, stop, restart, status" ;;
         esac
         ;;
     gui)
