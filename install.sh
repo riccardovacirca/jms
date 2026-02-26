@@ -588,7 +588,7 @@ LOGBACKXML
         cp "$INSTALLER_DIR/template/.vscode/launch.json" .vscode/launch.json
 
         # Moduli disponibili per l'import manuale
-        if [ -d "$INSTALLER_DIR/modules" ]; then
+        if [ -d "$INSTALLER_DIR/modules" ] && [ "$INSTALLER_DIR" != "." ]; then
             mkdir -p modules
             cp -r "$INSTALLER_DIR/modules/." modules/
         fi
