@@ -5,4 +5,4 @@
 /workspace/bin/cmd -> /workspace/jms/cmd
 /workspace/install.sh -> /workspace/jms/install.sh
 /workspace/release.sh -> /workspace/jms/release.sh
-/workspace/modules -> /workspace/jms/modules
+/workspace/modules/auth-1.0.0.tar.gz -> /workspace/jms/modules/auth-1.0.0.tar.gz
