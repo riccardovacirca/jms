@@ -8,7 +8,7 @@ Full-stack Java + vanilla JavaScript application. Backend runs on Undertow (Java
 
 ## Common Commands
 
-### Via `cmd` (inside Docker container `ciao`)
+### Via `cmd` (inside the dev Docker container)
 ```bash
 cmd gui build            # Build frontend → src/main/resources/static/
 cmd gui run              # Dev server Vite in foreground (port 5173)
@@ -17,8 +17,11 @@ cmd app dev              # Watch src/, recompile and restart on changes
 cmd app run              # Start JAR in foreground
 cmd app start/stop       # Start/stop in background
 cmd db                   # Interactive PostgreSQL CLI
+cmd db status            # Show app DB config, connection health and migrations
 cmd db setup             # Create user and database from .env file
 cmd sync                 # Sync sources → jms/ (requires confirmation)
+cmd module export <name> [-v 1.2.3]  # Export module to modules/<name>[-version].tar.gz
+cmd module import <file.tar.gz>      # Extract module into modules/<name>/ with placeholders replaced
 ```
 
 ### Directly (from `vite/` folder)
@@ -37,20 +40,32 @@ npm run build            # Build → src/main/resources/static/
 
 There are no test or lint commands configured.
 
+### Debugging (VSCode + Java Extension Pack)
+
+```bash
+docker exec <container> cmd app debug   # Start backend with JDWP on port 5005
+```
+
+Then in VSCode: **Run and Debug** (`Cmd+Shift+D`) → select **"Attach to Docker"** → press `F5`.
+
+The `.vscode/launch.json` is already configured to attach to `localhost:5005`. The app starts immediately (`suspend=n`) and waits for VSCode to connect.
+
+**After every file save**, `cmd app debug` recompiles and restarts the JVM — VSCode loses the connection and must be re-attached with `F5`.
+
 ## Architecture
 
 ### Backend (`src/main/java/`)
 
 Two packages:
 
-- **`com.example/`** — App-specific code: `App.java` (entry point + server setup), `Config.java`, and `handler/` subpackage with one class per route.
-- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Json`, `Log`, and an `excel/` subpackage.
+- **`<groupId>/`** — App-specific code: `App.java` (entry point + server setup), plus any installed module subpackages (e.g. `auth/` with `handler/`, `dao/`, `dto/`, `adapter/`).
+- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, and an `excel/` subpackage.
 
 **Handler pattern:** Each route is a class implementing `Handler`. Override `get()`, `post()`, `put()`, or `delete()` as needed — unimplemented methods return 405. `HandlerAdapter` wires the handler to Undertow, dispatches to a blocking thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` via `PathTemplateHandler`.
 
 **Adding a new route:**
-1. Create `src/main/java/com/example/handler/FooHandler.java` implementing `Handler`
-2. Register in `App.java`: `router.add("/api/foo", new HandlerAdapter(FooHandler.class))`
+1. Create `src/main/java/<groupId>/handler/FooHandler.java` implementing `Handler`
+2. Register in `App.java`: `paths.add("/api/foo", new HandlerAdapter(FooHandler.class, DB.getDataSource()))`
 
 **Response format:** All API responses use the envelope `{"err": boolean, "log": string|null, "out": object|null}`. Build via chained calls: `res.err(false).log(null).out(payload).send()`. Business errors return HTTP 200 with `err: true`; system errors return 500.
 
@@ -73,43 +88,66 @@ Vite 6 MPA project. Sources in `vite/src/`, build output in `src/main/resources/
 
 ```
 vite/src/
-├── index.html       → redirect to /home
-├── store.js         → createStore() factory + auth store (checkAuth, logout) + currentModule store
-├── util.js          → structured logger + fetchWithRefresh() (auto token refresh on 401) + mount()
-├── header/          → <header-layout> web component
-├── sidebar/         → <sidebar-layout> web component
-├── auth/
-│   ├── index.html   → served by Java at /auth  (has <base href="/auth/">)
-│   ├── index.js     → <auth-layout> web component
-│   └── index.css
-└── home/
-    ├── index.html   → served by Java at /home  (has <base href="/home/">)
-    ├── index.js     → <home-layout> web component + checkAuth()
-    └── index.css
+├── index.html         → redirect to /home
+├── store.js           → createStore() factory + auth store (checkAuth, logout) + currentModule store
+├── util.js            → structured logger + fetchWithRefresh() (auto token refresh on 401) + mount()
+├── common/
+│   ├── header.js      → <header-layout> web component
+│   └── sidebar.js     → <sidebar-layout> web component
+├── home/
+│   ├── main.html      → served at /home  (has <base href="/home/">)
+│   ├── main.js        → <home-layout> web component
+│   └── home.css
+└── <module>/          → added per module (e.g. auth/, invoices/)
+    ├── main.html      → entry point, has <base href="/<module>/">
+    ├── main.js        → web component
+    └── *.css
 ```
 
 **Web component pattern:** Each page is a custom element (`connectedCallback` + `_render()`), reactive to store changes via `subscribe()`. Bootstrap imported via npm in each `index.js`.
 
-**Adding a new page:** Create `vite/src/newpage/index.{html,js,css}`, add `<base href="/newpage/">` to the HTML, add the entry to `rollupOptions.input` in `vite.config.js`, add a route-rewrite for the dev server, and serve it from Java.
+**Adding a new page:** Create `vite/src/newpage/main.{html,js,css}`, add `<base href="/newpage/">` to the HTML, add the entry to `rollupOptions.input` in `vite.config.js`, add a route-rewrite for the dev server, and serve it from Java.
 
-**`fetchWithRefresh(url, options)`:** Drop-in replacement for `fetch`. On 401, automatically calls `/api/auth/refresh`, retries the original request once, and redirects to `/auth` if refresh fails. Deduplicates concurrent refresh requests.
+**`fetchWithRefresh(url, options)`:** Drop-in replacement for `fetch`. On 401, automatically calls the token refresh endpoint, retries the original request once, and redirects to the login page if refresh fails. Deduplicates concurrent refresh requests.
 
 **Structured logger** (`util.js`): `logger.debug/info/warn/error(module, message, data?)`, `logger.action(module, actionName, data?)`, `logger.api(module, method, endpoint, data?)`.
 
-**Dev routing:** `route-rewrite` plugin in `vite.config.js` maps `/home` → `/home/index.html` and `/auth` → `/auth/index.html` (server-side, URL unchanged). The `<base>` tag in each HTML ensures relative imports resolve correctly.
+**Dev routing:** `route-rewrite` plugin in `vite.config.js` maps clean URLs to HTML files (e.g. `/home` → `/home/main.html`) server-side, leaving the URL unchanged. The `<base>` tag in each HTML ensures relative imports resolve correctly. Add a new rewrite rule when adding a new page.
 
 ### Database Migrations
 
-Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__auth.sql`). Migrations in `jms/template/sql/` are copied with the original name unchanged. Schema: `roles` → `users` → `refresh_tokens`.
+Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__create_users.sql`). The base scaffold has no migrations — they are introduced by modules. When installing a module manually, rename its migration files with a fresh timestamp to avoid Flyway checksum conflicts.
 
 ### Docker / Deployment
 
-- Dev container: `ciao`, network `ciao-net`
-- PostgreSQL: shared `postgres` container (not project-specific), connected to `ciao-net`
-- Dev ports: API 2310 → 8080, Vite 2350 → 5173
+- Dev container name matches the project directory name, network `<project>-net`
+- PostgreSQL: shared `postgres` container (not project-specific), connected to the project network
+- Dev ports: API 2310 → 8080, Vite 2350 → 5173, JDWP 5005 → 5005
 - Bind mounts: `./` → `/workspace`, `./logs/` → `/app/logs`, `./config/` → `/app/config`
 - Production: non-root `appuser` (UID 1001), 512MB memory / 1.0 CPU limits, single JAR
 
 ### Template (`jms/`)
 
-`jms/` contains the utility library (`lib/`), Vite template static files (`static/`), initial migrations (`template/sql/`), Java template files (`template/java/`), and scripts (`cmd`, `install.sh`, `release.sh`). Updated via `cmd sync`.
+`jms/` is the upstream template repository. It contains:
+- `lib/` — utility library source (`dev.jms.util.*`), synced from the project
+- `template/` — scaffolding files: `App.java` (HelloWorld skeleton), `pom.xml`, `application.properties`, `.vscode/launch.json`
+- `modules/` — distributable module archives (`.tar.gz`)
+- `cmd`, `install.sh`, `release.sh` — scripts, synced from the project via `cmd sync`
+
+### Modules (`modules/`)
+
+Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains `java/<module>/`, `gui/<module>/`, `migration/`, and `README.md`.
+
+**Export** a module from the current project:
+```bash
+cmd module export auth          # → modules/auth.tar.gz
+cmd module export auth -v 1.0.0 # → modules/auth-1.0.0.tar.gz
+```
+
+**Import** (extract and contextualize, no files installed automatically):
+```bash
+cmd module import auth-1.0.0.tar.gz   # → modules/auth/ with {{APP_PACKAGE}} replaced
+```
+Then follow `modules/auth/README.md` to manually copy files and configure `pom.xml`, `application.properties`, `App.java`, and `vite.config.js`.
+
+`cmd sync` propagates `modules/` to `jms/modules/` so new archives are available to other projects.
