@@ -48,8 +48,10 @@
 #                               - bind mount ./config/ → /app/config (configurazione)
 #                               - porte API e Vite esposte sull'host
 #   6. Scaffolding          — genera la struttura del progetto solo se pom.xml
-#                             non esiste: pom.xml, App.java, auth, migration SQL,
-#                             logback.xml, application.properties, struttura Vite
+#                             non esiste: pom.xml, App.java skeleton, logback.xml,
+#                             application.properties, struttura Vite, modules/
+#                             I moduli (es. auth) si installano manualmente via
+#                             'cmd module import auth.tar.gz'
 #   7. npm install          — installa le dipendenze vite nel container
 #   8. cmd tool             — copia bin/cmd nel container e lo registra come
 #                             comando globale /usr/local/bin/cmd
@@ -545,11 +547,8 @@ GITIGNORE
 
         # Java files da template
         cp "$INSTALLER_DIR/template/java/App.java" "src/main/java/$GROUP_DIR/App.java"
-        mkdir -p "src/main/java/$GROUP_DIR/auth"
-        cp -r "$INSTALLER_DIR/template/java/auth/." "src/main/java/$GROUP_DIR/auth/"
-        find "src/main/java/$GROUP_DIR" -name "*.java" -type f | while read -r file; do
-            sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" "$file" > "$file.tmp" && mv -f "$file.tmp" "$file"
-        done
+        sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" "src/main/java/$GROUP_DIR/App.java" > "src/main/java/$GROUP_DIR/App.java.tmp" \
+            && mv -f "src/main/java/$GROUP_DIR/App.java.tmp" "src/main/java/$GROUP_DIR/App.java"
 
         cat > src/main/resources/logback.xml << 'LOGBACKXML'
 <configuration>
@@ -588,10 +587,11 @@ LOGBACKXML
         mkdir -p .vscode
         cp "$INSTALLER_DIR/template/.vscode/launch.json" .vscode/launch.json
 
-        # Migrazione iniziale Flyway da template
-        for f in "$INSTALLER_DIR/template/sql/"*.sql; do
-            cp "$f" "src/main/resources/db/migration/$(basename "$f")"
-        done
+        # Moduli disponibili per l'import manuale
+        if [ -d "$INSTALLER_DIR/modules" ]; then
+            mkdir -p modules
+            cp -r "$INSTALLER_DIR/modules/." modules/
+        fi
 
         mkdir -p vite
 
@@ -626,10 +626,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index:      resolve(__dirname, 'src/index.html'),
-        login:      resolve(__dirname, 'src/auth/login.html'),
-        changepass: resolve(__dirname, 'src/auth/changepass.html'),
-        home:       resolve(__dirname, 'src/home/main.html'),
+        index: resolve(__dirname, 'src/index.html'),
+        home:  resolve(__dirname, 'src/home/main.html'),
       }
     }
   },
@@ -646,7 +644,6 @@ export default defineConfig({
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
           if (req.url === '/home') req.url = '/home/main.html'
-          else if (req.url === '/auth') req.url = '/auth/login.html'
           next()
         })
       }
@@ -656,14 +653,6 @@ export default defineConfig({
 VITECONFIG
 
         rm -rf "$INSTALLER_DIR/template"
-    fi
-
-    if [ -d "static" ]; then
-        echo "Copying static/ → vite/src/..."
-        mkdir -p vite/src
-        cp -r static/. vite/src/
-        rm -rf static
-        echo "✓ static/ copiato in vite/src/ e rimosso"
     fi
 
     echo "Installing npm dependencies..."

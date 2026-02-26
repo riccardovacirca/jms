@@ -64,6 +64,11 @@ public class Mail
     String user;
     String password;
 
+    if (!config.get("mail.enabled", "false").equalsIgnoreCase("true")) {
+      System.out.println("[info] Mail disabilitato (mail.enabled=false)");
+      return;
+    }
+
     host = config.get("mail.host", "");
     from = config.get("mail.from", "");
 

@@ -1,18 +1,7 @@
 package {{APP_PACKAGE}};
 
-import {{APP_PACKAGE}}.auth.handler.ChangePasswordHandler;
-import {{APP_PACKAGE}}.auth.handler.ForgotPasswordHandler;
-import {{APP_PACKAGE}}.auth.handler.LoginHandler;
-import {{APP_PACKAGE}}.auth.handler.LogoutHandler;
-import {{APP_PACKAGE}}.auth.handler.RefreshHandler;
-import {{APP_PACKAGE}}.auth.handler.SessionHandler;
-import {{APP_PACKAGE}}.auth.handler.TwoFactorHandler;
-import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
-import dev.jms.util.Handler;
-import dev.jms.util.HandlerAdapter;
-import dev.jms.util.Mail;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.PathTemplateHandler;
@@ -37,30 +26,17 @@ public class App
     DB.init(config);
     runMigrations();
 
-    Auth.init(
-      config.get("jwt.secret", "dev-secret-change-in-production"),
-      config.getInt("jwt.access.expiry.seconds", 900)
-    );
-
-    Mail.init(config);
-
     staticHandler = new ResourceHandler(
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
     );
 
     paths = new PathTemplateHandler(staticHandler)
-      .add("/",     redirect("/home/main.html"))
-      .add("/api/auth/login",   route(new LoginHandler(),   DB.getDataSource()))
-      .add("/api/auth/session", route(new SessionHandler(), DB.getDataSource()))
-      .add("/api/auth/logout",  route(new LogoutHandler(),  DB.getDataSource()))
-      .add("/api/auth/refresh",          route(new RefreshHandler(),         DB.getDataSource()))
-      .add("/api/auth/change-password",  route(new ChangePasswordHandler(),  DB.getDataSource()))
-      .add("/api/auth/forgot-password",  route(new ForgotPasswordHandler(),  DB.getDataSource()))
-      .add("/api/auth/2fa",              route(new TwoFactorHandler(),        DB.getDataSource()));
+      .add("/",          redirect("/home/main.html"))
+      .add("/api/hello", hello());
 
     // Aggiungere qui i propri handler:
-    // .add("/api/users",      route(new UserHandler(), dataSource))
-    // .add("/api/users/{id}", route(new UserHandler(), dataSource))
+    // .add("/api/users",      new HandlerAdapter(UserHandler.class, DB.getDataSource()))
+    // .add("/api/users/{id}", new HandlerAdapter(UserHandler.class, DB.getDataSource()))
 
     server = Undertow.builder()
       .addHttpListener(port, "0.0.0.0")
@@ -71,6 +47,14 @@ public class App
     System.out.println("[info] Server in ascolto sulla porta " + port);
   }
 
+  private static HttpHandler hello()
+  {
+    return exchange -> {
+      exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+      exchange.getResponseSender().send("{\"err\":false,\"log\":null,\"out\":\"Hello, World!\"}");
+    };
+  }
+
   private static HttpHandler redirect(String location)
   {
     return exchange -> {
@@ -78,16 +62,6 @@ public class App
       exchange.getResponseHeaders().put(Headers.LOCATION, location);
       exchange.endExchange();
     };
-  }
-
-  private static HandlerAdapter route(Handler handler)
-  {
-    return new HandlerAdapter(handler);
-  }
-
-  private static HandlerAdapter route(Handler handler, javax.sql.DataSource dataSource)
-  {
-    return new HandlerAdapter(handler, dataSource);
   }
 
   private static void runMigrations()

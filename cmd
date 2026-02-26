@@ -52,9 +52,13 @@ Usage: cmd COMMAND [OPTIONS]
 
   db                               Open interactive PostgreSQL CLI
   db -f <file>                     Execute SQL or CSV file
+  db status                        Show app DB config, connection health and migrations
   db reset                         Reset database (drop and recreate)
 
   sync                             Sync using .sync config file in project root
+
+  module export <name> [-v 1.2.3]   Export module to tar.gz (default: modules/<name>.tar.gz, or modules/<name>-1.2.3.tar.gz with -v)
+  module import <file.tar.gz>       Extract module into modules/<name>/ with placeholders replaced (no files installed)
 
   -h, --help                       Show this help
 HELPEOF
@@ -215,7 +219,11 @@ _app_run_common() {
         exit 0
     }
 
-    trap '_dev_cleanup' INT TERM
+    trap '_dev_cleanup' INT TERM HUP
+
+    # Kill any orphaned instance of the app (e.g. from a previous crashed session)
+    pkill -f "com.example.App" 2>/dev/null || true
+    rm -f "$APP_PID_FILE"
 
     # Classpath: resolve on first run or when pom.xml is newer
     if [ ! -f "$DEV_CP_FILE" ] || [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
@@ -708,6 +716,413 @@ db_setup() {
     success "Database $PGSQL_NAME configured for user $PGSQL_USER"
 }
 
+db_status() {
+    local CONFIG_FILE="/app/config/application.properties"
+
+    _prop() {
+        grep "^${1}=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'
+    }
+
+    local DB_HOST DB_PORT DB_NAME DB_USER DB_PASS DB_POOL
+    local SRC_HOST="default" SRC_PORT="default" SRC_NAME="default"
+    local SRC_USER="default" SRC_PASS="default" SRC_POOL="default"
+
+    DB_HOST="localhost"; DB_PORT="5432"; DB_NAME="app"
+    DB_USER="app";       DB_PASS="";     DB_POOL="10"
+
+    if [ -f "$CONFIG_FILE" ]; then
+        local VAL
+        VAL=$(_prop "db.host");      [ -n "$VAL" ] && { DB_HOST="$VAL"; SRC_HOST="file"; }
+        VAL=$(_prop "db.port");      [ -n "$VAL" ] && { DB_PORT="$VAL"; SRC_PORT="file"; }
+        VAL=$(_prop "db.name");      [ -n "$VAL" ] && { DB_NAME="$VAL"; SRC_NAME="file"; }
+        VAL=$(_prop "db.user");      [ -n "$VAL" ] && { DB_USER="$VAL"; SRC_USER="file"; }
+        VAL=$(_prop "db.password");  [ -n "$VAL" ] && { DB_PASS="$VAL"; SRC_PASS="file"; }
+        VAL=$(_prop "db.pool.size"); [ -n "$VAL" ] && { DB_POOL="$VAL"; SRC_POOL="file"; }
+    fi
+
+    # Env var overrides (Config.java: db.host → DB_HOST, db.pool.size → DB_POOL_SIZE)
+    local ENV_VAL
+    ENV_VAL=$(printenv DB_HOST 2>/dev/null || true);      [ -n "$ENV_VAL" ] && { DB_HOST="$ENV_VAL"; SRC_HOST="env"; }
+    ENV_VAL=$(printenv DB_PORT 2>/dev/null || true);      [ -n "$ENV_VAL" ] && { DB_PORT="$ENV_VAL"; SRC_PORT="env"; }
+    ENV_VAL=$(printenv DB_NAME 2>/dev/null || true);      [ -n "$ENV_VAL" ] && { DB_NAME="$ENV_VAL"; SRC_NAME="env"; }
+    ENV_VAL=$(printenv DB_USER 2>/dev/null || true);      [ -n "$ENV_VAL" ] && { DB_USER="$ENV_VAL"; SRC_USER="env"; }
+    ENV_VAL=$(printenv DB_PASSWORD 2>/dev/null || true);  [ -n "$ENV_VAL" ] && { DB_PASS="$ENV_VAL"; SRC_PASS="env"; }
+    ENV_VAL=$(printenv DB_POOL_SIZE 2>/dev/null || true); [ -n "$ENV_VAL" ] && { DB_POOL="$ENV_VAL"; SRC_POOL="env"; }
+
+    echo "=== Database Status ==="
+    if [ -f "$CONFIG_FILE" ]; then
+        echo "Config: $CONFIG_FILE"
+    else
+        warn "Config file not found: $CONFIG_FILE (using defaults)"
+    fi
+    echo ""
+    printf "  %-12s %-24s (%s)\n" "host:"      "$DB_HOST"  "$SRC_HOST"
+    printf "  %-12s %-24s (%s)\n" "port:"      "$DB_PORT"  "$SRC_PORT"
+    printf "  %-12s %-24s (%s)\n" "database:"  "$DB_NAME"  "$SRC_NAME"
+    printf "  %-12s %-24s (%s)\n" "user:"      "$DB_USER"  "$SRC_USER"
+    printf "  %-12s %-24s (%s)\n" "password:"  "***"       "$SRC_PASS"
+    printf "  %-12s %-24s (%s)\n" "pool.size:" "$DB_POOL"  "$SRC_POOL"
+    echo ""
+
+    export PGPASSWORD="$DB_PASS"
+    local CONN_OUT
+    CONN_OUT=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+        -c "SHOW server_version;" -t 2>&1)
+
+    if echo "$CONN_OUT" | grep -qE "^[[:space:]]*[0-9]+"; then
+        success "Connection: OK"
+        printf "  Server: PostgreSQL %s\n" "$(echo "$CONN_OUT" | tr -d ' ')"
+        echo ""
+        echo "=== Migrations ==="
+        local MIGRATIONS
+        MIGRATIONS=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t \
+            -c "SELECT '  ' || lpad(installed_rank::text,3) || '  ' || rpad(version,24) || '  ' || rpad(description,28) || '  ' || to_char(installed_on,'YYYY-MM-DD HH24:MI') || '  ' || CASE WHEN success THEN 'OK' ELSE 'FAILED' END FROM flyway_schema_history ORDER BY installed_rank;" \
+            2>/dev/null || true)
+        if [ -n "$MIGRATIONS" ]; then
+            printf "  %-3s  %-24s  %-28s  %-16s  %s\n" "#" "version" "description" "installed_on" "status"
+            echo "$MIGRATIONS"
+        else
+            echo "  (no migrations found — flyway_schema_history may not exist yet)"
+        fi
+    else
+        warn "Connection: FAILED"
+        echo "  $CONN_OUT"
+    fi
+}
+
+# ============================================================================
+# Module Operations (export / import)
+# ============================================================================
+
+_module_app_package() {
+    # Extract groupId from pom.xml (first occurrence = project's own)
+    sed -n 's|[[:space:]]*<groupId>\(.*\)</groupId>|\1|p' "$WORKSPACE/pom.xml" | head -1 | tr -d ' '
+}
+
+_module_readme() {
+    local MODULE="$1" APP_PACKAGE="$2" TMP_DIR="$3"
+    local OUT="$TMP_DIR/README.md"
+    local APP_JAVA="$WORKSPACE/src/main/java/${APP_PACKAGE//.//}/App.java"
+    local CONFIG_FILE="$WORKSPACE/config/application.properties"
+    local POM="$WORKSPACE/pom.xml"
+    local PKG_PATH="{{APP_PACKAGE_PATH}}"   # placeholder, user replaces dots with slashes
+
+    {
+        echo "# Module: $MODULE"
+        echo ""
+        echo "> Replace \`{{APP_PACKAGE}}\` with your Maven groupId (e.g. \`io.mycompany\`)."
+        echo "> Replace \`{{APP_PACKAGE_PATH}}\` with the corresponding filesystem path (e.g. \`io/mycompany\`)."
+        echo ""
+        echo "## Contents"
+        echo ""
+        [ -d "$TMP_DIR/java" ]      && echo "- \`java/$MODULE/\` — Java package \`{{APP_PACKAGE}}.$MODULE\`"
+        [ -d "$TMP_DIR/gui" ]       && echo "- \`gui/$MODULE/\` — Vite frontend sources"
+        [ -d "$TMP_DIR/migration" ] && echo "- \`migration/\` — Flyway SQL migrations"
+        echo ""
+        echo "## Installation"
+        echo ""
+
+        # Step 1 — Java sources
+        if [ -d "$TMP_DIR/java/$MODULE" ]; then
+            echo "### 1. Java sources"
+            echo ""
+            echo "Copy \`java/$MODULE/\` into your project's Java source tree:"
+            echo ""
+            echo '```sh'
+            echo "cp -r java/$MODULE/  src/main/java/$PKG_PATH/$MODULE/"
+            echo '```'
+            echo ""
+            echo "Replace \`{{APP_PACKAGE}}\` in all copied Java files:"
+            echo ""
+            echo '```sh'
+            echo "find src/main/java/$PKG_PATH/$MODULE -name '*.java' \\"
+            echo "     -exec sed -i 's|{{APP_PACKAGE}}|your.package|g' {} +"
+            echo '```'
+            echo ""
+        fi
+
+        # Step 2 — GUI sources
+        if [ -d "$TMP_DIR/gui/$MODULE" ]; then
+            echo "### 2. Frontend sources"
+            echo ""
+            echo "Copy \`gui/$MODULE/\` into the Vite source tree:"
+            echo ""
+            echo '```sh'
+            echo "cp -r gui/$MODULE/  vite/src/$MODULE/"
+            echo '```'
+            echo ""
+        fi
+
+        # Step 3 — Migrations
+        if [ -d "$TMP_DIR/migration" ]; then
+            echo "### 3. Database migrations"
+            echo ""
+            echo "Copy the SQL files into the Flyway migrations directory."
+            echo "Rename each file with a fresh timestamp to avoid conflicts with existing history:"
+            echo ""
+            echo '```sh'
+            echo "# Example — adjust the timestamp to current date/time"
+            for f in "$TMP_DIR/migration/"*.sql; do
+                [ -f "$f" ] || continue
+                local DESCRIPTOR
+                DESCRIPTOR=$(basename "$f" | sed 's/^V[^_]*__//')
+                echo "cp migration/$(basename "$f")  src/main/resources/db/migration/V\$(date +%Y%m%d_%H%M%S)__${DESCRIPTOR}"
+            done
+            echo '```'
+            echo ""
+        fi
+
+        # Step 4 — pom.xml
+        echo "### 4. pom.xml — dependencies"
+        echo ""
+        echo "Add inside \`<dependencies>\` in \`pom.xml\`:"
+        echo ""
+        echo '```xml'
+        python3 - "$POM" "$TMP_DIR/java" <<'PYEOF' 2>/dev/null || true
+import sys, re, os
+
+pom_file = sys.argv[1]
+java_dir = sys.argv[2]
+
+CORE_PACKAGES = {
+    'java', 'javax', 'io.undertow', 'com.zaxxer', 'org.flywaydb',
+    'org.postgresql', 'com.fasterxml', 'org.slf4j', 'ch.qos',
+    'org.apache', 'dev.jms',
+}
+GID_TO_JAVA = {
+    'org.eclipse.angus': 'jakarta.mail',
+}
+
+prefixes = set()
+for root, _, files in os.walk(java_dir):
+    for f in files:
+        if not f.endswith('.java'):
+            continue
+        try:
+            with open(os.path.join(root, f)) as fp:
+                for line in fp:
+                    m = re.match(r'^import\s+([\w.]+);', line.strip())
+                    if not m:
+                        continue
+                    parts = m.group(1).split('.')
+                    prefix2 = '.'.join(parts[:2])
+                    if not any(m.group(1).startswith(c) for c in CORE_PACKAGES):
+                        prefixes.add(prefix2)
+        except Exception:
+            pass
+
+with open(pom_file) as fp:
+    content = fp.read()
+
+dep_blocks = re.findall(r'<dependency>.*?</dependency>', content, re.DOTALL)
+for block in dep_blocks:
+    gid_m   = re.search(r'<groupId>(.*?)</groupId>',      block)
+    aid_m   = re.search(r'<artifactId>(.*?)</artifactId>', block)
+    ver_m   = re.search(r'<version>(.*?)</version>',       block)
+    scope_m = re.search(r'<scope>(.*?)</scope>',           block)
+    if not gid_m:
+        continue
+    gid = gid_m.group(1)
+    java_prefix = GID_TO_JAVA.get(gid, gid)
+    if any(java_prefix.startswith(p) or p.startswith(java_prefix) for p in prefixes):
+        print('<dependency>')
+        print(f'    <groupId>{gid}</groupId>')
+        if aid_m:
+            print(f'    <artifactId>{aid_m.group(1)}</artifactId>')
+        if ver_m:
+            print(f'    <version>{ver_m.group(1)}</version>')
+        if scope_m:
+            print(f'    <scope>{scope_m.group(1)}</scope>')
+        print('</dependency>')
+        print()
+PYEOF
+        echo '```'
+        echo ""
+
+        # Step 5 — application.properties
+        echo "### 5. application.properties — configuration keys"
+        echo ""
+        echo "Add missing keys to \`config/application.properties\`:"
+        echo ""
+        echo '```properties'
+        if [ -f "$CONFIG_FILE" ]; then
+            grep -E "^(jwt|mail)\." "$CONFIG_FILE" 2>/dev/null || true
+            grep -iE "^${MODULE}\." "$CONFIG_FILE" 2>/dev/null || true
+        fi
+        echo '```'
+        echo ""
+
+        # Step 6 — App.java
+        echo "### 6. App.java — route registrations"
+        echo ""
+        echo "Add imports at the top of \`App.java\`:"
+        echo ""
+        echo '```java'
+        if [ -f "$APP_JAVA" ]; then
+            grep "^import ${APP_PACKAGE}\.${MODULE}\." "$APP_JAVA" 2>/dev/null \
+                | sed "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" || true
+        fi
+        echo '```'
+        echo ""
+        echo "Add routes in the \`PathTemplateHandler\` chain:"
+        echo ""
+        echo '```java'
+        if [ -f "$APP_JAVA" ]; then
+            grep "\.add(\".*/${MODULE}[/\"]" "$APP_JAVA" 2>/dev/null \
+                | sed "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" || true
+        fi
+        echo '```'
+        echo ""
+
+        # Step 7 — vite.config.js (only if GUI exists)
+        if [ -d "$TMP_DIR/gui/$MODULE" ]; then
+            echo "### 7. vite.config.js"
+            echo ""
+            echo "Add entry points to \`rollupOptions.input\`:"
+            echo ""
+            echo '```js'
+            find "$TMP_DIR/gui/$MODULE" -maxdepth 1 -name "*.html" | sort | while read -r f; do
+                local BASENAME KEY REL
+                BASENAME=$(basename "$f" .html)
+                KEY="${MODULE}_${BASENAME}"
+                REL="src/$MODULE/$(basename "$f")"
+                echo "${KEY}: resolve(__dirname, '${REL}'),"
+            done
+            echo '```'
+            echo ""
+            echo "Add URL rewrites in the \`route-rewrite\` plugin (dev server only)."
+            echo "Adjust the left-hand URL to match your routing conventions:"
+            echo ""
+            echo '```js'
+            find "$TMP_DIR/gui/$MODULE" -maxdepth 1 -name "*.html" | sort | while read -r f; do
+                local BASENAME REL
+                BASENAME=$(basename "$f" .html)
+                REL="/$MODULE/$(basename "$f")"
+                echo "else if (req.url === '/$MODULE/$BASENAME') req.url = '${REL}'"
+            done
+            echo '```'
+            echo ""
+        fi
+
+    } > "$OUT"
+}
+
+module_import() {
+    local ARCHIVE="$1"
+
+    [ -n "$ARCHIVE" ] || error "Usage: cmd module import <file.tar.gz>"
+    case "$ARCHIVE" in
+        */*) ;;
+        *) ARCHIVE="$WORKSPACE/modules/$ARCHIVE" ;;
+    esac
+    [ -f "$ARCHIVE" ] || error "File non trovato: $ARCHIVE"
+
+    local APP_PACKAGE
+    APP_PACKAGE=$(_module_app_package)
+    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
+
+    # Detect module name from archive (java/ subdirectory)
+    local MODULE
+    MODULE=$(tar -tzf "$ARCHIVE" 2>/dev/null | grep -E '^(./)?java/[^/]+/$' | head -1 | sed 's|.*/java/||; s|/$||')
+    [ -n "$MODULE" ] || error "Impossibile rilevare il nome del modulo dall'archivio (java/ mancante)"
+
+    local DEST="$WORKSPACE/modules/$MODULE"
+    if [ -d "$DEST" ]; then
+        error "Cartella '$DEST' già esistente. Rimuoverla prima di eseguire l'import."
+    fi
+
+    mkdir -p "$DEST"
+    tar -xzf "$ARCHIVE" -C "$DEST"
+
+    # Replace {{APP_PACKAGE}} placeholder in all text files
+    find "$DEST" -type f \( -name "*.java" -o -name "*.js" -o -name "*.html" -o -name "*.md" \) \
+        -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} +
+
+    success "Modulo '$MODULE' estratto in $DEST"
+    info "Leggi $DEST/README.md per i passi di installazione."
+}
+
+module_export() {
+    local MODULE=""
+    local VERSION=""
+    local OUTPUT=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -v|--version)
+                [ -n "$2" ] || error "-v|--version richiede un valore (es. 1.2.3)"
+                VERSION="$2"; shift 2 ;;
+            -*) error "Opzione sconosciuta: $1" ;;
+            *)
+                [ -z "$MODULE" ] && MODULE="$1" || OUTPUT="$1"
+                shift ;;
+        esac
+    done
+
+    [ -n "$MODULE" ] || error "Usage: cmd module export <name> [-v 1.2.3] [output.tar.gz]"
+
+    local APP_PACKAGE
+    APP_PACKAGE=$(_module_app_package)
+    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
+
+    local PKG_PATH="${APP_PACKAGE//.//}"
+    local JAVA_SRC="$WORKSPACE/src/main/java/$PKG_PATH/$MODULE"
+    local GUI_SRC="$WORKSPACE/vite/src/$MODULE"
+    local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
+
+    [ -d "$JAVA_SRC" ] || error "Java module not found: $JAVA_SRC"
+
+    if [ -n "$VERSION" ]; then
+        [ -n "$OUTPUT" ] || OUTPUT="$WORKSPACE/modules/${MODULE}-${VERSION}.tar.gz"
+    else
+        [ -n "$OUTPUT" ] || OUTPUT="$WORKSPACE/modules/${MODULE}.tar.gz"
+    fi
+    mkdir -p "$(dirname "$OUTPUT")"
+
+    local TMP_DIR
+    TMP_DIR=$(mktemp -d)
+
+    # Java sources — templatize package placeholder
+    info "[module] Copio sorgenti Java ($JAVA_SRC)..."
+    mkdir -p "$TMP_DIR/java"
+    cp -r "$JAVA_SRC" "$TMP_DIR/java/"
+    find "$TMP_DIR/java" -name "*.java" \
+        -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
+
+    # GUI sources
+    if [ -d "$GUI_SRC" ]; then
+        info "[module] Copio sorgenti GUI ($GUI_SRC)..."
+        mkdir -p "$TMP_DIR/gui"
+        cp -r "$GUI_SRC" "$TMP_DIR/gui/"
+    else
+        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE' (vite/src/$MODULE/)"
+    fi
+
+    # Migration files (matched by module name in filename)
+    local HAS_MIGRATIONS=false
+    while IFS= read -r -d '' f; do
+        if [ "$HAS_MIGRATIONS" = false ]; then
+            mkdir -p "$TMP_DIR/migration"
+            info "[module] Copio migration..."
+        fi
+        cp "$f" "$TMP_DIR/migration/"
+        HAS_MIGRATIONS=true
+    done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" -print0 2>/dev/null)
+
+    [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
+
+    # README
+    info "[module] Genero README.md..."
+    _module_readme "$MODULE" "$APP_PACKAGE" "$TMP_DIR"
+
+    # Package
+    tar -czf "$OUTPUT" -C "$TMP_DIR" .
+    rm -rf "$TMP_DIR"
+
+    success "Modulo '$MODULE' esportato → $OUTPUT"
+}
+
+
 # ============================================================================
 # Sync Operations
 # ============================================================================
@@ -820,16 +1235,25 @@ case "$1" in
         elif [ "$1" = "-f" ]; then
             [ -n "$2" ] || error "Option -f requires a file path"
             db_cli "$2"
+        elif [ "$1" = "status" ]; then
+            db_status
         elif [ "$1" = "reset" ]; then
             db_reset
         elif [ "$1" = "setup" ]; then
             db_setup
         else
-            error "Unknown db option: $1. Use: db, db -f <file>, db reset, db setup"
+            error "Unknown db option: $1. Use: db, db -f <file>, db status, db reset, db setup"
         fi
         ;;
     sync)
         sync_run
+        ;;
+    module)
+        case "$2" in
+            export) shift 2; module_export "$@" ;;
+            import) module_import "$3" ;;
+            *) error "Unknown module command: $2. Use: export, import" ;;
+        esac
         ;;
     -h|--help|help|"")
         show_help

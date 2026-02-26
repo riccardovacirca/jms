@@ -5,11 +5,4 @@
 /workspace/bin/cmd -> /workspace/jms/cmd
 /workspace/install.sh -> /workspace/jms/install.sh
 /workspace/release.sh -> /workspace/jms/release.sh
-/workspace/vite/src/auth -> /workspace/jms/static/auth
-/workspace/vite/src/home -> /workspace/jms/static/home
-/workspace/vite/src/index.html -> /workspace/jms/static/index.html
-/workspace/vite/src/store.js -> /workspace/jms/static/store.js
-/workspace/vite/src/util.js -> /workspace/jms/static/util.js
-/workspace/src/main/java/com/example -> /workspace/jms/template/java (s|com\.example|{{APP_PACKAGE}}|g)
-/workspace/src/main/resources/db/migration -> /workspace/jms/template/sql
-/workspace/pom.xml -> /workspace/jms/template/pom.xml (s|com\.example|{{APP_PACKAGE}}|g)
+/workspace/modules -> /workspace/jms/modules
