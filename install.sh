@@ -632,7 +632,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'src/index.html'),
-        home:  resolve(__dirname, 'src/home/main.html'),
       }
     }
   },
@@ -642,18 +641,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8080'
     }
-  },
-  plugins: [
-    {
-      name: 'route-rewrite',
-      configureServer(server) {
-        server.middlewares.use((req, _res, next) => {
-          if (req.url === '/home') req.url = '/home/main.html'
-          next()
-        })
-      }
-    }
-  ]
+  }
 })
 VITECONFIG
 
