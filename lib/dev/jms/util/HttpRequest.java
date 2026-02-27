@@ -14,10 +14,27 @@ import java.util.Map;
 public class HttpRequest
 {
   private final HttpServerExchange exchange;
+  private final byte[] bodyBytes; // Null se blocking mode
+  private String bodyString; // Cache
 
+  /**
+   * Costruttore per modalità blocking (esistente, invariato).
+   */
   public HttpRequest(HttpServerExchange exchange)
   {
     this.exchange = exchange;
+    this.bodyBytes = null;
+  }
+
+  /**
+   * Costruttore per modalità async.
+   * @param exchange Exchange Undertow
+   * @param bodyBytes Body già letto in modo non-blocking
+   */
+  public HttpRequest(HttpServerExchange exchange, byte[] bodyBytes)
+  {
+    this.exchange = exchange;
+    this.bodyBytes = bodyBytes;
   }
 
   public String getMethod()
@@ -82,17 +99,43 @@ public class HttpRequest
   }
 
   /**
-   * Legge e restituisce il body della request come stringa.
-   * Richiede che l'exchange sia in modalità bloccante (garantito da HandlerAdapter).
+   * Restituisce il body come stringa.
+   * - Modalità blocking: legge da InputStream (BLOCKING)
+   * - Modalità async: converte byte[] già letto (NON-BLOCKING)
    */
   public String getBody() throws Exception
   {
-    String result;
-
-    result = null;
-    try (InputStream is = exchange.getInputStream()) {
-      result = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    if (bodyString != null) {
+      return bodyString; // Cache
     }
-    return result;
+
+    if (bodyBytes != null) {
+      // Async mode: body già disponibile
+      bodyString = new String(bodyBytes, StandardCharsets.UTF_8);
+      return bodyString;
+    }
+
+    // Blocking mode: legge da InputStream (comportamento attuale)
+    try (InputStream is = exchange.getInputStream()) {
+      byte[] bytes = is.readAllBytes();
+      bodyString = new String(bytes, StandardCharsets.UTF_8);
+      return bodyString;
+    }
+  }
+
+  /**
+   * Restituisce il body come byte[].
+   * Utile per upload binari.
+   */
+  public byte[] getBodyBytes() throws Exception
+  {
+    if (bodyBytes != null) {
+      return bodyBytes; // Async mode
+    }
+
+    // Blocking mode
+    try (InputStream is = exchange.getInputStream()) {
+      return is.readAllBytes();
+    }
   }
 }

@@ -14,6 +14,8 @@ import java.util.LinkedHashMap;
  * send() deve essere chiamato per ultimo e provoca l'invio effettivo.
  *
  * Il body ha sempre il formato: {"err": bool, "log": string|null, "out": object|null}
+ *
+ * Supporta sia modalità blocking che async: usa sempre ResponseSender che è già non-blocking.
  */
 public class HttpResponse
 {

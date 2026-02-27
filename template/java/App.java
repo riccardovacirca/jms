@@ -1,5 +1,7 @@
 package {{APP_PACKAGE}};
 
+import dev.jms.util.AsyncExecutor;
+import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HandlerAdapter;
@@ -19,6 +21,7 @@ public class App
   {
     Config config;
     int port;
+    int asyncPoolSize;
     ResourceHandler staticHandler;
     PathTemplateHandler paths;
     Undertow server;
@@ -26,8 +29,11 @@ public class App
 
     config = new Config();
     port = config.getInt("server.port", 8080);
+    asyncPoolSize = config.getInt("async.pool.size", 20);
 
     DB.init(config);
+    Auth.init(config.get("jwt.secret", "dev-secret-change-in-production"), config.getInt("jwt.access.expiry.seconds", 900));
+    AsyncExecutor.init(asyncPoolSize);
     runMigrations();
 
     ds = DB.getDataSource();
@@ -48,6 +54,11 @@ public class App
       .addHttpListener(port, "0.0.0.0")
       .setHandler(paths)
       .build();
+
+    // Shutdown hook per terminare gracefully AsyncExecutor
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      AsyncExecutor.shutdown();
+    }));
 
     server.start();
     System.out.println("[info] Server in ascolto sulla porta " + port);

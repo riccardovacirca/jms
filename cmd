@@ -60,6 +60,8 @@ Usage: cmd COMMAND [OPTIONS]
   module export <name> [-v 1.2.3]   Export module to tar.gz (default: modules/<name>.tar.gz, or modules/<name>-1.2.3.tar.gz with -v)
   module import <file.tar.gz>       Extract module into modules/<name>/ with placeholders replaced (no files installed)
 
+  bench [options]                  Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
+
   -h, --help                       Show this help
 HELPEOF
 }
@@ -1185,6 +1187,45 @@ sync_run() {
 }
 
 # ============================================================================
+# Benchmark Operations
+# ============================================================================
+
+bench_run() {
+    load_env
+
+    # Check if siege is installed
+    command -v siege >/dev/null 2>&1 || \
+        error "siege not found. Run './install.sh' to rebuild the dev container with siege."
+
+    # Create bench directory if it doesn't exist
+    local BENCH_DIR="$WORKSPACE/bench"
+    mkdir -p "$BENCH_DIR"
+
+    # Generate timestamp for log file
+    local TIMESTAMP
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    local LOG_FILE="$BENCH_DIR/siege-${TIMESTAMP}.log"
+
+    info "Running siege benchmark..."
+    info "Options: $*"
+    info "Log file: bench/siege-${TIMESTAMP}.log"
+    echo ""
+
+    # Run siege with all passed arguments, output to both stdout and log file
+    siege "$@" 2>&1 | tee "$LOG_FILE"
+
+    local EXIT_CODE=${PIPESTATUS[0]}
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        success "Benchmark completed → bench/siege-${TIMESTAMP}.log"
+    else
+        warn "Benchmark exited with code $EXIT_CODE → bench/siege-${TIMESTAMP}.log"
+    fi
+
+    return $EXIT_CODE
+}
+
+# ============================================================================
 # Command parsing
 # ============================================================================
 
@@ -1254,6 +1295,10 @@ case "$1" in
         ;;
     sync)
         sync_run
+        ;;
+    bench)
+        shift 1
+        bench_run "$@"
         ;;
     module)
         case "$2" in
