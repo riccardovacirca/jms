@@ -594,7 +594,11 @@ LOGBACKXML
             cp -r "$INSTALLER_DIR/modules/." modules/
         fi
 
+        # Frontend Vite: copia template base
         mkdir -p vite
+        if [ -d "$INSTALLER_DIR/template/vite/src" ]; then
+            cp -r "$INSTALLER_DIR/template/vite/src" vite/
+        fi
 
         cat > vite/package.json << 'PACKAGEJSON'
 {
@@ -652,6 +656,11 @@ export default defineConfig({
   ]
 })
 VITECONFIG
+
+        # Copia CLAUDE.md dalla docs alla root del progetto
+        if [ -f "$INSTALLER_DIR/docs/CLAUDE.md" ]; then
+            cp "$INSTALLER_DIR/docs/CLAUDE.md" CLAUDE.md
+        fi
 
         rm -rf "$INSTALLER_DIR/template"
     fi
