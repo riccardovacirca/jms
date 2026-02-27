@@ -5,7 +5,7 @@
              http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>{{APP_PACKAGE}}</groupId>
+    <groupId>com.example</groupId>
     <artifactId>service</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
@@ -75,6 +75,12 @@
             <artifactId>angus-mail</artifactId>
             <version>2.0.3</version>
         </dependency>
+        <!-- Auth0 JWT (Authentication) -->
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>4.4.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -93,7 +99,7 @@
                             <finalName>service</finalName>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>{{APP_PACKAGE}}.App</mainClass>
+                                    <mainClass>com.example.App</mainClass>
                                 </transformer>
                                 <!-- Merges META-INF/services files (required for Flyway 10 ServiceLoader) -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

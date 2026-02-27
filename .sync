@@ -6,3 +6,7 @@
 /workspace/install.sh -> /workspace/jms/install.sh
 /workspace/release.sh -> /workspace/jms/release.sh
 /workspace/modules/auth-1.0.0.tar.gz -> /workspace/jms/modules/auth-1.0.0.tar.gz
+/workspace/modules/home-1.0.0.tar.gz -> /workspace/jms/modules/home-1.0.0.tar.gz
+/workspace/src/main/java/com/example/App.java -> /workspace/jms/template/java/App.java
+/workspace/pom.xml -> /workspace/jms/template/pom.xml
+/workspace/vite -> /workspace/jms/template/vite

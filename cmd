@@ -1067,7 +1067,7 @@ module_export() {
 
     local PKG_PATH="${APP_PACKAGE//.//}"
     local JAVA_SRC="$WORKSPACE/src/main/java/$PKG_PATH/$MODULE"
-    local GUI_SRC="$WORKSPACE/vite/src/$MODULE"
+    local GUI_SRC="$WORKSPACE/vite/src/modules/$MODULE"
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
     [ -d "$JAVA_SRC" ] || error "Java module not found: $JAVA_SRC"
@@ -1113,7 +1113,14 @@ module_export() {
 
     # README
     info "[module] Genero README.md..."
-    _module_readme "$MODULE" "$APP_PACKAGE" "$TMP_DIR"
+    # README - usa quello custom se esiste, altrimenti genera automatico
+    if [ -f "$WORKSPACE/modules/$MODULE/README.md" ]; then
+        info "[module] Uso README.md custom da modules/$MODULE/README.md..."
+        cp "$WORKSPACE/modules/$MODULE/README.md" "$TMP_DIR/README.md"
+    else
+        info "[module] Genero README.md automatico..."
+        _module_readme "$MODULE" "$APP_PACKAGE" "$TMP_DIR"
+    fi
 
     # Package
     tar -czf "$OUTPUT" -C "$TMP_DIR" .

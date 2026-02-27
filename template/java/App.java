@@ -2,6 +2,8 @@ package {{APP_PACKAGE}};
 
 import dev.jms.util.Config;
 import dev.jms.util.DB;
+import dev.jms.util.HandlerAdapter;
+import dev.jms.util.Handler;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.PathTemplateHandler;
@@ -9,6 +11,7 @@ import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
+import javax.sql.DataSource;
 
 public class App
 {
@@ -19,6 +22,7 @@ public class App
     ResourceHandler staticHandler;
     PathTemplateHandler paths;
     Undertow server;
+    DataSource ds;
 
     config = new Config();
     port = config.getInt("server.port", 8080);
@@ -26,17 +30,19 @@ public class App
     DB.init(config);
     runMigrations();
 
+    ds = DB.getDataSource();
+
     staticHandler = new ResourceHandler(
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
     );
 
     paths = new PathTemplateHandler(staticHandler)
-      .add("/",          redirect("/home/main.html"))
-      .add("/api/hello", hello());
+      // Root redirect - always present
+      .add("/", redirect("/index.html"));
 
     // Aggiungere qui i propri handler:
-    // .add("/api/users",      new HandlerAdapter(UserHandler.class, DB.getDataSource()))
-    // .add("/api/users/{id}", new HandlerAdapter(UserHandler.class, DB.getDataSource()))
+    // .add("/api/users",      route(new UserHandler(), ds))
+    // .add("/api/users/{id}", route(new UserHandler(), ds))
 
     server = Undertow.builder()
       .addHttpListener(port, "0.0.0.0")
@@ -47,12 +53,9 @@ public class App
     System.out.println("[info] Server in ascolto sulla porta " + port);
   }
 
-  private static HttpHandler hello()
+  private static HttpHandler route(Handler handler, DataSource ds)
   {
-    return exchange -> {
-      exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-      exchange.getResponseSender().send("{\"err\":false,\"log\":null,\"out\":\"Hello, World!\"}");
-    };
+    return new HandlerAdapter(handler, ds);
   }
 
   private static HttpHandler redirect(String location)
