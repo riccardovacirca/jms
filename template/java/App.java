@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}};
+package com.example;
 
 import dev.jms.util.AsyncExecutor;
 import dev.jms.util.Auth;
@@ -44,8 +44,8 @@ public class App
     paths = new PathTemplateHandler(staticHandler);
 
     // Aggiungere qui i propri handler:
-    // .add("/api/users",      route(new UserHandler(), ds))
-    // .add("/api/users/{id}", route(new UserHandler(), ds))
+    // paths.add("/api/users",      route(new UserHandler(), ds));
+    // paths.add("/api/users/{id}", route(new UserHandler(), ds));
 
     server = Undertow.builder()
       .addHttpListener(port, "0.0.0.0")
