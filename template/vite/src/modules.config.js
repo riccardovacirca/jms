@@ -6,12 +6,11 @@
  * - title: Titolo della pagina
  */
 export const MODULE_CONFIG = {
-  // Aggiungere qui i moduli installati, esempio:
-  // home: {
-  //   context: 'public',
-  //   path: '/home',
-  //   title: 'Home'
-  // }
+  index: {
+    context: 'public',
+    path: '/',
+    title: 'index'
+  }
 };
 
 /**

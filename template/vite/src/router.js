@@ -124,7 +124,6 @@ class Router {
         <div class="text-center">
           <h1 class="display-1 text-muted">404</h1>
           <p class="lead">Pagina non trovata: ${path}</p>
-          <a href="#home" class="btn btn-primary">Torna alla Home</a>
         </div>
       </div>
     `;
@@ -143,7 +142,6 @@ class Router {
           <h1 class="display-4 text-muted">${context.fallbackTitle || pageTitle}</h1>
           <p class="lead text-muted">${context.fallbackMessage || 'Modulo non configurato'}</p>
           <p class="text-muted small">Contesto: <code>${contextName}</code></p>
-          <a href="#home" class="btn btn-outline-primary">Torna alla Home</a>
         </div>
       </div>
     `;
