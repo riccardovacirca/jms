@@ -34,9 +34,9 @@
 #   6. install.sh              — genera lo script di installazione per il server
 #                                di destinazione (vedi sezione INSTALLAZIONE)
 #      Package finale          — impacchetta tar + install.sh in
-#                                release/<project>-v<version>.tar.gz
+#                                dist/<project>-v<version>.tar.gz
 #
-# Output: release/<project>-v<version>.tar.gz contenente:
+# Output: dist/<project>-v<version>.tar.gz contenente:
 #   - <project>-image.tar   (immagine Docker completa, standalone)
 #   - install.sh            (script di installazione per il server di destinazione)
 #
@@ -46,7 +46,7 @@
 #
 # Trasferire il package e installare:
 #
-#   scp release/<project>-v<version>.tar.gz user@server:/tmp/
+#   scp dist/<project>-v<version>.tar.gz user@server:/tmp/
 #   ssh user@server
 #   cd /tmp && tar -xzf <project>-v<version>.tar.gz
 #   ./install.sh
@@ -136,7 +136,7 @@ done
 # =============================================================================
 
 WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
-RELEASE_DIR="$WORKSPACE/release"
+RELEASE_DIR="$WORKSPACE/dist"
 IMAGE_TAG="latest"
 JAR_FILE="$WORKSPACE/target/service.jar"
 
@@ -208,12 +208,12 @@ info "Release package: $RELEASE_PACKAGE"
 info "Preparing release directory..."
 
 if [ -d "$RELEASE_DIR" ]; then
-    warn "Release directory exists. Cleaning..."
+    warn "Dist directory exists. Cleaning..."
     rm -rf "$RELEASE_DIR"
 fi
 
 mkdir -p "$RELEASE_DIR"
-success "Release directory prepared: $RELEASE_DIR"
+success "Dist directory prepared: $RELEASE_DIR"
 
 # =============================================================================
 # Step 1: Build Java Application
@@ -250,7 +250,7 @@ info "Step 2/6: Building Vite frontend..."
 # - All npm dependencies are installed: cd vite && npm install
 # - Vite config is correct: vite/vite.config.js
 
-docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd vite build" || {
+docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd gui build" || {
     error "Failed to build Vite frontend. Check npm/vite logs above."
 }
 
@@ -377,7 +377,7 @@ success "Docker image exported: $TAR_NAME (Size: $TAR_SIZE)"
 info "Step 6/6: Generating installation script and configuration file..."
 
 # Copy application.properties into release directory
-PROPS_SRC="$WORKSPACE/src/main/resources/application.properties"
+PROPS_SRC="$WORKSPACE/config/application.properties"
 if [ ! -f "$PROPS_SRC" ]; then
     error "application.properties not found: $PROPS_SRC"
 fi
@@ -421,7 +421,7 @@ info() { printf '\\033[0;34mINFO: %s\\033[0m\\n' "\$1"; }
 success() { printf '\\033[0;32m✓ SUCCESS: %s\\033[0m\\n' "\$1"; }
 
 # Configuration
-CONTAINER_NAME="${PROJECT_NAME}-production"
+CONTAINER_NAME="${PROJECT_NAME}-${VERSION}"
 IMAGE_TAR="${TAR_NAME}"
 LOG_VOLUME="${PROJECT_NAME}-logs"
 NETWORK="${DEV_NETWORK}"
@@ -589,7 +589,7 @@ info "   tar -xzf $RELEASE_PACKAGE"
 info "   ./install.sh"
 echo ""
 info "Production container configuration:"
-info "  Container name: ${PROJECT_NAME}-production"
+info "  Container name: ${PROJECT_NAME}-${VERSION}"
 info "  Memory: ${RELEASE_MEMORY_LIMIT} (reserved: ${RELEASE_MEMORY_RESERVATION})"
 info "  CPU: ${RELEASE_CPU_LIMIT} cores (reserved: ${RELEASE_CPU_RESERVATION})"
 info "  Port: ${RELEASE_PORT}"
