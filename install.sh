@@ -584,10 +584,6 @@ GITIGNORE
 </configuration>
 LOGBACKXML
 
-        # .vscode/launch.json da template
-        mkdir -p .vscode
-        cp "$INSTALLER_DIR/template/.vscode/launch.json" .vscode/launch.json
-
         # Moduli disponibili per l'import manuale
         if [ -d "$INSTALLER_DIR/modules" ] && [ "$INSTALLER_DIR" != "." ]; then
             mkdir -p modules
@@ -657,8 +653,6 @@ VITECONFIG
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/vite && npm install"
 
     echo "Setting up cmd tool..."
-    mkdir -p bin
-    cp "$INSTALLER_DIR/cmd" bin/cmd
     sed "s|com\.example|$GROUP_ID|g" bin/cmd > bin/cmd.tmp && mv -f bin/cmd.tmp bin/cmd
     chmod +x bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
@@ -672,7 +666,6 @@ VITECONFIG
     if [ -d .git ]; then
         rm -rf .git
     fi
-    rm -f cmd
 
     echo "Done"
 }
