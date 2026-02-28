@@ -34,8 +34,7 @@ class Router {
    * Trova il modulo corrispondente e lo carica.
    */
   route() {
-    const hash = window.location.hash.slice(1) || DEFAULT_ROUTES.root.slice(1);
-    const path = '/' + hash;
+    const path = window.location.hash.slice(1) || DEFAULT_ROUTES.root;
 
     console.info('[Router] Navigating to', path);
 
@@ -64,7 +63,7 @@ class Router {
     // Verifica SOLO se l'utente è autenticato (binario)
     if (context.requiresAuth && !auth.state.isAuthenticated) {
       console.info('[Router] Unauthorized, redirecting to', context.redirectTo);
-      window.location.hash = context.redirectTo.slice(1);
+      window.location.hash = context.redirectTo;
       return;
     }
 
@@ -94,9 +93,9 @@ class Router {
    * Reindirizza se necessario in base al contesto del modulo corrente.
    */
   handleAuthChange() {
-    const currentPath = window.location.hash.slice(1) || DEFAULT_ROUTES.root.slice(1);
+    const currentPath = window.location.hash.slice(1) || DEFAULT_ROUTES.root;
     const moduleName = Object.keys(MODULE_CONFIG).find(
-      name => MODULE_CONFIG[name].path === '/' + currentPath
+      name => MODULE_CONFIG[name].path === currentPath
     );
 
     if (moduleName) {
@@ -105,13 +104,13 @@ class Router {
 
       // Se siamo in un modulo privato e non siamo più autenticati
       if (context.requiresAuth && !auth.state.isAuthenticated) {
-        window.location.hash = DEFAULT_ROUTES.unauthorized.slice(1);
+        window.location.hash = DEFAULT_ROUTES.unauthorized;
       }
 
       // Se siamo loggati e siamo su auth, reindirizza alla home
       // (Il modulo auth gestisce internamente quando settare isAuthenticated = true)
       if (auth.state.isAuthenticated && config.context === 'auth') {
-        window.location.hash = DEFAULT_ROUTES.afterLogin.slice(1);
+        window.location.hash = DEFAULT_ROUTES.afterLogin;
       }
     }
   }

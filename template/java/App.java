@@ -11,7 +11,6 @@ import io.undertow.server.HttpHandler;
 import io.undertow.server.handlers.PathTemplateHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
-import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
 import javax.sql.DataSource;
 
@@ -40,11 +39,9 @@ public class App
 
     staticHandler = new ResourceHandler(
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
-    );
+    ).setWelcomeFiles("index.html");
 
-    paths = new PathTemplateHandler(staticHandler)
-      // Root redirect - always present
-      .add("/", redirect("/index.html"));
+    paths = new PathTemplateHandler(staticHandler);
 
     // Aggiungere qui i propri handler:
     // .add("/api/users",      route(new UserHandler(), ds))
@@ -67,15 +64,6 @@ public class App
   private static HttpHandler route(Handler handler, DataSource ds)
   {
     return new HandlerAdapter(handler, ds);
-  }
-
-  private static HttpHandler redirect(String location)
-  {
-    return exchange -> {
-      exchange.setStatusCode(302);
-      exchange.getResponseHeaders().put(Headers.LOCATION, location);
-      exchange.endExchange();
-    };
   }
 
   private static void runMigrations()

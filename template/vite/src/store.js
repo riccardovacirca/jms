@@ -6,6 +6,8 @@
  * @param {Object} initial - Stato iniziale dello store
  * @returns {{ state: Object, set: function, subscribe: function }}
  */
+import { DEFAULT_ROUTES } from './modules.config.js';
+
 function createStore(initial) {
   let state = { ...initial };
   const listeners = [];
@@ -45,7 +47,6 @@ async function checkAuth() {
 
 /**
  * Chiama il server per invalidare la sessione, poi reindirizza alla root.
- * Importa DEFAULT_ROUTES dinamicamente per evitare dipendenze circolari.
  * @returns {Promise<void>}
  */
 async function logout() {
@@ -53,10 +54,7 @@ async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
   } finally {
     auth.set({ isAuthenticated: false, user: null });
-    // Importa dinamicamente per evitare circular dependency
-    import('./modules.config.js').then(({ DEFAULT_ROUTES }) => {
-      window.location.hash = DEFAULT_ROUTES.root.slice(1);
-    });
+    window.location.hash = DEFAULT_ROUTES.root;
   }
 }
 
