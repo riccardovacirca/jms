@@ -1,10 +1,13 @@
 /**
  * Configurazione delle rotte dell'applicazione.
  *
- * authorization: null                     → rotta libera, nessun controllo
- * authorization: { redirectTo: '/path' }  → rotta protetta:
- *   - se authorized = false e /path è una rotta registrata → redirect
- *   - se authorized = false e /path non è registrata       → accesso negato
+ * path          → hash della rotta (es. '/home' corrisponde a /#/home)
+ * authorization → null: rotta libera
+ *                 { redirectTo: '/path' }: rotta protetta; se non autorizzato
+ *                 reindirizza a redirectTo (se registrata) o mostra 403
+ * init          → (opzionale) procedura eseguita dal router all'avvio, prima
+ *                 del primo routing; usata per ripristinare stato condiviso
+ *                 senza precaricare il modulo intero
  */
 export const MODULE_CONFIG = {
   index: {

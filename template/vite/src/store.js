@@ -9,5 +9,3 @@ export const authorized = atom(false);
 // null quando non autorizzato.
 export const user = atom(null);
 
-// Store del modulo corrente — usato da header/sidebar per evidenziare la voce attiva.
-export const currentModule = atom({ name: null });

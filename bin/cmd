@@ -1125,7 +1125,7 @@ module_export() {
     fi
 
     # Package
-    tar -czf "$OUTPUT" -C "$TMP_DIR" .
+    COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -C "$TMP_DIR" .
     rm -rf "$TMP_DIR"
 
     success "Modulo '$MODULE' esportato → $OUTPUT"
