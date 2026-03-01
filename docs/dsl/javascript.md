@@ -165,12 +165,12 @@ RULE export.side-effect-only
         la registrazione avviene sempre tramite customElements.define direttamente
 
   ok: |
-    class HeaderLayout extends HTMLElement { ... }
+    class HeaderLayout extends LitElement { ... }
     customElements.define('header-layout', HeaderLayout);
     // nessun export
 
   ko: |
-    export class HeaderLayout extends HTMLElement { ... }
+    export class HeaderLayout extends LitElement { ... }
 ```
 
 ---
@@ -227,11 +227,37 @@ RULE comment.jsdoc-for-functions
 ```
 RULE wc.class-per-component
   applies-to: custom elements
-  note: ogni custom element è una classe che estende HTMLElement;
-        lo stato locale del componente è inizializzato nel constructor;
-        la logica di rendering è in _render()
+  note: ogni custom element è una classe che estende LitElement;
+        lo stato reattivo è dichiarato tramite static properties con { state: true }
+        e inizializzato nel constructor;
+        Shadow DOM è disabilitato con createRenderRoot() per consentire a Bootstrap
+        di applicare gli stili normalmente;
+        la logica di rendering è in render(), che restituisce un template html`...`;
+        la registrazione avviene con customElements.define dopo la definizione della classe
 
   ok: |
+    class AuthLayout extends LitElement {
+      static properties = {
+        _loading: { state: true },
+        _error:   { state: true }
+      };
+
+      createRenderRoot() { return this; }
+
+      constructor() {
+        super();
+        this._loading = false;
+        this._error   = null;
+      }
+
+      render() {
+        return html`...`;
+      }
+    }
+
+    customElements.define('auth-layout', AuthLayout);
+
+  ko: |
     class AuthLayout extends HTMLElement {
       constructor() {
         super();
@@ -239,11 +265,9 @@ RULE wc.class-per-component
         this._error   = null;
       }
 
-      connectedCallback() {
-        this._render();
+      _render() {
+        this.innerHTML = `...`;
       }
-
-      _render() { ... }
     }
 
     customElements.define('auth-layout', AuthLayout);
@@ -252,17 +276,34 @@ RULE wc.class-per-component
 ```
 RULE wc.reactive-render
   applies-to: componenti che dipendono da uno store
-  note: il componente si sottoscrive allo store in connectedCallback;
-        ogni aggiornamento dello store chiama _render() senza parametri
+  note: il componente si sottoscrive allo store in connectedCallback e si disiscrive
+        in disconnectedCallback, salvando la funzione di unsub restituita da subscribe();
+        ogni aggiornamento dello store assegna il nuovo valore alla proprietà reattiva
+        corrispondente (this._x = v); Lit rileva la modifica e chiama render()
+        automaticamente — non si chiama render() esplicitamente;
+        il subscriber non passa lo stato come argomento a un metodo handler separato
 
   ok: |
     connectedCallback() {
-      this._render();
-      auth.subscribe(() => this._render());
+      super.connectedCallback();
+      this._unsubAuth = auth.subscribe(v => { this._authorized = v; });
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this._unsubAuth();
     }
 
   ko: |
+    // render() non va chiamato esplicitamente: Lit lo gestisce automaticamente
     connectedCallback() {
+      super.connectedCallback();
+      auth.subscribe(v => { this._authorized = v; this.render(); });
+    }
+
+    // lo stato non va passato come parametro a un handler: bypassa il pattern reattivo
+    connectedCallback() {
+      super.connectedCallback();
       auth.subscribe(state => this._updateView(state));
     }
 ```
