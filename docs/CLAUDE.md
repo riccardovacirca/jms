@@ -8,7 +8,7 @@ Full-stack Java + vanilla JavaScript application. Backend runs on Undertow (Java
 
 ## Common Commands
 
-### Via `cmd` (inside the dev Docker container)
+### Via `cmd` (inside the dev Docker container or directly via `bin/cmd`)
 ```bash
 cmd gui build            # Build frontend → src/main/resources/static/
 cmd gui run              # Dev server Vite in foreground (port 5173)
@@ -29,6 +29,8 @@ cmd module export <name> [-v 1.2.3]  # Export module to modules/<name>[-version]
 cmd module import <file.tar.gz>      # Extract module into modules/<name>/ with placeholders replaced
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
+
+**Note:** The `cmd` script is located in `bin/cmd` and is available in PATH inside the Docker container.
 
 ### Directly (from `vite/` folder)
 ```bash
@@ -53,7 +55,7 @@ There are no test or lint commands configured.
 ```bash
 # Start the development environment
 ./install.sh                 # First time or restart existing container
-docker exec -it <project> bash    # Enter dev container
+docker exec -it hello bash   # Enter dev container (container name matches PROJECT_NAME in .env)
 
 # Terminal 1: Backend (watch mode with hot reload)
 cmd app run
@@ -71,22 +73,63 @@ cmd db status          # Check connections + migrations
 cmd db                 # Interactive psql
 
 # Access points:
-# - Frontend: http://localhost:2350 (or VITE_PORT_HOST)
-# - API: http://localhost:2310 (or API_PORT_HOST)
+# - Frontend: http://localhost:2350 (VITE_PORT_HOST from .env)
+# - API: http://localhost:2310 (API_PORT_HOST from .env)
 ```
 
 ### Debugging (VSCode + Java Extension Pack)
 
-```bash
-# Inside the dev container
-cmd app debug   # Start backend with JDWP on port 5005
+**Prerequisites:** Install the [Java Extension Pack](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) in VSCode.
+
+**Step-by-step workflow:**
+
+1. **Start the backend in debug mode** (inside the container):
+   ```bash
+   cmd app debug   # Starts with JDWP on port 5005
+   ```
+   Output shows:
+   ```
+   [debug] Remote debug enabled on port 5005
+   [debug] Attach your debugger to localhost:5005
+   [dev] App started (PID: ...)
+   ```
+
+2. **Set breakpoints** in VSCode:
+   - Open a handler (e.g., `src/main/java/com/example/home/handler/HelloHandler.java`)
+   - Click left of the line number to add a red breakpoint dot
+
+3. **Attach the debugger**:
+   - Open **Run and Debug** panel (`Cmd+Shift+D` or `Ctrl+Shift+D`)
+   - Select **"Attach to Docker"** from the dropdown
+   - Press **F5** or click the green play button
+   - The orange debug toolbar appears when connected
+
+4. **Trigger the breakpoint from the browser**:
+   - Navigate to `http://localhost:2350/#/home`
+   - The frontend makes a fetch to `/api/home/hello`
+   - **Execution stops at your breakpoint** in the Java handler
+   - Inspect variables, call stack, step through code (F10, F11)
+   - Press F5 to continue execution
+
+**How it works:**
+- `cmd app debug` starts the JVM with JDWP agent: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005`
+- The container exposes port 5005 → host's 5005
+- VSCode connects to `localhost:5005` via configuration in `.vscode/launch.json`
+- HTTP requests from the browser → Undertow → handlers → **breakpoints trigger**
+
+**Hot reload behavior:**
+After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM**. This terminates the JDWP connection. You must **re-attach the debugger** by pressing `F5` in VSCode's Run & Debug panel. Breakpoints remain configured and will work immediately after reconnecting.
+
+**VSCode configuration** (`.vscode/launch.json`):
+```json
+{
+  "type": "java",
+  "name": "Attach to Docker",
+  "request": "attach",
+  "hostName": "localhost",
+  "port": 5005
+}
 ```
-
-Then in VSCode: **Run and Debug** (`Cmd+Shift+D`) → select **"Attach to Docker"** → press `F5`.
-
-The `.vscode/launch.json` is already configured to attach to `localhost:5005`. The app starts immediately (`suspend=n`) and waits for VSCode to connect.
-
-**Important:** After every file save, `cmd app debug` recompiles and restarts the JVM — VSCode loses the connection and must be re-attached with `F5`. This is normal behavior in watch mode.
 
 ## Architecture
 
@@ -139,7 +182,7 @@ Key configuration parameters:
 - `jwt.secret`, `jwt.access.expiry.seconds` — JWT authentication
 - `async.pool.size` (default: 20) — Thread pool size for @Async handlers
 - `async.max.body.size` (default: 10485760 = 10MB) — Max body size for async handlers
-- `mail.*` — SMTP configuration (disabled by default)
+- `mail.*` — SMTP configuration (disabled by default, set `mail.enabled=true` to enable)
 
 **Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (userId), `username`, `ruolo`, `can_admin`, `can_write`, `can_delete`, `must_change_password`.
 
@@ -147,50 +190,80 @@ Key configuration parameters:
 
 ### Frontend (`vite/`)
 
-Vite 6 SPA project with modular architecture. Sources in `vite/src/`, build output in `src/main/resources/static/` (bundled in JAR by Maven).
+Vite 6 SPA project with modular multi-container architecture. Sources in `vite/src/`, build output in `src/main/resources/static/` (bundled in JAR by Maven).
 
 ```
 vite/src/
-├── index.html           → Entry point (loads router.js)
-├── router.js            → SPA router with hash-based navigation
-├── modules.config.js    → Module registry + context definitions
-├── store.js             → createStore() factory + auth/currentModule stores
-├── util.js              → Structured logger + fetchWithRefresh()
+├── index.html           → Entry point with multi-area layout (header, main, footer)
+├── router.js            → Multi-container SPA router with persistent modules support
+├── config.js            → Complete module configuration (all attributes declared)
+├── init.js              → Global app initialization (fetch interceptor)
+├── store.js             → Nanostores-based state management (authorized, user stores)
 └── modules/             → Web components (one per module)
-    ├── auth/
-    │   ├── index.js     → Module entry point, exports mount()
-    │   ├── login.js     → <auth-login> component
-    │   └── *.js
-    └── home/
-        └── index.js     → <home-layout> component
+    ├── header/          → Persistent header module (always visible)
+    │   ├── index.js
+    │   └── component.js
+    ├── home/            → Home module (dynamic, mounted in 'main')
+    │   ├── index.js
+    │   ├── component.js
+    │   └── home.css
+    └── .gitkeep
 ```
 
-**Module pattern:** Each module is a directory in `vite/src/modules/` with an `index.js` that exports a `mount(container)` function. Modules are loaded dynamically by the router based on URL hash.
+**Multi-container layout** (`index.html`): Defines three container areas:
+- `#header` — For persistent modules like navigation bars
+- `#main` — For dynamic page content
+- `#footer` — For persistent modules like footers (optional)
+
+**Module pattern:** Each module is a directory in `vite/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration.
+
+**Module configuration** (`config.js`): All modules declare these attributes explicitly:
+```javascript
+export const MODULE_CONFIG = {
+  moduleName: {
+    path: '/path' | null,              // URL path or null (not navigable)
+    container: 'main' | 'header' | 'footer',  // DOM container ID
+    authorization: null | { redirectTo: '/path' },  // Access control
+    persistent: true | false,          // Always mounted or dynamic
+    init: null | async function        // Initialization function
+  }
+};
+```
 
 **Adding a new module:**
 1. Create `vite/src/modules/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
-2. Add entry to `modules.config.js`:
+2. Add complete entry to `config.js`:
    ```javascript
    export const MODULE_CONFIG = {
      newmodule: {
-       context: 'public',  // or 'private', 'auth'
        path: '/newmodule',
-       title: 'New Module'
+       container: 'main',
+       authorization: null,
+       persistent: false,
+       init: null
      }
    };
    ```
-3. Access via `http://localhost:5173/#newmodule`
+3. Access via `http://localhost:5173/#/newmodule`
 
-**Router:** Hash-based SPA router (`router.js`) handles navigation, authentication checks, and module loading. Routes are configured in `modules.config.js`. Fallback pages shown when modules are not found.
+**Router:** Multi-container hash-based SPA router supports:
+- **Persistent modules**: Mounted once at startup (e.g., `header`), never unmounted
+- **Dynamic modules**: Mounted/unmounted during navigation (e.g., `home`, `auth`)
+- **Container isolation**: Each module renders in its configured container
+- **Init procedures**: Executed before first routing to prepare shared state
+- **Authorization**: Redirects or shows 403 for protected routes
+- **Navigation ID tracking**: Discards stale module loads during rapid navigation
 
-**Contexts:** Three built-in contexts:
-- `public` — No authentication required
-- `private` — Requires authentication, redirects to `/auth` if not logged in
-- `auth` — Authentication pages (login, register), redirects to home when already logged in
+**Authorization model:**
+- `authorization: null` — Publicly accessible
+- `authorization: { redirectTo: '/path' }` — Protected; redirects unauthorized users
 
-**`fetchWithRefresh(url, options)`:** Drop-in replacement for `fetch`. On 401, automatically calls the token refresh endpoint, retries the original request once, and redirects to login if refresh fails. Deduplicates concurrent refresh requests.
+**Global fetch interceptor** (`init.js`): Intercepts all `fetch()` calls and checks for authentication errors in API responses. If `err: true` with `log` matching known auth errors (`'Non autenticato'`, `'Token non valido o scaduto'`), sets `authorized` store to `false`, triggering router redirect.
 
-**Structured logger** (`util.js`): `debug/info/warn/error(module, message, data?)`, `action(module, actionName, data?)`, `api(module, method, endpoint, data?)`, `apiResponse(module, endpoint, ok, data?)`. Logs to console and optionally to backend (`/api/logs`).
+**State management** (`store.js`): Uses [nanostores](https://github.com/nanostores/nanostores) (v0.11.3) for reactive state. Exports:
+- `authorized` store (boolean) — Authentication state
+- `user` store (object|null) — Current user data
+Router and modules subscribe to these stores for reactive updates.
 
 ### Database Migrations
 
@@ -198,9 +271,14 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Docker / Deployment
 
-- Dev container name matches the project directory name, network `<project>-net`
+- Dev container name matches `PROJECT_NAME` in `.env` (currently: `hello`)
+- Network: `<project>-net` (e.g., `hello-net`)
 - PostgreSQL: shared `postgres` container (not project-specific), connected to the project network
-- Dev ports: API 2310 → 8080, Vite 2350 → 5173, JDWP 5005 → 5005
+- Dev ports (configurable in `.env`):
+  - API: `API_PORT_HOST` (2310) → 8080
+  - Vite: `VITE_PORT_HOST` (2350) → 5173
+  - JDWP: `DEBUG_PORT_HOST` (5005) → 5005
+  - PostgreSQL: `PGSQL_PORT_HOST` (2340) → 5432
 - Bind mounts: `./` → `/workspace`, `./logs/` → `/app/logs`, `./config/` → `/app/config`
 - Production: non-root `appuser` (UID 1001), 512MB memory / 1.0 CPU limits, single JAR
 
@@ -212,11 +290,11 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
   - `java/App.java` — Entry point with AsyncExecutor initialization
   - `pom.xml` — Maven dependencies
   - `application.properties` — Config with async parameters
-  - `vite/` — Frontend base (router, stores, utilities, empty modules/)
+  - `vite/` — Frontend base (router, stores, init, empty modules/)
   - `.vscode/launch.json` — VSCode debug configuration
 - `modules/` — Distributable module archives (`.tar.gz`): `auth-1.0.0.tar.gz`, `home-1.0.0.tar.gz`
 - `cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
-- `docs/` — Documentation including `ASYNC_IMPLEMENTATION_PLAN.md`
+- `docs/` — Documentation including architecture details
 
 ### Modules (`modules/`)
 
@@ -235,3 +313,23 @@ cmd module import auth-1.0.0.tar.gz   # → modules/auth/ with {{APP_PACKAGE}} r
 Then follow `modules/auth/README.md` to manually copy files and configure `pom.xml`, `application.properties`, `App.java`, and `vite.config.js`.
 
 `cmd sync` propagates `modules/` to `jms/modules/` so new archives are available to other projects.
+
+**Available modules** (in `jms/modules/`):
+- `auth-1.0.1.tar.gz` — Complete authentication system (login, session, 2FA, password management)
+- `home-1.2.0.tar.gz` — Simple home page with API hello endpoint
+- `header-1.0.0.tar.gz` — Persistent navigation header (auth-aware, user display, login/logout)
+
+All modules follow the complete configuration schema with all 5 attributes (`path`, `container`, `authorization`, `persistent`, `init`).
+
+## Environment Configuration
+
+The `.env` file contains project configuration used by installation and release scripts:
+
+**Key variables:**
+- `PROJECT_NAME` — Container and database name (default: directory name)
+- `API_PORT_HOST`, `VITE_PORT_HOST` — Host ports for development access
+- `PGSQL_*` — PostgreSQL connection parameters
+- `JAVA_VERSION` — Java version for Docker images (default: 21)
+- `ARTIFACT_VERSION` — Application version for releases (default: 1.0.0)
+
+Environment variables can override application properties. For example, `DB_HOST=localhost` in environment will override `db.host` in `config/application.properties`.
