@@ -1,18 +1,21 @@
 /**
- * Configurazione delle rotte dell'applicazione.
+ * Configurazione dei moduli dell'applicazione.
  *
- * path          → hash della rotta (es. '/home' corrisponde a /#/home)
- * authorization → null: rotta libera
- *                 { redirectTo: '/path' }: rotta protetta; se non autorizzato
- *                 reindirizza a redirectTo (se registrata) o mostra 403
- * init          → (opzionale) procedura eseguita dal router all'avvio, prima
- *                 del primo routing; usata per ripristinare stato condiviso
- *                 senza precaricare il modulo intero
+ * Ogni modulo dichiara tutti gli attributi seguenti:
+ *
+ * path          → stringa (es. '/home') o null (modulo non navigabile via URL)
+ * container     → ID dell'elemento DOM in cui montare il modulo (es. 'main', 'header', 'footer')
+ * authorization → null (pubblico) o { redirectTo: '/path' } (protetto, reindirizza se non autorizzato)
+ * persistent    → true (sempre montato, non smontato) o false (montato/smontato durante la navigazione)
+ * init          → null o funzione asincrona eseguita all'avvio dell'app prima del routing
  */
 export const MODULE_CONFIG = {
   index: {
     path: '/',
-    authorization: null
+    container: 'main',
+    authorization: null,
+    persistent: false,
+    init: null
   }
 };
 
