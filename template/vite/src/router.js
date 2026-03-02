@@ -1,5 +1,6 @@
 import { authorized } from './store.js';
 import { MODULE_CONFIG, DEFAULT_ROUTE } from './config.js';
+import appInit from './init.js';
 
 /**
  * Router SPA hash-based.
@@ -21,7 +22,7 @@ class Router
   /**
    * Inizializza il container, il tracking del modulo corrente e avvia _init().
    * Gli event listener vengono registrati solo al termine di _init() per
-   * garantire che lo stato condiviso sia già corretto al primo routing.
+   * garantire che authorized e user siano già impostati al primo routing.
    */
   constructor() {
     this.container     = document.getElementById('app');
@@ -36,10 +37,11 @@ class Router
    *
    * Le init vengono caricate tramite dynamic import (solo il file init.js
    * del modulo, non il modulo intero) e completate prima del primo route().
-   * Questo garantisce che lo stato condiviso sia già corretto quando il
-   * router decide quale modulo caricare.
+   * Questo garantisce che lo stato condiviso (es. sessione utente) sia già
+   * corretto quando il router decide quale modulo caricare.
    */
   async _init() {
+    appInit();
     await Promise.all(
       Object.values(MODULE_CONFIG)
         .filter(c => c.init)
@@ -59,7 +61,7 @@ class Router
    *
    * Salta il caricamento se il modulo richiesto è già montato e l'utente
    * è ancora autorizzato: evita flash di "Caricamento..." e double render
-   * quando authorized cambia su rotte libere.
+   * quando authorized cambia su rotte libere (es. login/logout su home).
    */
   route() {
     const path = window.location.hash.slice(1) || DEFAULT_ROUTE;

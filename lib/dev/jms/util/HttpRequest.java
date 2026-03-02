@@ -81,7 +81,7 @@ public class HttpRequest
     Cookie cookie;
     String result;
 
-    cookie = exchange.getRequestCookies().get(name);
+    cookie = exchange.getRequestCookie(name);
     result = cookie != null ? cookie.getValue() : null;
     return result;
   }

@@ -32,7 +32,7 @@ public class AsyncExecutor {
       size,
       r -> {
         Thread t = new Thread(r);
-        t.setName("async-handler-" + t.getId());
+        t.setName("async-handler-" + t.threadId());
         t.setDaemon(false); // Non daemon per permettere graceful shutdown
         t.setUncaughtExceptionHandler((thread, throwable) -> {
           System.err.println("[error] Uncaught exception in " + thread.getName());
