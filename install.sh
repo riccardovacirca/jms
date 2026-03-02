@@ -596,50 +596,16 @@ LOGBACKXML
             cp -r "$INSTALLER_DIR/template/vite/src" vite/
         fi
 
-        cat > vite/package.json << 'PACKAGEJSON'
-{
-  "name": "vite",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "bootstrap": "^5.3.3"
-  },
-  "devDependencies": {
-    "vite": "^6.0.0"
-  }
-}
-PACKAGEJSON
-
-        cat > vite/vite.config.js << 'VITECONFIG'
-import { defineConfig } from 'vite'
-import { resolve } from 'path'
-
-export default defineConfig({
-  root: 'src',
-  build: {
-    outDir: '../../src/main/resources/static',
-    emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        index: resolve(__dirname, 'src/index.html'),
-      }
-    }
-  },
-  server: {
-    port: 5173,
-    host: '0.0.0.0',
-    proxy: {
-      '/api': 'http://localhost:8080'
-    }
-  }
-})
-VITECONFIG
+        # Copia i file di configurazione Vite dal template
+        if [ -f "$INSTALLER_DIR/template/vite/package.json" ]; then
+            cp "$INSTALLER_DIR/template/vite/package.json" vite/
+        fi
+        if [ -f "$INSTALLER_DIR/template/vite/package-lock.json" ]; then
+            cp "$INSTALLER_DIR/template/vite/package-lock.json" vite/
+        fi
+        if [ -f "$INSTALLER_DIR/template/vite/vite.config.js" ]; then
+            cp "$INSTALLER_DIR/template/vite/vite.config.js" vite/
+        fi
 
         # Copia CLAUDE.md dalla docs alla root del progetto
         if [ -f "$INSTALLER_DIR/docs/CLAUDE.md" ]; then
