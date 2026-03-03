@@ -53,12 +53,13 @@ Usage: cmd COMMAND [OPTIONS]
   db                               Open interactive PostgreSQL CLI
   db -f <file>                     Execute SQL or CSV file
   db status                        Show app DB config, connection health and migrations
+  db setup                         Create user and database from .env file
   db reset                         Reset database (drop and recreate)
 
   sync                             Sync using .sync config file in project root
 
+  module import <file.tar.gz>       Extract module and install it into the project (Java, GUI, migration, config)
   module export <name> [-v 1.2.3]   Export module to tar.gz (default: modules/<name>.tar.gz, or modules/<name>-1.2.3.tar.gz with -v)
-  module import <file.tar.gz>       Extract module into modules/<name>/ with placeholders replaced (no files installed)
 
   bench [options]                  Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 
@@ -1009,6 +1010,134 @@ PYEOF
     } > "$OUT"
 }
 
+module_install() {
+    local MODULE="$1"
+    [ -n "$MODULE" ] || error "Usage: cmd module install <nome-modulo>"
+
+    local MODULE_DIR="$WORKSPACE/modules/$MODULE"
+    [ -d "$MODULE_DIR" ] || error "Modulo '$MODULE' non trovato in modules/. Esegui prima: cmd module import <file.tar.gz>"
+
+    local APP_PACKAGE APP_PACKAGE_PATH
+    APP_PACKAGE=$(_module_app_package)
+    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
+    APP_PACKAGE_PATH="${APP_PACKAGE//.//}"
+
+    printf '\n'
+    info "[module] Installazione modulo: $MODULE"
+    info "[module] Package applicazione: $APP_PACKAGE"
+    printf '\n'
+
+    # Java sources
+    if [ -d "$MODULE_DIR/java/$MODULE" ]; then
+        info "[module] Copia file Java..."
+        mkdir -p "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH"
+        cp -r "$MODULE_DIR/java/$MODULE" "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/"
+        find "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE" -name '*.java' \
+            -exec sed -i "s|com\.example|$APP_PACKAGE|g" {} +
+        success "  File Java installati: src/main/java/$APP_PACKAGE_PATH/$MODULE/"
+    fi
+
+    # GUI sources
+    if [ -d "$MODULE_DIR/gui/$MODULE" ]; then
+        info "[module] Copia file GUI..."
+        mkdir -p "$WORKSPACE/vite/src/modules"
+        cp -r "$MODULE_DIR/gui/$MODULE" "$WORKSPACE/vite/src/modules/"
+        success "  File GUI installati: vite/src/modules/$MODULE/"
+    fi
+
+    # Migration SQL (copy as-is, no timestamp rename)
+    if [ -d "$MODULE_DIR/migration" ] && ls "$MODULE_DIR/migration"/*.sql >/dev/null 2>&1; then
+        info "[module] Copia migration SQL..."
+        for sql_file in "$MODULE_DIR/migration"/*.sql; do
+            cp "$sql_file" "$WORKSPACE/src/main/resources/db/migration/"
+            success "  Migration copiata: $(basename "$sql_file")"
+        done
+    fi
+
+    # Append application.properties (only if module has real config values)
+    local CONFIG_FILE="$MODULE_DIR/config/application.properties"
+    if [ -f "$CONFIG_FILE" ]; then
+        if grep -v '^[[:space:]]*#' "$CONFIG_FILE" | grep -qv '^[[:space:]]*$'; then
+            if ! grep -q "# Module: $MODULE" "$WORKSPACE/config/application.properties" 2>/dev/null; then
+                info "[module] Aggiunta configurazioni a config/application.properties..."
+                printf '\n' >> "$WORKSPACE/config/application.properties"
+                cat "$CONFIG_FILE" >> "$WORKSPACE/config/application.properties"
+                success "  Configurazioni aggiunte a config/application.properties"
+                warn "  IMPORTANTE: Rivedi e personalizza i valori di configurazione"
+            else
+                warn "  Configurazione per '$MODULE' già presente, skip"
+            fi
+        fi
+    fi
+
+    printf '\n'
+    success "Passaggi automatici completati"
+    printf '\n'
+
+    # Manual steps output
+    local README="$MODULE_DIR/README.md"
+    local STEP=0
+
+    # pom.xml dependencies
+    if grep -q "pom\.xml" "$README"; then
+        STEP=$((STEP + 1))
+        printf '══════════════════════════════════════════\n'
+        printf '%d. DIPENDENZE pom.xml\n' "$STEP"
+        printf '   Apri: pom.xml\n'
+        printf '   Aggiungi nel blocco <dependencies>:\n\n'
+        sed -n '/```xml/,/```/p' "$README" | grep -v '```' | sed 's/^/   /'
+        printf '\n'
+    fi
+
+    # App.java imports
+    if grep -q "import.*$MODULE" "$README"; then
+        STEP=$((STEP + 1))
+        printf '══════════════════════════════════════════\n'
+        printf '%d. IMPORT in App.java\n' "$STEP"
+        printf '   Apri: src/main/java/%s/App.java\n' "$APP_PACKAGE_PATH"
+        printf '   Aggiungi questi import:\n\n'
+        grep "import.*$MODULE" "$README" | sed "s|com\\.example|$APP_PACKAGE|g" | sed 's/^/   /'
+        printf '\n'
+    fi
+
+    # App.java routes
+    if grep -q "paths\.add" "$README"; then
+        STEP=$((STEP + 1))
+        printf '══════════════════════════════════════════\n'
+        printf '%d. ROUTE in App.java\n' "$STEP"
+        printf '   Apri: src/main/java/%s/App.java\n' "$APP_PACKAGE_PATH"
+        printf '   Aggiungi nel PathTemplateHandler:\n\n'
+        grep "paths\.add" "$README" | sed 's/^/   /'
+        printf '\n'
+    fi
+
+    # config.js
+    if grep -q "MODULE_CONFIG" "$README"; then
+        STEP=$((STEP + 1))
+        printf '══════════════════════════════════════════\n'
+        printf '%d. CONFIGURAZIONE vite/src/config.js\n' "$STEP"
+        printf '   Apri: vite/src/config.js\n'
+        printf '   Aggiungi nel MODULE_CONFIG:\n\n'
+        sed -n "/^  $MODULE:/,/^  },/p" "$README" | sed 's/^/   /'
+        printf '\n'
+        if [ "$MODULE" = "header" ]; then
+            warn "  IMPORTANTE: 'header' deve essere il PRIMO modulo in MODULE_CONFIG"
+            printf '\n'
+        fi
+    fi
+
+    [ "$STEP" -gt 0 ] && printf '══════════════════════════════════════════\n\n'
+
+    printf 'Prossimi passi:\n'
+    if [ "$STEP" -gt 0 ]; then
+        printf '  1. Completa le azioni manuali sopra\n'
+        printf '  2. cmd gui build && cmd app build\n'
+    else
+        printf '  1. cmd gui build && cmd app build\n'
+    fi
+    printf '  Dettagli completi: modules/%s/README.md\n\n' "$MODULE"
+}
+
 module_import() {
     local ARCHIVE="$1"
 
@@ -1023,10 +1152,10 @@ module_import() {
     APP_PACKAGE=$(_module_app_package)
     [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
 
-    # Detect module name from archive (java/ subdirectory)
+    # Detect module name from archive filename (strip .tar.gz and optional -X.Y.Z version)
     local MODULE
-    MODULE=$(tar -tzf "$ARCHIVE" 2>/dev/null | grep -E '^(./)?java/[^/]+/$' | head -1 | sed 's|.*/java/||; s|/$||')
-    [ -n "$MODULE" ] || error "Impossibile rilevare il nome del modulo dall'archivio (java/ mancante)"
+    MODULE=$(basename "$ARCHIVE" | sed 's|\.tar\.gz$||; s|-[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$||')
+    [ -n "$MODULE" ] || error "Impossibile rilevare il nome del modulo dal nome dell'archivio"
 
     local DEST="$WORKSPACE/modules/$MODULE"
     if [ -d "$DEST" ]; then
@@ -1034,14 +1163,15 @@ module_import() {
     fi
 
     mkdir -p "$DEST"
-    tar -xzf "$ARCHIVE" -C "$DEST"
+    tar -xzf "$ARCHIVE" -C "$DEST" --warning=no-unknown-keyword
 
     # Replace {{APP_PACKAGE}} placeholder in all text files
     find "$DEST" -type f \( -name "*.java" -o -name "*.js" -o -name "*.html" -o -name "*.md" \) \
         -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} +
 
     success "Modulo '$MODULE' estratto in $DEST"
-    info "Leggi $DEST/README.md per i passi di installazione."
+
+    module_install "$MODULE"
 }
 
 module_export() {
@@ -1122,6 +1252,12 @@ module_export() {
     else
         info "[module] Genero README.md automatico..."
         _module_readme "$MODULE" "$APP_PACKAGE" "$TMP_DIR"
+    fi
+
+    # Config properties (from modules/$MODULE/config/ if exists)
+    if [ -d "$WORKSPACE/modules/$MODULE/config" ]; then
+        info "[module] Copio config properties..."
+        cp -r "$WORKSPACE/modules/$MODULE/config" "$TMP_DIR/config"
     fi
 
     # Package
