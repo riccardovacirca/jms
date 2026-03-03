@@ -1,4 +1,4 @@
-package com.example;
+package {{APP_PACKAGE}};
 
 import dev.jms.util.AsyncExecutor;
 import dev.jms.util.Auth;
