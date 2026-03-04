@@ -26,7 +26,7 @@ cmd db setup             # Create user and database from .env file
 cmd db reset             # Drop + recreate database (destructive!)
 cmd sync                 # Sync sources → jms/ (requires confirmation)
 cmd module export <name> [-v 1.2.3]  # Export module to modules/<name>[-version].tar.gz
-cmd module import <file.tar.gz>      # Extract module into modules/<name>/ with placeholders replaced
+cmd module import <file.tar.gz>      # Extract and install module into project (Java, GUI, migration, config)
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
 
@@ -267,7 +267,7 @@ Router and modules subscribe to these stores for reactive updates.
 
 ### Database Migrations
 
-Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__create_users.sql`). The base scaffold has no migrations — they are introduced by modules. When installing a module manually, rename its migration files with a fresh timestamp to avoid Flyway checksum conflicts.
+Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__create_users.sql`). The base scaffold has no migrations — they are introduced by modules.
 
 ### Docker / Deployment
 
@@ -292,13 +292,13 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
   - `application.properties` — Config with async parameters
   - `vite/` — Frontend base (router, stores, init, empty modules/)
   - `.vscode/launch.json` — VSCode debug configuration
-- `modules/` — Distributable module archives (`.tar.gz`): `auth-1.0.0.tar.gz`, `home-1.0.0.tar.gz`
+- `modules/` — Distributable module archives (`.tar.gz`): `auth-1.0.0.tar.gz`, `header-1.0.0.tar.gz`, `home-1.0.0.tar.gz`, `contatti-1.0.0.tar.gz`
 - `cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
 ### Modules (`modules/`)
 
-Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains `java/<module>/`, `gui/<module>/`, `migration/`, and `README.md`.
+Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains `java/<module>/`, `gui/<module>/`, `migration/`, `config/` and `README.md`.
 
 **Export** a module from the current project:
 ```bash
@@ -306,20 +306,68 @@ cmd module export auth          # → modules/auth.tar.gz
 cmd module export auth -v 1.0.0 # → modules/auth-1.0.0.tar.gz
 ```
 
-**Import** (extract and contextualize, no files installed automatically):
+**Import** (extracts the archive and installs the module automatically):
 ```bash
-cmd module import auth-1.0.0.tar.gz   # → modules/auth/ with {{APP_PACKAGE}} replaced
+cmd module import auth-1.0.0.tar.gz
 ```
-Then follow `modules/auth/README.md` to manually copy files and configure `pom.xml`, `application.properties`, `App.java`, and `vite.config.js`.
-
-`cmd sync` propagates `modules/` to `jms/modules/` so new archives are available to other projects.
+The command copies Java sources, GUI files, migration SQL and appends `config/application.properties` to the project config. At the end it prints the remaining manual steps: adding dependencies to `pom.xml`, imports and routes to `App.java`, and the module entry to `vite/src/config.js`.
 
 **Available modules** (in `jms/modules/`):
-- `auth-1.0.1.tar.gz` — Complete authentication system (login, session, 2FA, password management)
-- `home-1.2.0.tar.gz` — Simple home page with API hello endpoint
+- `auth-1.0.0.tar.gz` — Complete authentication system (login, session, 2FA, password management)
 - `header-1.0.0.tar.gz` — Persistent navigation header (auth-aware, user display, login/logout)
+- `home-1.0.0.tar.gz` — Simple home page with API hello endpoint
+- `contatti-1.0.0.tar.gz` — Contact management module
 
 All modules follow the complete configuration schema with all 5 attributes (`path`, `container`, `authorization`, `persistent`, `init`).
+
+## Coding Style
+
+Full rules in `docs/dsl/java.md` and `docs/dsl/javascript.md`. Key non-obvious conventions:
+
+### Java
+
+**Formatting:**
+- 2-space indentation (no tabs)
+- Class/method opening brace on its **own line**; control flow (`if`, `for`, `try`, etc.) brace on **same line**
+- No extra spaces for vertical alignment of assignments or arguments
+
+**Variables:**
+- Declare all variables at the top of their scope, before any executable statement
+- Declaration and initialization are always separate statements
+- Never use `var`; always declare the explicit type
+- No wildcard generics (`?`, `? extends`, `? super`)
+
+**Control flow:** Single exit point per method — no early `return` in `void` methods (use `if-else`); one `return` in typed methods.
+
+**Database:** Always assign SQL to a local variable named `sql` before passing it to `db.select()` or `db.query()`.
+
+**Error handling:**
+- Business errors (validation, auth, not-found): handle in handler, return HTTP 200 with `err: true`, log at WARN level (no stack trace)
+- System errors: let them propagate to `HandlerAdapter`, which returns HTTP 500 and logs at ERROR with stack trace
+
+**Response builder:** Always chain in this exact order before `send()`: `status() → contentType() → [cookie()...] → err() → log() → out()`
+
+**Javadoc:** Required on all public and package-private classes and methods.
+
+### JavaScript
+
+**Formatting:**
+- Semicolons on every statement; one statement per line
+- Long expressions: extract intermediate variables rather than wrapping/chaining
+- Function body always on separate lines from the signature (never inline)
+
+**Exports:**
+- All named exports go in a single `export { }` block at the **end** of the file — never `export function` or `export const` inline
+- Files that only register a custom element (`customElements.define(...)`) export nothing
+
+**Module-level state:** Group related variables in a named object (`const refreshState = { active: false, promise: null }`) instead of separate top-level `let` declarations.
+
+**Web components (Lit):**
+- Extend `LitElement`; disable Shadow DOM with `createRenderRoot() { return this; }` so Bootstrap styles apply
+- Reactive state via `static properties = { _x: { state: true } }`, initialized in `constructor()`
+- Subscribe to stores in `connectedCallback`, unsubscribe in `disconnectedCallback`; **never call `render()` explicitly** — Lit handles it automatically
+
+**Frontend dependencies:** Bootstrap 5 (CSS/components), Lit 3 (web components), nanostores (reactive state).
 
 ## Environment Configuration
 

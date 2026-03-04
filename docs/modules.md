@@ -6,6 +6,54 @@ base dell'applicazione.
 
 ---
 
+## Installazione di un modulo
+
+### Comando unico
+
+```bash
+cmd module import modules/<name>-x.y.z.tar.gz
+```
+
+Il comando esegue automaticamente:
+- Estrazione dell'archivio in `modules/<name>/` con sostituzione del placeholder `{{APP_PACKAGE}}`
+- Copia dei sorgenti Java in `src/main/java/<package>/<name>/` con package corretto
+- Copia dei sorgenti GUI in `vite/src/modules/<name>/`
+- Copia delle migration SQL in `src/main/resources/db/migration/`
+- Append di `config/application.properties` del modulo a `config/application.properties` (solo se contiene chiavi reali, e solo se non già presente)
+
+Al termine mostra le **azioni manuali** rimaste, specifiche per il modulo.
+
+### Azioni manuali
+
+Dopo l'esecuzione del comando, il modulo richiede di completare a mano le modifiche ai file esistenti del progetto:
+
+**1. `pom.xml`** *(solo se il modulo ha dipendenze Java esterne)*
+
+Aggiungere le dipendenze nel blocco `<dependencies>`. Il comando stampa il blocco XML pronto per il copy-paste.
+
+**2. `src/main/java/<package>/App.java`** — import
+
+Aggiungere gli import delle classi handler del modulo nella sezione import. Il comando stampa le righe `import` già con il package corretto.
+
+**3. `src/main/java/<package>/App.java`** — route
+
+Aggiungere le route nel `PathTemplateHandler`. Il comando stampa le chiamate `paths.add(...)` pronte.
+
+**4. `vite/src/config.js`** — MODULE_CONFIG
+
+Aggiungere la configurazione del modulo nell'oggetto `MODULE_CONFIG`. Il comando stampa il blocco JavaScript pronto.
+
+> Il modulo `header` deve essere dichiarato **primo** in `MODULE_CONFIG`.
+
+### Build e avvio
+
+```bash
+cmd gui build && cmd app build
+cmd app restart
+```
+
+---
+
 ## Struttura
 
 Ogni modulo installato nell'applicazione ha i propri file in **due posti distinti**
@@ -45,14 +93,18 @@ i moduli sono installati.
 Ogni modifica a un file JS di modulo va applicata **sia nel file live che nel file
 di archivio**:
 
-| File live (`vite/src/`) | File archivio (`modules/`) |
-|-------------------------|----------------------------|
-| `modules/auth/init.js` | `auth/gui/auth/init.js` |
-| `modules/auth/index.js` | `auth/gui/auth/index.js` |
-| `modules/auth/login.js` | `auth/gui/auth/login.js` |
-| `modules/auth/changepass.js` | `auth/gui/auth/changepass.js` |
-| `modules/home/component.js` | `home/gui/home/component.js` |
-| `modules/home/index.js` | `home/gui/home/index.js` |
+| File live (`vite/src/modules/`) | File archivio (`modules/<name>/gui/<name>/`) |
+|---------------------------------|----------------------------------------------|
+| `auth/init.js` | `auth/gui/auth/init.js` |
+| `auth/index.js` | `auth/gui/auth/index.js` |
+| `auth/login.js` | `auth/gui/auth/login.js` |
+| `auth/changepass.js` | `auth/gui/auth/changepass.js` |
+| `header/index.js` | `header/gui/header/index.js` |
+| `header/component.js` | `header/gui/header/component.js` |
+| `home/index.js` | `home/gui/home/index.js` |
+| `home/component.js` | `home/gui/home/component.js` |
+| `contatti/index.js` | `contatti/gui/contatti/index.js` |
+| `contatti/component.js` | `contatti/gui/contatti/component.js` |
 
 ---
 
@@ -67,20 +119,15 @@ di archivio**:
 
 ## Ricostruzione degli archivi
 
-I comandi vanno eseguiti dalla root del progetto. `COPYFILE_DISABLE=1` è obbligatorio
-su macOS per evitare che `tar` includa i file metadata `._*` di AppleDouble.
+Il comando `cmd module export` gestisce automaticamente la creazione dell'archivio
+(incluse le configurazioni `config/` e il README personalizzato). Va eseguito
+dall'interno del container.
 
 ```bash
-# Rimuovere eventuali file metadata macOS residui
-find modules/<name> -name '._*' -delete
+# Ricostruire l'archivio (dentro il container)
+cmd module export <name> -v x.y.z
 
-# Ricostruire l'archivio
-TMP=$(mktemp -d)
-cp -r modules/<name>/. "$TMP/"
-COPYFILE_DISABLE=1 tar -czf modules/<name>-x.y.z.tar.gz -C "$TMP" .
-rm -rf "$TMP"
-
-# Sincronizzare con jms
+# Sincronizzare con jms (dalla root del progetto, fuori dal container)
 cp modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
 
 # Verificare identità dei due archivi
@@ -89,28 +136,26 @@ md5 modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
 
 I due MD5 devono essere identici. Se non lo sono, il `cp` non è andato a buon fine.
 
-### Esempio per entrambi i moduli in una sola sessione
+### Esempio per tutti i moduli
 
 ```bash
-# auth
-find modules/auth -name '._*' -delete
-rm -f modules/auth-1.0.0.tar.gz
-TMP=$(mktemp -d) && cp -r modules/auth/. "$TMP/"
-COPYFILE_DISABLE=1 tar -czf modules/auth-1.0.0.tar.gz -C "$TMP" .
-rm -rf "$TMP"
-cp modules/auth-1.0.0.tar.gz jms/modules/auth-1.0.0.tar.gz
+# Dentro il container
+cmd module export auth     -v 1.0.0
+cmd module export header   -v 1.0.0
+cmd module export home     -v 1.0.0
+cmd module export contatti -v 1.0.0
 
-# home
-find modules/home -name '._*' -delete
-rm -f modules/home-1.0.0.tar.gz
-TMP=$(mktemp -d) && cp -r modules/home/. "$TMP/"
-COPYFILE_DISABLE=1 tar -czf modules/home-1.0.0.tar.gz -C "$TMP" .
-rm -rf "$TMP"
-cp modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
+# Fuori dal container
+cp modules/auth-1.0.0.tar.gz     jms/modules/auth-1.0.0.tar.gz
+cp modules/header-1.0.0.tar.gz   jms/modules/header-1.0.0.tar.gz
+cp modules/home-1.0.0.tar.gz     jms/modules/home-1.0.0.tar.gz
+cp modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
 
-# verifica
-md5 modules/auth-1.0.0.tar.gz jms/modules/auth-1.0.0.tar.gz
-md5 modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
+# Verifica
+md5 modules/auth-1.0.0.tar.gz     jms/modules/auth-1.0.0.tar.gz
+md5 modules/header-1.0.0.tar.gz   jms/modules/header-1.0.0.tar.gz
+md5 modules/home-1.0.0.tar.gz     jms/modules/home-1.0.0.tar.gz
+md5 modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
 ```
 
 ---
@@ -118,8 +163,8 @@ md5 modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
 ## Invarianti da rispettare
 
 - Modificare sempre **entrambe** le copie di ogni file di modulo (live + archivio)
+- Usare sempre `cmd module export` per ricostruire gli archivi (gestisce `COPYFILE_DISABLE=1` e include `config/` automaticamente)
 - `modules/*.tar.gz` e `jms/modules/*.tar.gz` devono avere **MD5 identici**
-- Usare sempre `COPYFILE_DISABLE=1` nella creazione degli archivi su macOS
 - `jms/template/vite/src/config.js` non deve contenere entry di moduli specifici
 - Non usare `cmd sync` per propagare file app-specifici in `jms/template/`: il sync
   sovrascrive i file base ma non deve portare in jms le entry di moduli presenti
