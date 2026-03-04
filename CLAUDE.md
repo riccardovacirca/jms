@@ -41,7 +41,6 @@ npm run build            # Build → src/main/resources/static/
 ### Setup and deploy
 ```bash
 ./install.sh                        # Setup dev Docker environment (or restart existing)
-./install.sh --groupid io.mycompany # First install with custom GroupId
 ./install.sh --postgres             # Install standalone PostgreSQL container
 ./install.sh --mailpit              # Install Mailpit (fake SMTP + web UI on port 8025)
 ./release.sh                        # Build production Docker image + tar.gz package
@@ -95,7 +94,7 @@ cmd db                 # Interactive psql
    ```
 
 2. **Set breakpoints** in VSCode:
-   - Open a handler (e.g., `src/main/java/com/example/home/handler/HelloHandler.java`)
+   - Open a handler (e.g., `src/main/java/dev/jms/app/home/handler/HelloHandler.java`)
    - Click left of the line number to add a red breakpoint dot
 
 3. **Attach the debugger**:
@@ -284,16 +283,15 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Template (`jms/`)
 
-`jms/` is the upstream template repository. It contains:
-- `lib/dev/jms/util/` — Complete utility library source with async support (25 files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `Async`, `AsyncExecutor`, plus `excel/` subpackage)
-- `template/` — Scaffolding files ready for new projects:
-  - `java/App.java` — Entry point with AsyncExecutor initialization
-  - `pom.xml` — Maven dependencies
-  - `application.properties` — Config with async parameters
-  - `vite/` — Frontend base (router, stores, init, empty modules/)
-  - `.vscode/launch.json` — VSCode debug configuration
+`jms/` is the upstream template repository. Clone it with the project name to start a new project — the Java source structure is already in its final position. It contains:
+- `src/main/java/dev/jms/util/` — Complete utility library source (25 files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `Async`, `AsyncExecutor`, plus `excel/` subpackage)
+- `src/main/java/dev/jms/app/App.java` — Entry point with AsyncExecutor initialization
+- `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
+- `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
+- `config/application.properties` — Config template with placeholders substituted by `install.sh`
+- `template/vite/` — Frontend base (router, stores, init, empty modules/), copied to `vite/` by `install.sh`
 - `modules/` — Distributable module archives (`.tar.gz`): `auth-1.0.0.tar.gz`, `header-1.0.0.tar.gz`, `home-1.0.0.tar.gz`, `contatti-1.0.0.tar.gz`
-- `cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
+- `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
 ### Modules (`modules/`)

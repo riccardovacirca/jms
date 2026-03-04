@@ -37,10 +37,9 @@ cd myproject/
 
 **Creates:**
 - Docker container `myproject` with Java 21, Maven, Node.js, PostgreSQL client, siege
-- Project structure: `src/`, `vite/`, `config/`, `logs/`, `bin/`
-- Utility library (dev.jms.util) in `src/main/java/`
-- Frontend base (router, stores) in `vite/src/`
-- `cmd` tool in `bin/`
+- `config/application.properties` with project name and DB credentials substituted from `.env`
+- `vite/` frontend directory with npm dependencies installed
+- `cmd` tool registered as a global command inside the container
 
 **Output:**
 ```
@@ -257,9 +256,9 @@ docker exec -it myproject bash -c "cmd db setup"  # Create user and database
 
 ### Add Custom Handler
 
-**1. Create handler (in `src/main/java/<groupId>/handler/MyHandler.java`):**
+**1. Create handler (in `src/main/java/dev/jms/app/handler/MyHandler.java`):**
 ```java
-package com.example.handler;
+package dev.jms.app.handler;
 
 import dev.jms.util.*;
 
@@ -275,9 +274,9 @@ public class MyHandler implements Handler {
 
 **2. Register in `App.java`:**
 ```java
-import com.example.handler.MyHandler;
+import dev.jms.app.handler.MyHandler;
 // ...
-.add("/api/my", route(new MyHandler(), ds))
+paths.add("/api/my", route(new MyHandler(), ds));
 ```
 
 **3. Rebuild and test:**
@@ -302,13 +301,15 @@ export default {
 };
 ```
 
-**3. Register in `vite/src/modules.config.js`:**
+**3. Register in `vite/src/config.js`:**
 ```javascript
 export const MODULE_CONFIG = {
   mymodule: {
-    context: 'public',
     path: '/mymodule',
-    title: 'My Module'
+    container: 'main',
+    authorization: null,
+    persistent: false,
+    init: null
   }
 };
 ```
@@ -316,7 +317,7 @@ export const MODULE_CONFIG = {
 **4. Rebuild and access:**
 ```bash
 docker exec -it myproject bash -c "cmd gui build"
-# Access: http://localhost:2350/#mymodule
+# Access: http://localhost:2350/#/mymodule
 ```
 
 ### Production Build

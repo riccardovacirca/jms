@@ -189,7 +189,7 @@ _app_run_common() {
     _dev_start() {
         printf '\n=== %s restart ===\n' "$(date '+%H:%M:%S')" >> "$DEV_LOG"
         local CP="$WORKSPACE/target/classes:$(cat "$DEV_CP_FILE")"
-        java $JAVA_DEBUG_OPTS -cp "$CP" com.example.App >> "$DEV_LOG" 2>&1 &
+        java $JAVA_DEBUG_OPTS -cp "$CP" dev.jms.app.App >> "$DEV_LOG" 2>&1 &
         DEV_PID=$!
         echo "$DEV_PID" > "$APP_PID_FILE"
         sleep 1
@@ -225,7 +225,7 @@ _app_run_common() {
     trap '_dev_cleanup' INT TERM HUP
 
     # Kill any orphaned instance of the app (e.g. from a previous crashed session)
-    pkill -f "com.example.App" 2>/dev/null || true
+    pkill -f "dev.jms.app.App" 2>/dev/null || true
     rm -f "$APP_PID_FILE"
 
     # Classpath: resolve on first run or when pom.xml is newer

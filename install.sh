@@ -7,7 +7,6 @@
 #
 # Options:
 #   (nessuna)               Crea o riavvia l'ambiente di sviluppo completo
-#   --groupid <id>          Maven GroupId (default: com.example)
 #   --postgres              Installa il container PostgreSQL
 #   -n, --name <name>       Nome del container PostgreSQL (default: postgres)
 #   -p, --port <port>       Porta host per PostgreSQL (default: 5432)
@@ -16,7 +15,6 @@
 #
 # Examples:
 #   ./install.sh                                # Primo install o riavvio
-#   ./install.sh --groupid io.mycompany         # GroupId personalizzato
 #   ./install.sh --postgres                     # Installa PostgreSQL
 #   ./install.sh --postgres -n mydb             # Installa PostgreSQL con nome custom
 #   ./install.sh --postgres -p 5433             # Installa PostgreSQL su porta custom
@@ -151,7 +149,6 @@ Usage: ./install.sh [OPTION]
 
 Options:
   (none)                  Create complete development environment
-  --groupid <id>          Maven GroupId (default: com.example)
   --postgres              Install PostgreSQL container
   -n, --name <name>       PostgreSQL container name (default: postgres)
   -p, --port <port>       PostgreSQL host port (default: 5432)
@@ -165,7 +162,6 @@ Options:
 
 Examples:
   ./install.sh                               # First install
-  ./install.sh --groupid io.mycompany        # Custom GroupId
   ./install.sh --postgres                    # Install PostgreSQL
   ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
   ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
@@ -412,20 +408,6 @@ install_mailpit() {
 # =============================================================================
 
 install_dev() {
-    local GROUP_ID="com.example"
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --groupid)
-                [ -n "$2" ] || { echo "ERRORE: --groupid richiede un valore (es. io.mycompany)"; exit 1; }
-                GROUP_ID="$2"
-                shift 2
-                ;;
-            *) shift ;;
-        esac
-    done
-    local GROUP_DIR
-    GROUP_DIR=$(echo "$GROUP_ID" | tr '.' '/')
-
     if [ ! -f .env ]; then
         echo "Generating .env..."
         generate_env_file
@@ -433,8 +415,6 @@ install_dev() {
     . ./.env
 
     local DEV_CONTAINER="$PROJECT_NAME"
-
-    mkdir -p config
 
     if docker ps -a --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
         if ! docker ps --format '{{.Names}}' | grep -q "^$DEV_CONTAINER$"; then
@@ -455,32 +435,6 @@ install_dev() {
             docker network connect "$DEV_NETWORK" "mailpit" 2>/dev/null || true
         fi
 
-        mkdir -p docker
-        cat > docker/Dockerfile.dev << 'DOCKERFILE'
-FROM ubuntu:24.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    nano \
-    postgresql-client \
-    ca-certificates \
-    openjdk-21-jdk \
-    maven \
-    inotify-tools \
-    rsync \
-    siege \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /workspace
-
-RUN mkdir -p /app/logs
-DOCKERFILE
-
         echo "Building development image..."
         docker build -t "$PROJECT_NAME-dev:latest" -f docker/Dockerfile.dev .
 
@@ -498,9 +452,6 @@ DOCKERFILE
             --network "$DEV_NETWORK" \
             "$PROJECT_NAME-dev:latest" \
             tail -f /dev/null >/dev/null
-
-        rm -f docker/Dockerfile.dev
-        rmdir docker 2>/dev/null || true
     fi
 
     rm -f .gitignore
@@ -514,100 +465,15 @@ logs/
 config/
 GITIGNORE
 
-    if [ ! -f pom.xml ]; then
-        echo "Scaffolding project..."
-
-        mkdir -p "src/main/java/$GROUP_DIR"
-        mkdir -p src/main/resources/static
-        mkdir -p src/main/resources/db/migration
-
-        cp -r "$INSTALLER_DIR/lib/." src/main/java/
-        rm -rf "$INSTALLER_DIR/lib"
-
-        # config/application.properties da template
-        cp "$INSTALLER_DIR/template/application.properties" config/application.properties
-        sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-        sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-        sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-
-        # pom.xml da template
-        cp "$INSTALLER_DIR/template/pom.xml" pom.xml
-        sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" pom.xml > pom.xml.tmp && mv -f pom.xml.tmp pom.xml
-
-        # Java files da template
-        cp "$INSTALLER_DIR/template/java/App.java" "src/main/java/$GROUP_DIR/App.java"
-        sed "s|{{APP_PACKAGE}}|$GROUP_ID|g" "src/main/java/$GROUP_DIR/App.java" > "src/main/java/$GROUP_DIR/App.java.tmp" \
-            && mv -f "src/main/java/$GROUP_DIR/App.java.tmp" "src/main/java/$GROUP_DIR/App.java"
-
-        cat > src/main/resources/logback.xml << 'LOGBACKXML'
-<configuration>
-
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss} [%-5level] %logger{25} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/app/logs/service.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <!-- Rotazione giornaliera, compressione gzip, 30 giorni di storico -->
-            <fileNamePattern>/app/logs/service.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
-            <maxHistory>30</maxHistory>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%-5level] %logger{25} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- Silenzia i logger interni di POI e xmlbeans -->
-    <logger name="org.apache.poi"      level="OFF"/>
-    <logger name="org.apache.xmlbeans" level="OFF"/>
-
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
-    </root>
-
-</configuration>
-LOGBACKXML
-
-        # Moduli disponibili per l'import manuale
-        if [ -d "$INSTALLER_DIR/modules" ] && [ "$INSTALLER_DIR" != "." ]; then
-            mkdir -p modules
-            cp -r "$INSTALLER_DIR/modules/." modules/
-        fi
-
-        # Frontend Vite: copia template base
-        mkdir -p vite
-        if [ -d "$INSTALLER_DIR/template/vite/src" ]; then
-            cp -r "$INSTALLER_DIR/template/vite/src" vite/
-        fi
-
-        # Copia i file di configurazione Vite dal template
-        if [ -f "$INSTALLER_DIR/template/vite/package.json" ]; then
-            cp "$INSTALLER_DIR/template/vite/package.json" vite/
-        fi
-        if [ -f "$INSTALLER_DIR/template/vite/package-lock.json" ]; then
-            cp "$INSTALLER_DIR/template/vite/package-lock.json" vite/
-        fi
-        if [ -f "$INSTALLER_DIR/template/vite/vite.config.js" ]; then
-            cp "$INSTALLER_DIR/template/vite/vite.config.js" vite/
-        fi
-
-        # Copia CLAUDE.md dalla docs alla root del progetto
-        if [ -f "$INSTALLER_DIR/docs/CLAUDE.md" ]; then
-            cp "$INSTALLER_DIR/docs/CLAUDE.md" CLAUDE.md
-        fi
-
-        rm -rf "$INSTALLER_DIR/template"
-    fi
+    # config/application.properties — sostituisce i placeholder con i valori da .env
+    sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/vite && npm install"
 
     echo "Setting up cmd tool..."
-    sed "s|com\.example|$GROUP_ID|g" bin/cmd > bin/cmd.tmp && mv -f bin/cmd.tmp bin/cmd
     chmod +x bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
         ln -sf /workspace/bin/cmd /usr/local/bin/cmd
