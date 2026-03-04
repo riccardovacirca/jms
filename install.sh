@@ -195,7 +195,7 @@ ARTIFACT_VERSION=1.0.0
 # ========================================
 # Development
 # ========================================
-DEV_NETWORK_SUFFIX=-net
+DEV_NETWORK=PROJECT_DIR_PLACEHOLDER-net
 DEV_IMAGE=ubuntu:24.04
 
 # Undertow (API)
@@ -432,7 +432,6 @@ install_dev() {
     fi
     . ./.env
 
-    local DEV_NETWORK="$PROJECT_NAME$DEV_NETWORK_SUFFIX"
     local DEV_CONTAINER="$PROJECT_NAME"
 
     mkdir -p config
@@ -506,23 +505,12 @@ DOCKERFILE
 
     rm -f .gitignore
     cat > .gitignore << 'GITIGNORE'
-# Build artifacts
 target/
 vite/node_modules/
-
-# Vite build output (generato da 'npm run build', non tracciato)
 src/main/resources/static/
-
-# Docker temporaneo
 docker/
-
-# Environment (contiene credenziali)
 .env
-
-# Log (directory di log del container, non tracciata)
 logs/
-
-# Config runtime (contiene credenziali, generato da install.sh)
 config/
 GITIGNORE
 
