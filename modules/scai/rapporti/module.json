@@ -1,0 +1,8 @@
+{
+  "name": "rapporti",
+  "version": "1.0.0",
+  "dependencies": {
+    "ente": "^1.0.0",
+    "sede": "^1.0.0"
+  }
+}

@@ -68,10 +68,12 @@ class Router
   /**
    * Monta tutti i moduli con persistent: true nei loro container.
    * I moduli persistent rimangono sempre montati e non vengono mai smontati.
+   * L'ordine di montaggio è determinato dall'attributo priority (più basso = per primo).
    */
   async _mountPersistentModules() {
     const persistentModules = Object.entries(MODULE_CONFIG)
-      .filter(([_, config]) => config.persistent);
+      .filter(([_, config]) => config.persistent)
+      .sort(([_, a], [__, b]) => (a.priority || 999) - (b.priority || 999));
 
     for (const [moduleName, config] of persistentModules) {
       try {

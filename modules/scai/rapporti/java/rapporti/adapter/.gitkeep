@@ -1,0 +1,3 @@
+# Adapter layer
+# Parsing body → DTO conversions
+# To be implemented when Java backend is integrated

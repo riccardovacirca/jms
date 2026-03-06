@@ -1,0 +1,11 @@
+{
+  "name": "policy",
+  "version": "1.0.0",
+  "dependencies": {
+    "ente": "^1.0.0",
+    "sede": "^1.0.0",
+    "rapporti": "^1.0.0",
+    "sdc": "^1.0.0",
+    "repertorio": "^1.0.0"
+  }
+}

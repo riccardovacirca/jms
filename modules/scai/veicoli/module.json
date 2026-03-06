@@ -1,0 +1,8 @@
+{
+  "name": "veicoli",
+  "version": "1.0.0",
+  "dependencies": {
+    "ente": "^1.0.0",
+    "rapporti": "^1.0.0"
+  }
+}

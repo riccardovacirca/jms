@@ -1,0 +1,7 @@
+{
+  "name": "repertorio",
+  "version": "1.0.0",
+  "dependencies": {
+    "sdc": "^1.0.0"
+  }
+}

@@ -8,9 +8,11 @@ import dev.jms.util.HandlerAdapter;
 import dev.jms.util.Handler;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
+import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.PathTemplateHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
+import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
 import javax.sql.DataSource;
 
@@ -42,6 +44,16 @@ public class App
     ).setWelcomeFiles("index.html");
 
     paths = new PathTemplateHandler(staticHandler);
+
+    // Default status endpoint
+    paths.add("/api/status", new HttpHandler() {
+      @Override
+      public void handleRequest(HttpServerExchange exchange) throws Exception
+      {
+        exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+        exchange.getResponseSender().send("{\"err\":false,\"log\":null,\"out\":\"Application is running\"}");
+      }
+    });
 
     // Aggiungere qui i propri handler:
     // paths.add("/api/users",      route(new UserHandler(), ds));

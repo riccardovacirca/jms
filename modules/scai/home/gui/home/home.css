@@ -1,0 +1,67 @@
+/* Stili specifici del modulo home */
+home-component {
+  display: block;
+}
+
+/* Dashboard Card Styles */
+.dashboard-card {
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: 1px solid #e0e0e0;
+  background: white;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+  border-color: #198754;
+}
+
+.dashboard-card:active {
+  transform: translateY(-2px);
+}
+
+.dashboard-card:focus {
+  outline: 2px solid #198754;
+  outline-offset: 2px;
+}
+
+.dashboard-card .card-body {
+  min-height: 250px;
+}
+
+.dashboard-card i {
+  transition: all 0.3s ease;
+}
+
+.dashboard-card:hover i {
+  color: #157347 !important;
+  transform: scale(1.1);
+}
+
+/* Disabled Card Styles */
+.dashboard-card-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: #f8f9fa;
+}
+
+.dashboard-card-disabled:hover {
+  transform: none;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+  border-color: #e0e0e0;
+}
+
+.dashboard-card-disabled i {
+  opacity: 0.5;
+}
+
+.dashboard-card-disabled:hover i {
+  transform: none !important;
+  color: #6c757d !important;
+}
+
+/* Hero Header */
+.bg-success {
+  background: linear-gradient(135deg, #198754 0%, #157347 100%) !important;
+}

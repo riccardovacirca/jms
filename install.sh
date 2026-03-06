@@ -149,6 +149,7 @@ Usage: ./install.sh [OPTION]
 
 Options:
   (none)                  Create complete development environment
+  --with-postgres         Create dev environment + dedicated PostgreSQL container
   --postgres              Install PostgreSQL container
   -n, --name <name>       PostgreSQL container name (default: postgres)
   -p, --port <port>       PostgreSQL host port (default: 5432)
@@ -162,6 +163,7 @@ Options:
 
 Examples:
   ./install.sh                               # First install
+  ./install.sh --with-postgres               # Install dev + dedicated PostgreSQL
   ./install.sh --postgres                    # Install PostgreSQL
   ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
   ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
@@ -224,7 +226,7 @@ RELEASE_APP_USER_GID=1001
 # ========================================
 PGSQL_ENABLED=y
 PGSQL_IMAGE=postgres:16
-PGSQL_HOST=postgres
+PGSQL_HOST=PROJECT_DIR_PLACEHOLDER-db
 PGSQL_PORT=5432
 PGSQL_PORT_HOST=2340
 PGSQL_ROOT_USER=postgres
@@ -491,10 +493,62 @@ GITIGNORE
 }
 
 # =============================================================================
+# install_with_postgres — dev + dedicated PostgreSQL
+# =============================================================================
+
+install_with_postgres() {
+    # First install dev environment
+    install_dev
+
+    # Load .env to get configuration
+    . ./.env
+
+    local PG_NAME="${PROJECT_NAME}-db"
+    local PG_PORT="${PGSQL_PORT_HOST}"
+    local PG_NETWORK="${DEV_NETWORK}"
+
+    echo ""
+    echo "Installing dedicated PostgreSQL container..."
+    "$0" --postgres -n "$PG_NAME" -p "$PG_PORT" --network "$PG_NETWORK"
+
+    echo ""
+    echo "Waiting for PostgreSQL to be ready..."
+    local MAX_WAIT=30
+    local WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if docker exec "$PG_NAME" pg_isready -U "$PGSQL_ROOT_USER" >/dev/null 2>&1; then
+            echo "PostgreSQL is ready"
+            break
+        fi
+        sleep 1
+        WAITED=$((WAITED + 1))
+        printf "."
+    done
+    echo ""
+
+    if [ $WAITED -eq $MAX_WAIT ]; then
+        echo "WARNING: PostgreSQL did not become ready within ${MAX_WAIT}s"
+        echo "You may need to run manually: docker exec $PROJECT_NAME cmd db setup"
+    else
+        echo "Setting up database..."
+        docker exec "$PROJECT_NAME" cmd db setup
+    fi
+
+    echo ""
+    echo "Done"
+    echo ""
+    echo "PostgreSQL container: $PG_NAME"
+    echo "Database configured and ready"
+}
+
+# =============================================================================
 # Dispatcher
 # =============================================================================
 
 case "$1" in
+    --with-postgres)
+        install_with_postgres
+        ;;
     --postgres)
         shift
         install_postgres "$@"

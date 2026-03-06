@@ -1,0 +1,58 @@
+/* Rapporti module styles */
+
+.rapporti-layout {
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.rapporti-layout .table-hover tbody tr:hover {
+  background-color: rgba(0, 123, 255, 0.05);
+  cursor: pointer;
+}
+
+.rapporti-layout .badge {
+  font-weight: 500;
+  padding: 0.35em 0.65em;
+}
+
+.rapporti-layout .card {
+  border: 1px solid #dee2e6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.rapporti-layout .card-header {
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.rapporti-layout .form-label.small {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.rapporti-layout .font-monospace {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .rapporti-layout .table-responsive {
+    font-size: 0.875rem;
+  }
+
+  .rapporti-layout .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  .rapporti-layout .btn,
+  .rapporti-layout .nav-tabs,
+  .rapporti-layout .pagination {
+    display: none !important;
+  }
+}
