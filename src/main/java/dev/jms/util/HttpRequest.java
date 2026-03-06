@@ -2,6 +2,9 @@ package dev.jms.util;
 
 import io.undertow.server.handlers.Cookie;
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.form.FormData;
+import io.undertow.server.handlers.form.FormDataParser;
+import io.undertow.server.handlers.form.FormParserFactory;
 import io.undertow.util.HeaderValues;
 import io.undertow.util.PathTemplateMatch;
 
@@ -16,6 +19,7 @@ public class HttpRequest
   private final HttpServerExchange exchange;
   private final byte[] bodyBytes; // Null se blocking mode
   private String bodyString; // Cache
+  private FormData formData; // Cache per multipart
 
   /**
    * Costruttore per modalità blocking (esistente, invariato).
@@ -137,5 +141,65 @@ public class HttpRequest
     try (InputStream is = exchange.getInputStream()) {
       return is.readAllBytes();
     }
+  }
+
+  /**
+   * Restituisce i byte del file caricato via multipart/form-data per il campo indicato.
+   * Restituisce null se il campo non esiste o non è un file.
+   */
+  public byte[] getMultipartFileBytes(String fieldName) throws Exception
+  {
+    FormData data;
+    FormData.FormValue fileValue;
+    byte[] result;
+
+    data = parseMultipart();
+    result = null;
+    if (data != null) {
+      fileValue = data.getFirst(fieldName);
+      if (fileValue != null && fileValue.isFileItem()) {
+        try (InputStream is = fileValue.getFileItem().getInputStream()) {
+          result = is.readAllBytes();
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Restituisce il nome originale del file caricato via multipart/form-data per il campo indicato.
+   * Restituisce null se il campo non esiste o non è un file.
+   */
+  public String getMultipartFilename(String fieldName) throws Exception
+  {
+    FormData data;
+    FormData.FormValue fileValue;
+    String result;
+
+    data = parseMultipart();
+    result = null;
+    if (data != null) {
+      fileValue = data.getFirst(fieldName);
+      if (fileValue != null && fileValue.isFileItem()) {
+        result = fileValue.getFileName();
+      }
+    }
+    return result;
+  }
+
+  /** Parsa il body multipart/form-data e mette in cache il risultato. */
+  private FormData parseMultipart() throws Exception
+  {
+    FormParserFactory factory;
+    FormDataParser parser;
+
+    if (formData == null) {
+      factory = FormParserFactory.builder().build();
+      parser = factory.createParser(exchange);
+      if (parser != null) {
+        formData = parser.parseBlocking();
+      }
+    }
+    return formData;
   }
 }
