@@ -1,0 +1,35 @@
+Module: home
+Description: Simple home page with API hello endpoint
+
+========================================
+1. App.java - Add imports
+========================================
+
+Open: src/main/java/dev/jms/app/App.java
+Add at the top:
+
+import dev.jms.app.home.handler.HelloHandler;
+
+========================================
+2. App.java - Register routes
+========================================
+
+Add in PathTemplateHandler section:
+
+paths.add("/api/home/hello", route(new HelloHandler(), ds));
+
+========================================
+3. config.js - Add module configuration
+========================================
+
+Open: vite/src/config.js
+Add in MODULE_CONFIG:
+
+home: {
+  path: '/home',
+  container: 'main',
+  authorization: null,
+  persistent: false,
+  priority: 999,
+  init: null
+}

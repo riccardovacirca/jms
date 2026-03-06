@@ -802,213 +802,6 @@ _module_app_package() {
     sed -n 's|[[:space:]]*<groupId>\(.*\)</groupId>|\1|p' "$WORKSPACE/pom.xml" | head -1 | tr -d ' '
 }
 
-_module_readme() {
-    local MODULE="$1" APP_PACKAGE="$2" TMP_DIR="$3"
-    local OUT="$TMP_DIR/README.md"
-    local APP_JAVA="$WORKSPACE/src/main/java/${APP_PACKAGE//.//}/App.java"
-    local CONFIG_FILE="$WORKSPACE/config/application.properties"
-    local POM="$WORKSPACE/pom.xml"
-    local PKG_PATH="{{APP_PACKAGE_PATH}}"   # placeholder, user replaces dots with slashes
-
-    {
-        echo "# Module: $MODULE"
-        echo ""
-        echo "> Replace \`{{APP_PACKAGE}}\` with your Maven groupId (e.g. \`io.mycompany\`)."
-        echo "> Replace \`{{APP_PACKAGE_PATH}}\` with the corresponding filesystem path (e.g. \`io/mycompany\`)."
-        echo ""
-        echo "## Contents"
-        echo ""
-        [ -d "$TMP_DIR/java" ]      && echo "- \`java/$MODULE/\` — Java package \`{{APP_PACKAGE}}.$MODULE\`"
-        [ -d "$TMP_DIR/gui" ]       && echo "- \`gui/$MODULE/\` — Vite frontend sources"
-        [ -d "$TMP_DIR/migration" ] && echo "- \`migration/\` — Flyway SQL migrations"
-        echo ""
-        echo "## Installation"
-        echo ""
-
-        # Step 1 — Java sources
-        if [ -d "$TMP_DIR/java/$MODULE" ]; then
-            echo "### 1. Java sources"
-            echo ""
-            echo "Copy \`java/$MODULE/\` into your project's Java source tree:"
-            echo ""
-            echo '```sh'
-            echo "cp -r java/$MODULE/  src/main/java/$PKG_PATH/$MODULE/"
-            echo '```'
-            echo ""
-            echo "Replace \`{{APP_PACKAGE}}\` in all copied Java files:"
-            echo ""
-            echo '```sh'
-            echo "find src/main/java/$PKG_PATH/$MODULE -name '*.java' \\"
-            echo "     -exec sed -i 's|{{APP_PACKAGE}}|your.package|g' {} +"
-            echo '```'
-            echo ""
-        fi
-
-        # Step 2 — GUI sources
-        if [ -d "$TMP_DIR/gui/$MODULE" ]; then
-            echo "### 2. Frontend sources"
-            echo ""
-            echo "Copy \`gui/$MODULE/\` into the Vite source tree:"
-            echo ""
-            echo '```sh'
-            echo "cp -r gui/$MODULE/  vite/src/$MODULE/"
-            echo '```'
-            echo ""
-        fi
-
-        # Step 3 — Migrations
-        if [ -d "$TMP_DIR/migration" ]; then
-            echo "### 3. Database migrations"
-            echo ""
-            echo "Copy the SQL files into the Flyway migrations directory."
-            echo "Rename each file with a fresh timestamp to avoid conflicts with existing history:"
-            echo ""
-            echo '```sh'
-            echo "# Example — adjust the timestamp to current date/time"
-            for f in "$TMP_DIR/migration/"*.sql; do
-                [ -f "$f" ] || continue
-                local DESCRIPTOR
-                DESCRIPTOR=$(basename "$f" | sed 's/^V[^_]*__//')
-                echo "cp migration/$(basename "$f")  src/main/resources/db/migration/V\$(date +%Y%m%d_%H%M%S)__${DESCRIPTOR}"
-            done
-            echo '```'
-            echo ""
-        fi
-
-        # Step 4 — pom.xml
-        echo "### 4. pom.xml — dependencies"
-        echo ""
-        echo "Add inside \`<dependencies>\` in \`pom.xml\`:"
-        echo ""
-        echo '```xml'
-        python3 - "$POM" "$TMP_DIR/java" <<'PYEOF' 2>/dev/null || true
-import sys, re, os
-
-pom_file = sys.argv[1]
-java_dir = sys.argv[2]
-
-CORE_PACKAGES = {
-    'java', 'javax', 'io.undertow', 'com.zaxxer', 'org.flywaydb',
-    'org.postgresql', 'com.fasterxml', 'org.slf4j', 'ch.qos',
-    'org.apache', 'dev.jms',
-}
-GID_TO_JAVA = {
-    'org.eclipse.angus': 'jakarta.mail',
-}
-
-prefixes = set()
-for root, _, files in os.walk(java_dir):
-    for f in files:
-        if not f.endswith('.java'):
-            continue
-        try:
-            with open(os.path.join(root, f)) as fp:
-                for line in fp:
-                    m = re.match(r'^import\s+([\w.]+);', line.strip())
-                    if not m:
-                        continue
-                    parts = m.group(1).split('.')
-                    prefix2 = '.'.join(parts[:2])
-                    if not any(m.group(1).startswith(c) for c in CORE_PACKAGES):
-                        prefixes.add(prefix2)
-        except Exception:
-            pass
-
-with open(pom_file) as fp:
-    content = fp.read()
-
-dep_blocks = re.findall(r'<dependency>.*?</dependency>', content, re.DOTALL)
-for block in dep_blocks:
-    gid_m   = re.search(r'<groupId>(.*?)</groupId>',      block)
-    aid_m   = re.search(r'<artifactId>(.*?)</artifactId>', block)
-    ver_m   = re.search(r'<version>(.*?)</version>',       block)
-    scope_m = re.search(r'<scope>(.*?)</scope>',           block)
-    if not gid_m:
-        continue
-    gid = gid_m.group(1)
-    java_prefix = GID_TO_JAVA.get(gid, gid)
-    if any(java_prefix.startswith(p) or p.startswith(java_prefix) for p in prefixes):
-        print('<dependency>')
-        print(f'    <groupId>{gid}</groupId>')
-        if aid_m:
-            print(f'    <artifactId>{aid_m.group(1)}</artifactId>')
-        if ver_m:
-            print(f'    <version>{ver_m.group(1)}</version>')
-        if scope_m:
-            print(f'    <scope>{scope_m.group(1)}</scope>')
-        print('</dependency>')
-        print()
-PYEOF
-        echo '```'
-        echo ""
-
-        # Step 5 — application.properties
-        echo "### 5. application.properties — configuration keys"
-        echo ""
-        echo "Add missing keys to \`config/application.properties\`:"
-        echo ""
-        echo '```properties'
-        if [ -f "$CONFIG_FILE" ]; then
-            grep -E "^(jwt|mail)\." "$CONFIG_FILE" 2>/dev/null || true
-            grep -iE "^${MODULE}\." "$CONFIG_FILE" 2>/dev/null || true
-        fi
-        echo '```'
-        echo ""
-
-        # Step 6 — App.java
-        echo "### 6. App.java — route registrations"
-        echo ""
-        echo "Add imports at the top of \`App.java\`:"
-        echo ""
-        echo '```java'
-        if [ -f "$APP_JAVA" ]; then
-            grep "^import ${APP_PACKAGE}\.${MODULE}\." "$APP_JAVA" 2>/dev/null \
-                | sed "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" || true
-        fi
-        echo '```'
-        echo ""
-        echo "Add routes in the \`PathTemplateHandler\` chain:"
-        echo ""
-        echo '```java'
-        if [ -f "$APP_JAVA" ]; then
-            grep "\.add(\".*/${MODULE}[/\"]" "$APP_JAVA" 2>/dev/null \
-                | sed "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" || true
-        fi
-        echo '```'
-        echo ""
-
-        # Step 7 — vite.config.js (only if GUI exists)
-        if [ -d "$TMP_DIR/gui/$MODULE" ]; then
-            echo "### 7. vite.config.js"
-            echo ""
-            echo "Add entry points to \`rollupOptions.input\`:"
-            echo ""
-            echo '```js'
-            find "$TMP_DIR/gui/$MODULE" -maxdepth 1 -name "*.html" | sort | while read -r f; do
-                local BASENAME KEY REL
-                BASENAME=$(basename "$f" .html)
-                KEY="${MODULE}_${BASENAME}"
-                REL="src/$MODULE/$(basename "$f")"
-                echo "${KEY}: resolve(__dirname, '${REL}'),"
-            done
-            echo '```'
-            echo ""
-            echo "Add URL rewrites in the \`route-rewrite\` plugin (dev server only)."
-            echo "Adjust the left-hand URL to match your routing conventions:"
-            echo ""
-            echo '```js'
-            find "$TMP_DIR/gui/$MODULE" -maxdepth 1 -name "*.html" | sort | while read -r f; do
-                local BASENAME REL
-                BASENAME=$(basename "$f" .html)
-                REL="/$MODULE/$(basename "$f")"
-                echo "else if (req.url === '/$MODULE/$BASENAME') req.url = '${REL}'"
-            done
-            echo '```'
-            echo ""
-        fi
-
-    } > "$OUT"
-}
 
 module_install() {
     local MODULE="$1"
@@ -1074,68 +867,23 @@ module_install() {
     success "Passaggi automatici completati"
     printf '\n'
 
-    # Manual steps output
-    local README="$MODULE_DIR/README.md"
-    local STEP=0
-
-    # pom.xml dependencies
-    if grep -q "pom\.xml" "$README"; then
-        STEP=$((STEP + 1))
-        printf '══════════════════════════════════════════\n'
-        printf '%d. DIPENDENZE pom.xml\n' "$STEP"
-        printf '   Apri: pom.xml\n'
-        printf '   Aggiungi nel blocco <dependencies>:\n\n'
-        sed -n '/```xml/,/```/p' "$README" | grep -v '```' | sed 's/^/   /'
+    # Display complete README
+    local README="$MODULE_DIR/README"
+    if [ -f "$README" ]; then
+        printf '\n'
+        printf '════════════════════════════════════════════════════════════════\n'
+        printf 'PASSAGGI MANUALI PER COMPLETARE L'\''INSTALLAZIONE\n'
+        printf '════════════════════════════════════════════════════════════════\n'
+        printf '\n'
+        cat "$README"
+        printf '\n'
+        printf '════════════════════════════════════════════════════════════════\n'
         printf '\n'
     fi
-
-    # App.java imports
-    if grep -q "import.*$MODULE" "$README"; then
-        STEP=$((STEP + 1))
-        printf '══════════════════════════════════════════\n'
-        printf '%d. IMPORT in App.java\n' "$STEP"
-        printf '   Apri: src/main/java/%s/App.java\n' "$APP_PACKAGE_PATH"
-        printf '   Aggiungi questi import:\n\n'
-        grep "import.*$MODULE" "$README" | sed "s|com\\.example|$APP_PACKAGE|g" | sed 's/^/   /'
-        printf '\n'
-    fi
-
-    # App.java routes
-    if grep -q "paths\.add" "$README"; then
-        STEP=$((STEP + 1))
-        printf '══════════════════════════════════════════\n'
-        printf '%d. ROUTE in App.java\n' "$STEP"
-        printf '   Apri: src/main/java/%s/App.java\n' "$APP_PACKAGE_PATH"
-        printf '   Aggiungi nel PathTemplateHandler:\n\n'
-        grep "paths\.add" "$README" | sed 's/^/   /'
-        printf '\n'
-    fi
-
-    # config.js
-    if grep -q "MODULE_CONFIG" "$README"; then
-        STEP=$((STEP + 1))
-        printf '══════════════════════════════════════════\n'
-        printf '%d. CONFIGURAZIONE vite/src/config.js\n' "$STEP"
-        printf '   Apri: vite/src/config.js\n'
-        printf '   Aggiungi nel MODULE_CONFIG:\n\n'
-        sed -n "/^  $MODULE:/,/^  },/p" "$README" | sed 's/^/   /'
-        printf '\n'
-        if [ "$MODULE" = "header" ]; then
-            warn "  IMPORTANTE: 'header' deve essere il PRIMO modulo in MODULE_CONFIG"
-            printf '\n'
-        fi
-    fi
-
-    [ "$STEP" -gt 0 ] && printf '══════════════════════════════════════════\n\n'
 
     printf 'Prossimi passi:\n'
-    if [ "$STEP" -gt 0 ]; then
-        printf '  1. Completa le azioni manuali sopra\n'
-        printf '  2. cmd gui build && cmd app build\n'
-    else
-        printf '  1. cmd gui build && cmd app build\n'
-    fi
-    printf '  Dettagli completi: modules/%s/README.md\n\n' "$MODULE"
+    printf '  1. Completa le azioni manuali sopra\n'
+    printf '  2. cmd gui build && cmd app build\n\n'
 }
 
 module_import() {
@@ -1170,6 +918,42 @@ module_import() {
         -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} +
 
     success "Modulo '$MODULE' estratto in $DEST"
+
+    # Check dependencies from module.json
+    if [ -f "$DEST/module.json" ]; then
+        info "Verifica dipendenze da module.json..."
+        local MISSING_DEPS=""
+        local DEP_COUNT=0
+
+        # Extract dependencies using grep and basic parsing
+        while IFS= read -r line; do
+            # Match lines like: "modulename": "^1.0.0"
+            if echo "$line" | grep -qE '^\s*"[^"]+"\s*:\s*"[^"]+"'; then
+                local DEP_NAME
+                DEP_NAME=$(echo "$line" | sed -E 's/^\s*"([^"]+)"\s*:.*/\1/')
+                DEP_COUNT=$((DEP_COUNT + 1))
+
+                # Check if dependency is installed
+                if [ ! -d "$WORKSPACE/modules/$DEP_NAME" ]; then
+                    MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
+                fi
+            fi
+        done < <(sed -n '/"dependencies":/,/}/p' "$DEST/module.json" | grep -E '^\s*"[^"]+"\s*:')
+
+        if [ -n "$MISSING_DEPS" ]; then
+            printf '\n'
+            warn "ATTENZIONE: Il modulo '$MODULE' richiede le seguenti dipendenze:"
+            printf "$MISSING_DEPS"
+            warn "Installa prima i moduli mancanti con: cmd module import <modulo.tar.gz>"
+            printf '\n'
+            if ! confirm "Vuoi continuare comunque con l'installazione?"; then
+                rm -rf "$DEST"
+                error "Installazione annullata"
+            fi
+        elif [ "$DEP_COUNT" -gt 0 ]; then
+            success "Tutte le dipendenze sono soddisfatte"
+        fi
+    fi
 
     module_install "$MODULE"
 }
@@ -1244,20 +1028,28 @@ module_export() {
     [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
 
     # README
-    info "[module] Genero README.md..."
+    info "[module] Genero README..."
     # README - usa quello custom se esiste, altrimenti genera automatico
-    if [ -f "$WORKSPACE/modules/$MODULE/README.md" ]; then
-        info "[module] Uso README.md custom da modules/$MODULE/README.md..."
-        cp "$WORKSPACE/modules/$MODULE/README.md" "$TMP_DIR/README.md"
+    if [ -f "$WORKSPACE/modules/$MODULE/README" ]; then
+        info "[module] Uso README custom da modules/$MODULE/README..."
+        cp "$WORKSPACE/modules/$MODULE/README" "$TMP_DIR/README"
     else
-        info "[module] Genero README.md automatico..."
-        _module_readme "$MODULE" "$APP_PACKAGE" "$TMP_DIR"
+        warn "[module] README non trovato in modules/$MODULE/README"
+        warn "[module] Creane uno manuale prima di esportare"
     fi
 
     # Config properties (from modules/$MODULE/config/ if exists)
     if [ -d "$WORKSPACE/modules/$MODULE/config" ]; then
         info "[module] Copio config properties..."
         cp -r "$WORKSPACE/modules/$MODULE/config" "$TMP_DIR/config"
+    fi
+
+    # module.json (metadata con dipendenze)
+    if [ -f "$WORKSPACE/modules/$MODULE/module.json" ]; then
+        info "[module] Includo module.json..."
+        cp "$WORKSPACE/modules/$MODULE/module.json" "$TMP_DIR/module.json"
+    else
+        warn "[module] module.json non trovato, creane uno con name, version e dependencies"
     fi
 
     # Package

@@ -1,0 +1,136 @@
+package {{APP_PACKAGE}}.contatti.handler;
+
+import com.auth0.jwt.exceptions.JWTVerificationException;
+import {{APP_PACKAGE}}.contatti.adapter.ContattoAdapter;
+import {{APP_PACKAGE}}.contatti.dao.ContattoDAO;
+import {{APP_PACKAGE}}.contatti.dto.ContattoDTO;
+import dev.jms.util.Auth;
+import dev.jms.util.DB;
+import dev.jms.util.Handler;
+import dev.jms.util.HttpRequest;
+import dev.jms.util.HttpResponse;
+import dev.jms.util.Log;
+import dev.jms.util.ValidationException;
+
+/** GET /api/contatti/{id}    — recupera un contatto.
+ *  PUT /api/contatti/{id}    — aggiorna un contatto.
+ *  DELETE /api/contatti/{id} — elimina un contatto. */
+public class ContattoHandler implements Handler
+{
+  private static final Log log = Log.get(ContattoHandler.class);
+
+  @Override
+  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO contatto;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200).contentType("application/json").err(true).log("Non autenticato").out(null).send();
+      return;
+    }
+    try {
+      Auth.get().verifyAccessToken(token);
+    } catch (JWTVerificationException e) {
+      res.status(200).contentType("application/json").err(true).log("Token non valido o scaduto").out(null).send();
+      return;
+    }
+
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ContattoDAO(db);
+    contatto = dao.findById(id);
+
+    if (contatto == null) {
+      res.status(200).contentType("application/json").err(true).log("Contatto non trovato").out(null).send();
+    } else {
+      res.status(200).contentType("application/json").err(false).log(null).out(contatto).send();
+    }
+  }
+
+  @Override
+  public void put(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO existing;
+    ContattoDTO updated;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200).contentType("application/json").err(true).log("Non autenticato").out(null).send();
+      return;
+    }
+    try {
+      Auth.get().verifyAccessToken(token);
+    } catch (JWTVerificationException e) {
+      res.status(200).contentType("application/json").err(true).log("Token non valido o scaduto").out(null).send();
+      return;
+    }
+
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ContattoDAO(db);
+    existing = dao.findById(id);
+
+    if (existing == null) {
+      res.status(200).contentType("application/json").err(true).log("Contatto non trovato").out(null).send();
+      return;
+    }
+
+    try {
+      updated = ContattoAdapter.from(req);
+      if (dao.existsByTelefono(updated.telefono(), id)) {
+        res.status(200).contentType("application/json").err(true).log("Telefono già esistente").out(null).send();
+        return;
+      }
+      updated = new ContattoDTO(
+        id,
+        updated.nome(), updated.cognome(), updated.ragioneSociale(),
+        updated.telefono(), updated.email(), updated.indirizzo(),
+        updated.citta(), updated.cap(), updated.provincia(), updated.note(),
+        updated.stato(), updated.consenso(), updated.blacklist(),
+        existing.createdAt(), null, existing.listeCount()
+      );
+      dao.update(updated);
+      res.status(200).contentType("application/json").err(false).log(null).out(null).send();
+    } catch (ValidationException e) {
+      res.status(200).contentType("application/json").err(true).log(e.getMessage()).out(null).send();
+    }
+  }
+
+  @Override
+  public void delete(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO existing;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200).contentType("application/json").err(true).log("Non autenticato").out(null).send();
+      return;
+    }
+    try {
+      Auth.get().verifyAccessToken(token);
+    } catch (JWTVerificationException e) {
+      res.status(200).contentType("application/json").err(true).log("Token non valido o scaduto").out(null).send();
+      return;
+    }
+
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ContattoDAO(db);
+    existing = dao.findById(id);
+
+    if (existing == null) {
+      res.status(200).contentType("application/json").err(true).log("Contatto non trovato").out(null).send();
+      return;
+    }
+
+    dao.delete(id);
+    res.status(200).contentType("application/json").err(false).log(null).out(null).send();
+  }
+}

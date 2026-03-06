@@ -1,0 +1,7 @@
+{
+  "name": "contatti",
+  "version": "1.0.0",
+  "dependencies": {
+    "auth": "^1.0.0"
+  }
+}

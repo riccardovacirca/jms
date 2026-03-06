@@ -1,0 +1,36 @@
+package {{APP_PACKAGE}}.contatti.adapter;
+
+import {{APP_PACKAGE}}.contatti.dto.ListaDTO;
+import dev.jms.util.HttpRequest;
+import dev.jms.util.Json;
+import dev.jms.util.Validator;
+
+import java.util.HashMap;
+
+public class ListaAdapter
+{
+  private ListaAdapter() {}
+
+  @SuppressWarnings("unchecked")
+  public static ListaDTO from(HttpRequest req) throws Exception
+  {
+    HashMap<String, Object> body;
+    String nome;
+    String descrizione;
+    boolean consenso;
+    int stato;
+    String scadenza;
+
+    body        = Json.decode(req.getBody(), HashMap.class);
+    nome        = (String) body.get("nome");
+    descrizione = (String) body.get("descrizione");
+    consenso    = Boolean.TRUE.equals(body.get("consenso"));
+    stato       = body.get("stato") instanceof Number ? ((Number) body.get("stato")).intValue() : 1;
+    scadenza    = (String) body.get("scadenza");
+
+    Validator.required(nome, "nome");
+    Validator.maxLength(nome, 100, "nome");
+
+    return new ListaDTO(null, nome, descrizione, consenso, stato, scadenza, null, null, null, 0);
+  }
+}

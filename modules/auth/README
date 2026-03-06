@@ -1,0 +1,60 @@
+Module: auth
+Description: Complete authentication system (login, session, 2FA, password management)
+
+========================================
+1. pom.xml - Add dependencies
+========================================
+
+Open: pom.xml
+Add inside <dependencies>:
+
+<dependency>
+    <groupId>com.auth0</groupId>
+    <artifactId>java-jwt</artifactId>
+    <version>4.4.0</version>
+</dependency>
+
+========================================
+2. App.java - Add imports
+========================================
+
+Open: src/main/java/dev/jms/app/App.java
+Add at the top:
+
+import dev.jms.app.auth.handler.ChangePasswordHandler;
+import dev.jms.app.auth.handler.ForgotPasswordHandler;
+import dev.jms.app.auth.handler.LoginHandler;
+import dev.jms.app.auth.handler.LogoutHandler;
+import dev.jms.app.auth.handler.RefreshHandler;
+import dev.jms.app.auth.handler.SessionHandler;
+import dev.jms.app.auth.handler.TwoFactorHandler;
+
+========================================
+3. App.java - Register routes
+========================================
+
+Add in PathTemplateHandler section:
+
+paths.add("/api/auth/login",           route(new LoginHandler(),          ds));
+paths.add("/api/auth/session",         route(new SessionHandler(),        ds));
+paths.add("/api/auth/logout",          route(new LogoutHandler(),         ds));
+paths.add("/api/auth/refresh",         route(new RefreshHandler(),        ds));
+paths.add("/api/auth/change-password", route(new ChangePasswordHandler(), ds));
+paths.add("/api/auth/forgot-password", route(new ForgotPasswordHandler(), ds));
+paths.add("/api/auth/2fa",             route(new TwoFactorHandler(),      ds));
+
+========================================
+4. config.js - Add module configuration
+========================================
+
+Open: vite/src/config.js
+Add in MODULE_CONFIG:
+
+auth: {
+  path: '/auth',
+  container: 'main',
+  authorization: null,
+  persistent: false,
+  priority: 999,
+  init: () => import('./modules/auth/init.js').then(m => m.default())
+}

@@ -1,171 +1,171 @@
-# Manutenzione degli archivi dei moduli
+# Modules
 
-Questo documento descrive come aggiornare i file sorgente dei moduli, ricostruire
-gli archivi `.tar.gz` e mantenerli sincronizzati con `jms/`, senza alterare i file
-base dell'applicazione.
+Module management and maintenance procedures.
 
----
+## Installation
 
-## Installazione di un modulo
-
-### Comando unico
+### Command
 
 ```bash
 cmd module import modules/<name>-x.y.z.tar.gz
 ```
 
-Il comando esegue automaticamente:
-- Estrazione dell'archivio in `modules/<name>/` con sostituzione del placeholder `{{APP_PACKAGE}}`
-- Copia dei sorgenti Java in `src/main/java/<package>/<name>/` con package corretto
-- Copia dei sorgenti GUI in `vite/src/modules/<name>/`
-- Copia delle migration SQL in `src/main/resources/db/migration/`
-- Append di `config/application.properties` del modulo a `config/application.properties` (solo se contiene chiavi reali, e solo se non già presente)
+**Automatic operations:**
+- Extract archive to `modules/<name>/`
+- Replace `{{APP_PACKAGE}}` placeholder with actual package
+- Copy Java sources to `src/main/java/<package>/<name>/`
+- Copy GUI sources to `vite/src/modules/<name>/`
+- Copy migration SQL to `src/main/resources/db/migration/`
+- Append module config to `config/application.properties` (if not present)
+- Verify dependencies from `module.json`
 
-Al termine mostra le **azioni manuali** rimaste, specifiche per il modulo.
+**Manual steps after import:**
 
-### Azioni manuali
+1. `pom.xml` - Add dependencies (if module requires external Java libraries)
+2. `App.java` - Add imports for module handlers
+3. `App.java` - Add routes with `paths.add(...)`
+4. `config.js` - Add module entry to `MODULE_CONFIG`
 
-Dopo l'esecuzione del comando, il modulo richiede di completare a mano le modifiche ai file esistenti del progetto:
+Complete instructions printed in README after import.
 
-**1. `pom.xml`** *(solo se il modulo ha dipendenze Java esterne)*
-
-Aggiungere le dipendenze nel blocco `<dependencies>`. Il comando stampa il blocco XML pronto per il copy-paste.
-
-**2. `src/main/java/<package>/App.java`** — import
-
-Aggiungere gli import delle classi handler del modulo nella sezione import. Il comando stampa le righe `import` già con il package corretto.
-
-**3. `src/main/java/<package>/App.java`** — route
-
-Aggiungere le route nel `PathTemplateHandler`. Il comando stampa le chiamate `paths.add(...)` pronte.
-
-**4. `vite/src/config.js`** — MODULE_CONFIG
-
-Aggiungere la configurazione del modulo nell'oggetto `MODULE_CONFIG`. Il comando stampa il blocco JavaScript pronto.
-
-> Il modulo `header` deve essere dichiarato **primo** in `MODULE_CONFIG`.
-
-### Build e avvio
+**Build after installation:**
 
 ```bash
 cmd gui build && cmd app build
 cmd app restart
 ```
 
----
+## Structure
 
-## Struttura
-
-Ogni modulo installato nell'applicazione ha i propri file in **due posti distinti**
-che devono essere sempre tenuti in sincronia:
+**Files locations:**
 
 ```
-vite/src/modules/<name>/       ← file live dell'applicazione (modificati durante lo sviluppo)
-modules/<name>/gui/<name>/     ← copia del sorgente GUI da archiviare
-modules/<name>/java/<name>/    ← sorgente Java del modulo
-modules/<name>/migration/      ← migrazioni Flyway del modulo
-modules/<name>-x.y.z.tar.gz    ← archivio distribuibile
-jms/modules/<name>-x.y.z.tar.gz ← copia identica in jms (sempre allineata)
+vite/src/modules/<name>/       ← Live application files (modified during development)
+modules/<name>/gui/<name>/     ← GUI source copy for archiving
+modules/<name>/java/<name>/    ← Java source
+modules/<name>/migration/      ← Flyway migrations
+modules/<name>/module.json     ← Metadata with dependencies
+modules/<name>/README          ← Manual installation steps
+modules/<name>-x.y.z.tar.gz    ← Distributable archive
+jms/modules/<name>-x.y.z.tar.gz ← Template copy (always synchronized)
 ```
 
----
+## Base Files vs Module Files
 
-## File base vs file dei moduli
+**Base files** (DO NOT modify when working on modules):
 
-### File base — NON modificare quando si lavora sui moduli
+- `vite/src/store.js` - Nanostores (authorized, user)
+- `vite/src/router.js` - Multi-container SPA router
+- `vite/src/config.js` (app) - Contains installed module entries
+- `vite/src/config.js` (template) - Only generic 'index' entry
 
-I seguenti file appartengono all'infrastruttura base dell'applicazione. Esistono
-sia nella versione app (`vite/src/`) sia nella versione template (`jms/template/vite/src/`).
-La versione template deve restare generica, senza riferimenti ai moduli installati:
+**Rule:** `jms/template/vite/src/config.js` must never contain specific module entries.
 
-| File | App (`vite/src/`) | Template (`jms/template/vite/src/`) |
-|------|-------------------|--------------------------------------|
-| `store.js` | atom `authorized`, `user` | identico |
-| `router.js` | router hash-based generico | identico |
-| `config.js` | contiene le entry dei moduli installati | solo entry generica `index` |
+**Module files** (modify in both locations):
 
-**Regola:** `jms/template/vite/src/config.js` non deve mai contenere entry di moduli
-specifici (auth, home, ecc.). La versione app `vite/src/config.js` le contiene perché
-i moduli sono installati.
+| Live | Archive |
+|------|---------|
+| `vite/src/modules/<name>/*.js` | `modules/<name>/gui/<name>/*.js` |
 
-### File dei moduli — modificare sempre in coppia
+**Examples:**
+- `vite/src/modules/auth/init.js` → `modules/auth/gui/auth/init.js`
+- `vite/src/modules/auth/login.js` → `modules/auth/gui/auth/login.js`
+- `vite/src/modules/header/component.js` → `modules/header/gui/header/component.js`
+- `vite/src/modules/home/component.js` → `modules/home/gui/home/component.js`
 
-Ogni modifica a un file JS di modulo va applicata **sia nel file live che nel file
-di archivio**:
+## Update Workflow
 
-| File live (`vite/src/modules/`) | File archivio (`modules/<name>/gui/<name>/`) |
-|---------------------------------|----------------------------------------------|
-| `auth/init.js` | `auth/gui/auth/init.js` |
-| `auth/index.js` | `auth/gui/auth/index.js` |
-| `auth/login.js` | `auth/gui/auth/login.js` |
-| `auth/changepass.js` | `auth/gui/auth/changepass.js` |
-| `header/index.js` | `header/gui/header/index.js` |
-| `header/component.js` | `header/gui/header/component.js` |
-| `home/index.js` | `home/gui/home/index.js` |
-| `home/component.js` | `home/gui/home/component.js` |
-| `contatti/index.js` | `contatti/gui/contatti/index.js` |
-| `contatti/component.js` | `contatti/gui/contatti/component.js` |
+1. Modify live file in `vite/src/modules/<name>/`
+2. Apply same change to `modules/<name>/gui/<name>/`
+3. Rebuild archive
+4. Verify checksums
 
----
+## Rebuild Archives
 
-## Workflow di aggiornamento
-
-1. Modifica il file live in `vite/src/modules/<name>/`
-2. Applica la stessa modifica al file corrispondente in `modules/<name>/gui/<name>/`
-3. Ricostruisci l'archivio (vedi sezione successiva)
-4. Verifica i checksums
-
----
-
-## Ricostruzione degli archivi
-
-Il comando `cmd module export` gestisce automaticamente la creazione dell'archivio
-(incluse le configurazioni `config/` e il README personalizzato). Va eseguito
-dall'interno del container.
+**Inside container:**
 
 ```bash
-# Ricostruire l'archivio (dentro il container)
 cmd module export <name> -v x.y.z
+```
 
-# Sincronizzare con jms (dalla root del progetto, fuori dal container)
+**Outside container** (sync to template):
+
+```bash
 cp modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
+```
 
-# Verificare identità dei due archivi
+**Verify identity:**
+
+```bash
 md5 modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
 ```
 
-I due MD5 devono essere identici. Se non lo sono, il `cp` non è andato a buon fine.
+MD5 must be identical.
 
-### Esempio per tutti i moduli
+**Example for all modules:**
 
+Inside container:
 ```bash
-# Dentro il container
-cmd module export auth     -v 1.0.0
-cmd module export header   -v 1.0.0
-cmd module export home     -v 1.0.0
+cmd module export auth -v 1.0.0
+cmd module export header -v 1.0.0
+cmd module export home -v 1.0.0
 cmd module export contatti -v 1.0.0
-
-# Fuori dal container
-cp modules/auth-1.0.0.tar.gz     jms/modules/auth-1.0.0.tar.gz
-cp modules/header-1.0.0.tar.gz   jms/modules/header-1.0.0.tar.gz
-cp modules/home-1.0.0.tar.gz     jms/modules/home-1.0.0.tar.gz
-cp modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
-
-# Verifica
-md5 modules/auth-1.0.0.tar.gz     jms/modules/auth-1.0.0.tar.gz
-md5 modules/header-1.0.0.tar.gz   jms/modules/header-1.0.0.tar.gz
-md5 modules/home-1.0.0.tar.gz     jms/modules/home-1.0.0.tar.gz
-md5 modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
 ```
 
----
+Outside container:
+```bash
+cp modules/auth-1.0.0.tar.gz jms/modules/auth-1.0.0.tar.gz
+cp modules/header-1.0.0.tar.gz jms/modules/header-1.0.0.tar.gz
+cp modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
+cp modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
+```
 
-## Invarianti da rispettare
+Verify:
+```bash
+md5 modules/*.tar.gz jms/modules/*.tar.gz
+```
 
-- Modificare sempre **entrambe** le copie di ogni file di modulo (live + archivio)
-- Usare sempre `cmd module export` per ricostruire gli archivi (gestisce `COPYFILE_DISABLE=1` e include `config/` automaticamente)
-- `modules/*.tar.gz` e `jms/modules/*.tar.gz` devono avere **MD5 identici**
-- `jms/template/vite/src/config.js` non deve contenere entry di moduli specifici
-- Non usare `cmd sync` per propagare file app-specifici in `jms/template/`: il sync
-  sovrascrive i file base ma non deve portare in jms le entry di moduli presenti
-  nella versione app di `config.js`
+## Dependencies
+
+Module dependencies managed via `module.json`:
+
+```json
+{
+  "name": "contatti",
+  "version": "1.0.0",
+  "dependencies": {
+    "auth": "^1.0.0"
+  }
+}
+```
+
+Import verifies dependencies and warns if missing modules detected. User can confirm to proceed anyway or abort installation.
+
+## Available Modules
+
+**`auth-1.0.0.tar.gz`**
+- Complete authentication system
+- Login, session, 2FA, password management
+- Dependencies: none
+
+**`header-1.0.0.tar.gz`**
+- Persistent navigation header
+- Auth-aware, user display, login/logout
+- Priority: 1 (loads first)
+- Dependencies: none
+
+**`home-1.0.0.tar.gz`**
+- Home page with API hello endpoint
+- Dependencies: none
+
+**`contatti-1.0.0.tar.gz`**
+- Contact management module
+- Dependencies: auth ^1.0.0
+
+## Invariants
+
+- Always modify both copies of module files (live + archive)
+- Use `cmd module export` to rebuild archives (handles `COPYFILE_DISABLE=1`, includes `config/`)
+- `modules/*.tar.gz` and `jms/modules/*.tar.gz` must have identical MD5
+- `jms/template/vite/src/config.js` must not contain specific module entries
+- Do not use `cmd sync` to propagate app-specific files to `jms/template/`

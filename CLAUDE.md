@@ -224,6 +224,7 @@ export const MODULE_CONFIG = {
     container: 'main' | 'header' | 'footer',  // DOM container ID
     authorization: null | { redirectTo: '/path' },  // Access control
     persistent: true | false,          // Always mounted or dynamic
+    priority: 999,                     // Load order (lower = first, only for persistent)
     init: null | async function        // Initialization function
   }
 };
@@ -239,6 +240,7 @@ export const MODULE_CONFIG = {
        container: 'main',
        authorization: null,
        persistent: false,
+       priority: 999,
        init: null
      }
    };
@@ -296,7 +298,24 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Modules (`modules/`)
 
-Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains `java/<module>/`, `gui/<module>/`, `migration/`, `config/` and `README.md`.
+Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains:
+- `java/<module>/` — Java handlers, DAOs, DTOs
+- `gui/<module>/` — Frontend module sources
+- `migration/` — Flyway SQL migrations
+- `config/` — Application properties
+- `README` — Plain text installation instructions (terminal-optimized)
+- `module.json` — Module metadata with dependencies
+
+**Module metadata** (`module.json`):
+```json
+{
+  "name": "contatti",
+  "version": "1.0.0",
+  "dependencies": {
+    "auth": "^1.0.0"
+  }
+}
+```
 
 **Export** a module from the current project:
 ```bash
@@ -308,15 +327,19 @@ cmd module export auth -v 1.0.0 # → modules/auth-1.0.0.tar.gz
 ```bash
 cmd module import auth-1.0.0.tar.gz
 ```
-The command copies Java sources, GUI files, migration SQL and appends `config/application.properties` to the project config. At the end it prints the remaining manual steps: adding dependencies to `pom.xml`, imports and routes to `App.java`, and the module entry to `vite/src/config.js`.
+The command:
+1. Verifies dependencies from `module.json` (warns if missing)
+2. Copies Java sources, GUI files, migration SQL
+3. Appends `config/application.properties` to the project config
+4. Displays complete `README` with manual steps
 
 **Available modules** (in `jms/modules/`):
-- `auth-1.0.0.tar.gz` — Complete authentication system (login, session, 2FA, password management)
-- `header-1.0.0.tar.gz` — Persistent navigation header (auth-aware, user display, login/logout)
-- `home-1.0.0.tar.gz` — Simple home page with API hello endpoint
-- `contatti-1.0.0.tar.gz` — Contact management module
+- `auth-1.0.0.tar.gz` — Complete authentication system (no dependencies)
+- `header-1.0.0.tar.gz` — Persistent navigation header (no dependencies)
+- `home-1.0.0.tar.gz` — Simple home page with API hello endpoint (no dependencies)
+- `contatti-1.0.0.tar.gz` — Contact management module (requires: auth)
 
-All modules follow the complete configuration schema with all 5 attributes (`path`, `container`, `authorization`, `persistent`, `init`).
+All modules follow the complete configuration schema with all 6 attributes (`path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 
 ## Coding Style
 
