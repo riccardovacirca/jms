@@ -351,11 +351,27 @@ update_git_repo() {
         info "  Changes committed"
     else
         info "  No changes to commit"
-        cd "$WORKSPACE"
-        return 0
     fi
 
-    info "  Pushing to remote..."
+    cd "$WORKSPACE"
+}
+
+push_only_git_repo() {
+    local REPO_DIR="$1"
+
+    info "Pushing to remote from $REPO_DIR..."
+    cd "$REPO_DIR"
+
+    git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+
+    local CURRENT_REMOTE
+    CURRENT_REMOTE=$(git config --get remote.origin.url 2>/dev/null || true)
+    if [ -n "$CURRENT_REMOTE" ]; then
+        local REPO_NAME
+        REPO_NAME=$(basename -s .git "$CURRENT_REMOTE")
+        git remote set-url origin "https://${GIT_USER}:${GIT_TOKEN}@github.com/${GIT_USER}/${REPO_NAME}.git"
+    fi
+
     if git push; then
         success "Successfully pushed"
     else
@@ -426,6 +442,7 @@ git_push() {
     _require_git_env
     confirm "Push changes to remote ($REPO_NAME at $GIT_REPO_DIR)?" || exit 0
     update_git_repo "$GIT_REPO_DIR"
+    push_only_git_repo "$GIT_REPO_DIR"
 }
 
 git_pull() {
@@ -455,6 +472,7 @@ git_sync() {
     confirm "Sync repository ($REPO_NAME at $GIT_REPO_DIR)?" || exit 0
     pull_git_repo "$GIT_REPO_DIR"
     update_git_repo "$GIT_REPO_DIR"
+    push_only_git_repo "$GIT_REPO_DIR"
 }
 
 git_fetch() {
@@ -462,6 +480,9 @@ git_fetch() {
     [ ! -d "$WORKSPACE/.git" ] || error "Git repository already exists. Remove .git folder first if you want to reinitialize."
     [ -n "$PROJECT_NAME" ] || error "PROJECT_NAME not set in .env file"
     _require_git_env
+
+    warn "I file locali verranno sovrascritti con i contenuti del repository remoto."
+    confirm "Inizializzare il repository da remoto ($PROJECT_NAME)?" || exit 0
 
     local GIT_URL="https://${GIT_USER}:${GIT_TOKEN}@github.com/${GIT_USER}/${PROJECT_NAME}.git"
     info "Initializing repository from remote..."

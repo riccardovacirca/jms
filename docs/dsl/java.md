@@ -412,9 +412,39 @@ RULE response.builder-completeness
   ok: |
     res.status(200)
        .contentType("application/json")
-       .err(false).log(null).out(out)
+       .err(false)
+       .log(null)
+       .out(out)
        .send();
 
   ko: |
     res.contentType("application/json").err(false).out(out).send();   // manca status()
+```
+
+```
+RULE response.builder-chain
+  applies-to: ogni chiamata a res.send()
+  note: ogni metodo della catena è su una riga separata;
+        le righe di continuazione sono indentate in modo che il punto
+        sia allineato al punto di res. (ovvero: indentazione corrente + 3 spazi);
+        il punto e virgola sta sulla riga di send()
+
+  ok: |
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out("Hello, World!")
+       .send();
+
+  ko: |
+    res.status(200).contentType("application/json").err(false).log(null).out(out).send();
+
+  ko: |
+    res.status(200)
+      .contentType("application/json")
+      .err(false)
+      .log(null)
+      .out(out)
+      .send();
 ```
