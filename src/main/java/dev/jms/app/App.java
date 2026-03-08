@@ -4,6 +4,7 @@ import dev.jms.util.AsyncExecutor;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
+// import dev.jms.util.Mail;
 import dev.jms.util.HandlerAdapter;
 import dev.jms.util.Handler;
 import io.undertow.Undertow;
@@ -34,6 +35,7 @@ public class App
 
     DB.init(config);
     Auth.init(config.get("jwt.secret", "dev-secret-change-in-production"), config.getInt("jwt.access.expiry.seconds", 900));
+    // Mail.init(config);
     AsyncExecutor.init(asyncPoolSize);
     runMigrations();
 

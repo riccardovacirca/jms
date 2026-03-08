@@ -183,7 +183,7 @@ Key configuration parameters:
 - `async.max.body.size` (default: 10485760 = 10MB) — Max body size for async handlers
 - `mail.*` — SMTP configuration (disabled by default, set `mail.enabled=true` to enable)
 
-**Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (userId), `username`, `ruolo`, `can_admin`, `can_write`, `can_delete`, `must_change_password`.
+**Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `permissions` (List<String>, e.g. `["can_admin","can_write","can_delete"]`), `must_change_password`.
 
 **Excel utilities** (`dev.jms.util.excel`): `ExcelReader` parses `.xlsx` files; `ExcelImporter` handles full import with pluggable `MappingStrategy` (column mapping) and `NormalizationStrategy` (data normalization). `ExcelAnalyzer` provides preview/validation without loading the full file.
 
@@ -195,17 +195,10 @@ Vite 6 SPA project with modular multi-container architecture. Sources in `vite/s
 vite/src/
 ├── index.html           → Entry point with multi-area layout (header, main, footer)
 ├── router.js            → Multi-container SPA router with persistent modules support
-├── config.js            → Complete module configuration (all attributes declared)
+├── config.js            → Module configuration template (no project-specific entries)
 ├── init.js              → Global app initialization (fetch interceptor)
 ├── store.js             → Nanostores-based state management (authorized, user stores)
-└── modules/             → Web components (one per module)
-    ├── header/          → Persistent header module (always visible)
-    │   ├── index.js
-    │   └── component.js
-    ├── home/            → Home module (dynamic, mounted in 'main')
-    │   ├── index.js
-    │   ├── component.js
-    │   └── home.css
+└── modules/             → Empty placeholder — modules added via cmd module import
     └── .gitkeep
 ```
 
@@ -220,36 +213,33 @@ vite/src/
 ```javascript
 export const MODULE_CONFIG = {
   moduleName: {
-    path: '/path' | null,              // URL path or null (not navigable)
+    route: '/path' | null,             // URL hash route or null (not navigable, e.g. header)
+    path: 'dirname' | null,            // Folder under vite/src/modules/ or null (no frontend module)
     container: 'main' | 'header' | 'footer',  // DOM container ID
-    authorization: null | { redirectTo: '/path' },  // Access control
-    persistent: true | false,          // Always mounted or dynamic
+    authorization: null | { redirectTo: '/route' },  // Access control
+    persistent: true | false,          // persistent requires path !== null
     priority: 999,                     // Load order (lower = first, only for persistent)
     init: null | async function        // Initialization function
   }
 };
+
+// Selects which MODULE_CONFIG key to load when no hash is present
+export const DEFAULT_MODULE = 'status';
 ```
+
+`path: null` is reserved for routes handled entirely by the backend with no frontend module to mount. `persistent: true` with `path: null` is a configuration error — the router throws explicitly.
+
+A new installation includes `status` as the only pre-installed frontend module (`vite/src/modules/status/`), which calls `/api/status` and displays the result. It is the `DEFAULT_MODULE`.
 
 **Adding a new module:**
 1. Create `vite/src/modules/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
-2. Add complete entry to `config.js`:
-   ```javascript
-   export const MODULE_CONFIG = {
-     newmodule: {
-       path: '/newmodule',
-       container: 'main',
-       authorization: null,
-       persistent: false,
-       priority: 999,
-       init: null
-     }
-   };
-   ```
+2. Add complete entry to `config.js` with `route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`
 3. Access via `http://localhost:5173/#/newmodule`
 
 **Router:** Multi-container hash-based SPA router supports:
-- **Persistent modules**: Mounted once at startup (e.g., `header`), never unmounted
+- **Persistent modules**: Mounted once at startup (e.g., `header`), never unmounted; require `path !== null`
 - **Dynamic modules**: Mounted/unmounted during navigation (e.g., `home`, `auth`)
+- **Default module**: When no hash is present, loads `DEFAULT_MODULE` by key directly (not by route lookup)
 - **Container isolation**: Each module renders in its configured container
 - **Init procedures**: Executed before first routing to prepare shared state
 - **Authorization**: Redirects or shows 403 for protected routes
@@ -291,8 +281,8 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 - `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
 - `config/application.properties` — Config template with placeholders substituted by `install.sh`
-- `template/vite/` — Frontend base (router, stores, init, empty modules/), copied to `vite/` by `install.sh`
-- `modules/` — Distributable module archives (`.tar.gz`): `auth-1.0.0.tar.gz`, `header-1.0.0.tar.gz`, `home-1.0.0.tar.gz`, `contatti-1.0.0.tar.gz`
+- `vite/` — Frontend base template (router, stores, init, empty modules/), copied to `vite/` by `install.sh` when creating a new project
+- `modules/` — Distributable module archives (`.tar.gz`): `auth-1.1.0.tar.gz`, `header-1.0.0.tar.gz`, `home-1.0.0.tar.gz`, `contatti-1.0.0.tar.gz`
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
@@ -333,8 +323,8 @@ The command:
 3. Appends `config/application.properties` to the project config
 4. Displays complete `README` with manual steps
 
-**Available modules** (in `jms/modules/`):
-- `auth-1.0.0.tar.gz` — Complete authentication system (no dependencies)
+**Available modules** (in `modules/`):
+- `auth-1.1.0.tar.gz` — Complete authentication system with token-based password reset (no dependencies)
 - `header-1.0.0.tar.gz` — Persistent navigation header (no dependencies)
 - `home-1.0.0.tar.gz` — Simple home page with API hello endpoint (no dependencies)
 - `contatti-1.0.0.tar.gz` — Contact management module (requires: auth)

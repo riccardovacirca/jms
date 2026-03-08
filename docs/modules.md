@@ -57,9 +57,7 @@ jms/modules/<name>-x.y.z.tar.gz ← Template copy (always synchronized)
 - `vite/src/store.js` - Nanostores (authorized, user)
 - `vite/src/router.js` - Multi-container SPA router
 - `vite/src/config.js` (app) - Contains installed module entries
-- `vite/src/config.js` (template) - Only generic 'index' entry
-
-**Rule:** `jms/template/vite/src/config.js` must never contain specific module entries.
+- `jms/vite/src/config.js` (template) - Contains only the base `status` entry; must never contain project-specific module entries
 
 **Module files** (modify in both locations):
 
@@ -106,7 +104,7 @@ MD5 must be identical.
 
 Inside container:
 ```bash
-cmd module export auth -v 1.0.0
+cmd module export auth -v 1.1.0
 cmd module export header -v 1.0.0
 cmd module export home -v 1.0.0
 cmd module export contatti -v 1.0.0
@@ -114,7 +112,7 @@ cmd module export contatti -v 1.0.0
 
 Outside container:
 ```bash
-cp modules/auth-1.0.0.tar.gz jms/modules/auth-1.0.0.tar.gz
+cp modules/auth-1.1.0.tar.gz jms/modules/auth-1.1.0.tar.gz
 cp modules/header-1.0.0.tar.gz jms/modules/header-1.0.0.tar.gz
 cp modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
 cp modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
@@ -143,7 +141,7 @@ Import verifies dependencies and warns if missing modules detected. User can con
 
 ## Available Modules
 
-**`auth-1.0.0.tar.gz`**
+**`auth-1.1.0.tar.gz`**
 - Complete authentication system
 - Login, session, 2FA, password management
 - Dependencies: none
@@ -167,5 +165,5 @@ Import verifies dependencies and warns if missing modules detected. User can con
 - Always modify both copies of module files (live + archive)
 - Use `cmd module export` to rebuild archives (handles `COPYFILE_DISABLE=1`, includes `config/`)
 - `modules/*.tar.gz` and `jms/modules/*.tar.gz` must have identical MD5
-- `jms/template/vite/src/config.js` must not contain specific module entries
-- Do not use `cmd sync` to propagate app-specific files to `jms/template/`
+- `jms/vite/src/config.js` must not contain project-specific module entries (only `status`)
+- Do not use `cmd sync` to propagate app-specific files to `jms/`

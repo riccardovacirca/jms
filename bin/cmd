@@ -683,13 +683,6 @@ db_reset() {
     warn "This will DELETE all data in $PGSQL_NAME and recreate it!"
     confirm "Are you sure you want to reset the database?" || exit 0
 
-    local APP_WAS_RUNNING=false
-    if app_is_running; then
-        info "Stopping application..."
-        app_stop
-        APP_WAS_RUNNING=true
-    fi
-
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
     local PG_HOST="${PGSQL_HOST:-postgres}"
     local PG_PORT="${PGSQL_PORT:-5432}"
@@ -709,11 +702,6 @@ db_reset() {
         -c "GRANT ALL ON SCHEMA public TO \"$PGSQL_USER\";" 2>/dev/null || true
 
     success "Database reset completed"
-
-    if [ "$APP_WAS_RUNNING" = true ]; then
-        info "Restarting application..."
-        app_start
-    fi
 }
 
 db_setup() {
@@ -1007,7 +995,7 @@ module_export() {
     local GUI_SRC="$WORKSPACE/vite/src/modules/$MODULE"
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
-    [ -d "$JAVA_SRC" ] || error "Java module not found: $JAVA_SRC"
+    [ -d "$JAVA_SRC" ] || [ -d "$GUI_SRC" ] || error "No Java or GUI sources found for module '$MODULE'"
 
     if [ -n "$VERSION" ]; then
         [ -n "$OUTPUT" ] || OUTPUT="$WORKSPACE/modules/${MODULE}-${VERSION}.tar.gz"
@@ -1019,12 +1007,14 @@ module_export() {
     local TMP_DIR
     TMP_DIR=$(mktemp -d)
 
-    # Java sources — templatize package placeholder
-    info "[module] Copio sorgenti Java ($JAVA_SRC)..."
-    mkdir -p "$TMP_DIR/java"
-    cp -r "$JAVA_SRC" "$TMP_DIR/java/"
-    find "$TMP_DIR/java" -name "*.java" \
-        -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
+    # Java sources — templatize package placeholder (optional)
+    if [ -d "$JAVA_SRC" ]; then
+        info "[module] Copio sorgenti Java ($JAVA_SRC)..."
+        mkdir -p "$TMP_DIR/java"
+        cp -r "$JAVA_SRC" "$TMP_DIR/java/"
+        find "$TMP_DIR/java" -name "*.java" \
+            -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
+    fi
 
     # GUI sources
     if [ -d "$GUI_SRC" ]; then

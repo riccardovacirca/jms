@@ -1,5 +1,5 @@
 import { authorized } from './store.js';
-import { MODULE_CONFIG, DEFAULT_ROUTE } from './config.js';
+import { MODULE_CONFIG, DEFAULT_MODULE } from './config.js';
 import appInit from './init.js';
 
 /**
@@ -76,8 +76,11 @@ class Router
       .sort(([_, a], [__, b]) => (a.priority || 999) - (b.priority || 999));
 
     for (const [moduleName, config] of persistentModules) {
+      if (config.path === null) {
+        throw new Error(`[Router] Module "${moduleName}" is persistent but has path: null — persistent modules require a path`);
+      }
       try {
-        const module = await import(`./modules/${moduleName}/index.js`);
+        const module = await import(`./modules/${config.path}/index.js`);
         const container = this._getContainer(config.container);
         if (container) {
           container.innerHTML = '';
@@ -112,11 +115,11 @@ class Router
    * è ancora autorizzato.
    */
   route() {
-    const path = window.location.hash.slice(1) || DEFAULT_ROUTE;
+    const hash = window.location.hash.slice(1).split('?')[0];
 
-    const moduleName = Object.keys(MODULE_CONFIG).find(
-      name => MODULE_CONFIG[name].path === path
-    );
+    const moduleName = hash
+      ? Object.keys(MODULE_CONFIG).find(name => MODULE_CONFIG[name].route === hash)
+      : DEFAULT_MODULE;
 
     if (!moduleName) {
       this.currentModule = null;
@@ -155,7 +158,7 @@ class Router
     if (config.authorization !== null && !authorized.get()) {
       const redirectTo     = config.authorization?.redirectTo;
       const redirectExists = redirectTo && Object.values(MODULE_CONFIG).some(
-        m => m.path === redirectTo
+        m => m.route === redirectTo
       );
 
       if (redirectExists) {
@@ -168,11 +171,16 @@ class Router
       return;
     }
 
+    if (config.path === null) {
+      this.currentModule = moduleName;
+      return;
+    }
+
     this.showStatus(config.container, 'Caricamento...');
 
     const navId = ++this._navId;
     try {
-      const module = await import(`./modules/${moduleName}/index.js`);
+      const module = await import(`./modules/${config.path}/index.js`);
       if (navId !== this._navId) return;
 
       const container = this._getContainer(config.container);

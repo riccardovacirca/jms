@@ -7,24 +7,14 @@
 #
 # Options:
 #   (nessuna)               Crea o riavvia l'ambiente di sviluppo completo
-#   --postgres              Installa il container PostgreSQL
-#   -n, --name <name>       Nome del container PostgreSQL (default: postgres)
-#   -p, --port <port>       Porta host per PostgreSQL (default: 5432)
-#   --network <network>     Network Docker per PostgreSQL (default: bridge)
+#   --postgres              Installa/ricrea il container PostgreSQL del progetto
+#   --mailpit               Installa/ricrea il container Mailpit del progetto
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
-#   ./install.sh                                # Primo install o riavvio
-#   ./install.sh --postgres                     # Installa PostgreSQL
-#   ./install.sh --postgres -n mydb             # Installa PostgreSQL con nome custom
-#   ./install.sh --postgres -p 5433             # Installa PostgreSQL su porta custom
-#   ./install.sh --postgres --network hola-net  # Installa su network custom
-#   ./install.sh --postgres -n mydb -p 5433 --network hola-net  # Tutti i parametri custom
-#   ./install.sh --mailpit                      # Installa Mailpit (SMTP fake + web UI)
-#   ./install.sh --mailpit -n mymail            # Installa Mailpit con nome custom
-#   ./install.sh --mailpit -p 2025              # Installa Mailpit con porta SMTP custom
-#   ./install.sh --mailpit --ui-port 9025       # Installa Mailpit con porta web UI custom
-#   ./install.sh --mailpit --network hola-net   # Installa su network custom
+#   ./install.sh             # Primo install o riavvio
+#   ./install.sh --postgres  # Installa/ricrea PostgreSQL
+#   ./install.sh --mailpit   # Installa/ricrea Mailpit
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -59,28 +49,29 @@
 #   - Se il container è già running: nessuna azione
 #
 # -----------------------------------------------------------------------------
-# PROCEDURA DI INSTALL (--postgres)
+# PROCEDURA DI INSTALL (--postgres / --with-postgres)
 # -----------------------------------------------------------------------------
 #
-# Installa un container PostgreSQL standalone, indipendente da qualsiasi
-# configurazione di progetto. Non richiede .env.
-#
-# Dopo l'installazione usare 'cmd db setup' per creare il database e l'utente
-# applicativo specifici del progetto.
+# Installa un container PostgreSQL vincolato al progetto corrente.
+# Genera .env se non esiste, legge tutti i parametri da esso.
+# Il container viene nominato <project>-db e connesso alla rete <project>-net.
+# Se il container esiste già, chiede conferma prima di ricrearlo.
+# Se il container dev è in esecuzione, esegue anche 'cmd db setup'.
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (--mailpit)
 # -----------------------------------------------------------------------------
 #
-# Installa un container Mailpit standalone per il test locale dell'invio email.
+# Installa un container Mailpit vincolato al progetto corrente.
 # Mailpit è un server SMTP "finto": cattura le email senza spedirle davvero
 # e le espone in una web UI.
+# Genera .env se non esiste, legge tutti i parametri da esso.
+# Il container viene nominato <project>-mail e connesso alla rete <project>-net.
+# Se il container esiste già, chiede conferma prima di ricrearlo.
 #
-# Porte esposte sull'host:
-#   - SMTP:   1025  (usare come mail.host=mailpit, mail.port=1025 in application.properties)
-#   - Web UI: 8025  (aprire http://localhost:8025 per visualizzare le email)
-#
-# Non richiede .env. Non invia email reali.
+# Porte esposte sull'host (da .env):
+#   - SMTP:   MAILPIT_SMTP_PORT_HOST  (default 1025)
+#   - Web UI: MAILPIT_UI_PORT_HOST    (default 8025, aprire http://localhost:8025)
 #
 # -----------------------------------------------------------------------------
 # POLICY LOG
@@ -148,31 +139,15 @@ show_help() {
 Usage: ./install.sh [OPTION]
 
 Options:
-  (none)                  Create complete development environment
-  --with-postgres         Create dev environment + dedicated PostgreSQL container
-  --postgres              Install PostgreSQL container
-  -n, --name <name>       PostgreSQL container name (default: postgres)
-  -p, --port <port>       PostgreSQL host port (default: 5432)
-  --network <network>     Docker network for PostgreSQL (default: bridge)
-  --mailpit               Install Mailpit container (fake SMTP + web UI)
-  -n, --name <name>       Mailpit container name (default: mailpit)
-  -p, --port <port>       Mailpit SMTP host port (default: 1025)
-  --ui-port <port>        Mailpit web UI host port (default: 8025)
-  --network <network>     Docker network for Mailpit (default: bridge)
+  (none)                  Create or restart the development environment
+  --postgres              Install/recreate project PostgreSQL container
+  --mailpit               Install/recreate project Mailpit container
   --help, -h              Show this message
 
 Examples:
-  ./install.sh                               # First install
-  ./install.sh --with-postgres               # Install dev + dedicated PostgreSQL
-  ./install.sh --postgres                    # Install PostgreSQL
-  ./install.sh --postgres -n mydb            # Install PostgreSQL with custom name
-  ./install.sh --postgres -p 5433            # Install PostgreSQL on custom port
-  ./install.sh --postgres --network hola-net # Install on custom network
-  ./install.sh --postgres -n mydb -p 5433 --network hola-net  # All custom parameters
-  ./install.sh --mailpit                     # Install Mailpit
-  ./install.sh --mailpit -p 2025             # Install Mailpit with custom SMTP port
-  ./install.sh --mailpit --ui-port 9025      # Install Mailpit with custom UI port
-  ./install.sh --mailpit --network hola-net  # Install Mailpit on custom network
+  ./install.sh             # First install or restart
+  ./install.sh --postgres  # Install/recreate PostgreSQL (reads from .env)
+  ./install.sh --mailpit   # Install/recreate Mailpit (reads from .env)
 EOF
     exit 0
 }
@@ -236,6 +211,19 @@ PGSQL_USER=PROJECT_DIR_PLACEHOLDER
 PGSQL_PASSWORD=secret
 
 # ========================================
+# Mailpit (fake SMTP for development)
+# ========================================
+MAILPIT_CONTAINER=PROJECT_DIR_PLACEHOLDER-mail
+MAILPIT_IMAGE=axllent/mailpit
+MAILPIT_HOST=PROJECT_DIR_PLACEHOLDER-mail
+MAILPIT_SMTP_PORT=1025
+MAILPIT_SMTP_PORT_HOST=1025
+MAILPIT_UI_PORT=8025
+MAILPIT_UI_PORT_HOST=8025
+MAILPIT_USER=
+MAILPIT_PASSWORD=
+
+# ========================================
 # Git
 # ========================================
 GIT_USER=
@@ -247,50 +235,38 @@ EOF
 }
 
 # =============================================================================
-# install_postgres — container PostgreSQL standalone, senza .env
+# install_postgres — container PostgreSQL del progetto corrente
 # =============================================================================
 
 install_postgres() {
-    local CONTAINER_NAME="postgres"
-    local PORT_HOST=""
-    local NETWORK=""
+    if [ ! -f .env ]; then
+        echo "Generating .env..."
+        generate_env_file
+    fi
+    . ./.env
 
-    # Parse arguments
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -n|--name)
-                [ -n "$2" ] || { echo "ERRORE: -n|--name richiede un valore"; exit 1; }
-                CONTAINER_NAME="$2"
-                shift 2
-                ;;
-            -p|--port)
-                [ -n "$2" ] || { echo "ERRORE: -p|--port richiede un valore"; exit 1; }
-                PORT_HOST="$2"
-                shift 2
-                ;;
-            --network)
-                [ -n "$2" ] || { echo "ERRORE: --network richiede un valore"; exit 1; }
-                NETWORK="$2"
-                shift 2
-                ;;
-            *) shift ;;
-        esac
-    done
-
+    local CONTAINER_NAME="$PGSQL_HOST"
     local IMAGE="${PGSQL_IMAGE:-postgres:16}"
     local ROOT_USER="${PGSQL_ROOT_USER:-postgres}"
     local ROOT_PASSWORD="${PGSQL_ROOT_PASSWORD:-postgres}"
-    PORT_HOST="${PORT_HOST:-${PGSQL_PORT_HOST:-5432}}"
+    local PORT_HOST="${PGSQL_PORT_HOST:-5432}"
+    local VOLUME="${CONTAINER_NAME}-data"
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
-        if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
-            echo "PostgreSQL container '$CONTAINER_NAME' is already running"
-        else
-            echo "Starting PostgreSQL container '$CONTAINER_NAME'..."
-            docker start "$CONTAINER_NAME"
-        fi
-        echo "Done"
-        exit 0
+        echo "PostgreSQL container '$CONTAINER_NAME' already exists."
+        printf "Remove and recreate it? [y/N] "
+        read answer || true
+        case "$answer" in
+            y|Y) ;;
+            *) echo "Aborted"; exit 0 ;;
+        esac
+        docker stop "$CONTAINER_NAME" 2>/dev/null || true
+        docker rm "$CONTAINER_NAME"
+    fi
+
+    if ! docker network ls --format '{{.Name}}' | grep -q "^${DEV_NETWORK}$"; then
+        echo "Creating Docker network '$DEV_NETWORK'..."
+        docker network create "$DEV_NETWORK" >/dev/null
     fi
 
     if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
@@ -299,81 +275,75 @@ install_postgres() {
     fi
 
     echo "Creating PostgreSQL container '$CONTAINER_NAME'..."
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --network "$DEV_NETWORK" \
+        -e POSTGRES_USER="$ROOT_USER" \
+        -e POSTGRES_PASSWORD="$ROOT_PASSWORD" \
+        -p "${PORT_HOST}:5432" \
+        -v "${VOLUME}:/var/lib/postgresql/data" \
+        "$IMAGE" >/dev/null
 
-    # Build docker run command
-    local DOCKER_CMD="docker run -d --name \"$CONTAINER_NAME\""
-    DOCKER_CMD="$DOCKER_CMD -e POSTGRES_USER=\"$ROOT_USER\""
-    DOCKER_CMD="$DOCKER_CMD -e POSTGRES_PASSWORD=\"$ROOT_PASSWORD\""
-    DOCKER_CMD="$DOCKER_CMD -p \"$PORT_HOST:5432\""
-    DOCKER_CMD="$DOCKER_CMD -v \"${CONTAINER_NAME}-data:/var/lib/postgresql/data\""
-
-    # Add network if specified
-    if [ -n "$NETWORK" ]; then
-        # Check if network exists
-        if ! docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$"; then
-            echo "ERRORE: Network '$NETWORK' non esistente. Crearla prima con: docker network create $NETWORK"
-            exit 1
+    echo "Waiting for PostgreSQL to be ready..."
+    local MAX_WAIT=30
+    local WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if docker exec "$CONTAINER_NAME" pg_isready -U "$ROOT_USER" >/dev/null 2>&1; then
+            echo "PostgreSQL is ready"
+            break
         fi
-        DOCKER_CMD="$DOCKER_CMD --network \"$NETWORK\""
+        sleep 1
+        WAITED=$((WAITED + 1))
+        printf "."
+    done
+    echo ""
+
+    if [ $WAITED -eq $MAX_WAIT ]; then
+        echo "WARNING: PostgreSQL did not become ready within ${MAX_WAIT}s"
+        echo "Run manually: docker exec $PROJECT_NAME cmd db setup"
+    elif docker ps --format '{{.Names}}' | grep -q "^${PROJECT_NAME}$"; then
+        echo "Setting up database..."
+        docker exec "$PROJECT_NAME" cmd db setup
+    else
+        echo "Dev container not running. Run manually: docker exec $PROJECT_NAME cmd db setup"
     fi
 
-    DOCKER_CMD="$DOCKER_CMD \"$IMAGE\""
-
-    eval "$DOCKER_CMD" >/dev/null
-
+    echo ""
     echo "Done"
+    echo "PostgreSQL container: $CONTAINER_NAME (port $PORT_HOST)"
 }
 
 # =============================================================================
-# install_mailpit — container Mailpit standalone (SMTP fake + web UI)
+# install_mailpit — container Mailpit del progetto corrente
 # =============================================================================
 
 install_mailpit() {
-    local CONTAINER_NAME="mailpit"
-    local SMTP_PORT_HOST=""
-    local UI_PORT_HOST=""
-    local NETWORK=""
+    if [ ! -f .env ]; then
+        echo "Generating .env..."
+        generate_env_file
+    fi
+    . ./.env
 
-    # Parse arguments
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -n|--name)
-                [ -n "$2" ] || { echo "ERRORE: -n|--name richiede un valore"; exit 1; }
-                CONTAINER_NAME="$2"
-                shift 2
-                ;;
-            -p|--port)
-                [ -n "$2" ] || { echo "ERRORE: -p|--port richiede un valore"; exit 1; }
-                SMTP_PORT_HOST="$2"
-                shift 2
-                ;;
-            --ui-port)
-                [ -n "$2" ] || { echo "ERRORE: --ui-port richiede un valore"; exit 1; }
-                UI_PORT_HOST="$2"
-                shift 2
-                ;;
-            --network)
-                [ -n "$2" ] || { echo "ERRORE: --network richiede un valore"; exit 1; }
-                NETWORK="$2"
-                shift 2
-                ;;
-            *) shift ;;
-        esac
-    done
-
-    local IMAGE="axllent/mailpit"
-    SMTP_PORT_HOST="${SMTP_PORT_HOST:-1025}"
-    UI_PORT_HOST="${UI_PORT_HOST:-8025}"
+    local CONTAINER_NAME="$MAILPIT_CONTAINER"
+    local IMAGE="${MAILPIT_IMAGE:-axllent/mailpit}"
+    local SMTP_PORT_HOST="${MAILPIT_SMTP_PORT_HOST:-1025}"
+    local UI_PORT_HOST="${MAILPIT_UI_PORT_HOST:-8025}"
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
-        if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
-            echo "Mailpit container '$CONTAINER_NAME' is already running"
-        else
-            echo "Starting Mailpit container '$CONTAINER_NAME'..."
-            docker start "$CONTAINER_NAME"
-        fi
-        echo "Done"
-        exit 0
+        echo "Mailpit container '$CONTAINER_NAME' already exists."
+        printf "Remove and recreate it? [y/N] "
+        read answer || true
+        case "$answer" in
+            y|Y) ;;
+            *) echo "Aborted"; exit 0 ;;
+        esac
+        docker stop "$CONTAINER_NAME" 2>/dev/null || true
+        docker rm "$CONTAINER_NAME"
+    fi
+
+    if ! docker network ls --format '{{.Name}}' | grep -q "^${DEV_NETWORK}$"; then
+        echo "Creating Docker network '$DEV_NETWORK'..."
+        docker network create "$DEV_NETWORK" >/dev/null
     fi
 
     if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
@@ -382,27 +352,18 @@ install_mailpit() {
     fi
 
     echo "Creating Mailpit container '$CONTAINER_NAME'..."
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --network "$DEV_NETWORK" \
+        -p "${SMTP_PORT_HOST}:1025" \
+        -p "${UI_PORT_HOST}:8025" \
+        "$IMAGE" >/dev/null
 
-    # Build docker run command
-    local DOCKER_CMD="docker run -d --name \"$CONTAINER_NAME\""
-    DOCKER_CMD="$DOCKER_CMD -p \"$SMTP_PORT_HOST:1025\""
-    DOCKER_CMD="$DOCKER_CMD -p \"$UI_PORT_HOST:8025\""
-
-    # Add network if specified
-    if [ -n "$NETWORK" ]; then
-        # Check if network exists
-        if ! docker network ls --format '{{.Name}}' | grep -q "^${NETWORK}$"; then
-            echo "ERRORE: Network '$NETWORK' non esistente. Crearla prima con: docker network create $NETWORK"
-            exit 1
-        fi
-        DOCKER_CMD="$DOCKER_CMD --network \"$NETWORK\""
-    fi
-
-    DOCKER_CMD="$DOCKER_CMD \"$IMAGE\""
-
-    eval "$DOCKER_CMD" >/dev/null
-
+    echo ""
     echo "Done"
+    echo "Mailpit container: $CONTAINER_NAME"
+    echo "SMTP:   localhost:$SMTP_PORT_HOST  (mail.host=$CONTAINER_NAME, mail.port=1025)"
+    echo "Web UI: http://localhost:$UI_PORT_HOST"
 }
 
 # =============================================================================
@@ -433,8 +394,9 @@ install_dev() {
             docker network connect "$DEV_NETWORK" "postgres" 2>/dev/null || true
         fi
 
-        if docker ps --format '{{.Names}}' | grep -q "^mailpit$"; then
-            docker network connect "$DEV_NETWORK" "mailpit" 2>/dev/null || true
+        local MAILPIT_CONT="${MAILPIT_CONTAINER:-mailpit}"
+        if docker ps --format '{{.Names}}' | grep -q "^${MAILPIT_CONT}$"; then
+            docker network connect "$DEV_NETWORK" "$MAILPIT_CONT" 2>/dev/null || true
         fi
 
         echo "Building development image..."
@@ -471,6 +433,7 @@ GITIGNORE
     sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAILPIT_HOST}}|$MAILPIT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/vite && npm install"
@@ -493,69 +456,15 @@ GITIGNORE
 }
 
 # =============================================================================
-# install_with_postgres — dev + dedicated PostgreSQL
-# =============================================================================
-
-install_with_postgres() {
-    # First install dev environment
-    install_dev
-
-    # Load .env to get configuration
-    . ./.env
-
-    local PG_NAME="${PROJECT_NAME}-db"
-    local PG_PORT="${PGSQL_PORT_HOST}"
-    local PG_NETWORK="${DEV_NETWORK}"
-
-    echo ""
-    echo "Installing dedicated PostgreSQL container..."
-    "$0" --postgres -n "$PG_NAME" -p "$PG_PORT" --network "$PG_NETWORK"
-
-    echo ""
-    echo "Waiting for PostgreSQL to be ready..."
-    local MAX_WAIT=30
-    local WAITED=0
-    while [ $WAITED -lt $MAX_WAIT ]; do
-        if docker exec "$PG_NAME" pg_isready -U "$PGSQL_ROOT_USER" >/dev/null 2>&1; then
-            echo "PostgreSQL is ready"
-            break
-        fi
-        sleep 1
-        WAITED=$((WAITED + 1))
-        printf "."
-    done
-    echo ""
-
-    if [ $WAITED -eq $MAX_WAIT ]; then
-        echo "WARNING: PostgreSQL did not become ready within ${MAX_WAIT}s"
-        echo "You may need to run manually: docker exec $PROJECT_NAME cmd db setup"
-    else
-        echo "Setting up database..."
-        docker exec "$PROJECT_NAME" cmd db setup
-    fi
-
-    echo ""
-    echo "Done"
-    echo ""
-    echo "PostgreSQL container: $PG_NAME"
-    echo "Database configured and ready"
-}
-
-# =============================================================================
 # Dispatcher
 # =============================================================================
 
 case "$1" in
-    --with-postgres)
-        install_with_postgres
-        ;;
     --postgres)
-        shift
-        install_postgres "$@"
+        install_postgres
         ;;
     --mailpit)
-        shift
-        install_mailpit "$@"
+        install_mailpit
         ;;
     --help|-h)
         show_help
