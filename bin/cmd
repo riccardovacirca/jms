@@ -91,7 +91,7 @@ app_build() {
     load_env
     info "Compiling Java backend (Maven)..."
     cd "$WORKSPACE"
-    mvn -q package -DskipTests
+    mvn --no-transfer-progress package -DskipTests
     success "Build completed → target/service.jar"
 }
 
@@ -181,7 +181,7 @@ _app_run_common() {
 
     _dev_classpath() {
         info "[dev] Resolving dependency classpath..."
-        mvn -q dependency:build-classpath -Dmdep.outputFile="$DEV_CP_FILE" \
+        mvn --no-transfer-progress dependency:build-classpath -Dmdep.outputFile="$DEV_CP_FILE" \
             || error "[dev] Failed to resolve classpath"
         info "[dev] Classpath cached → .dev-classpath"
     }
@@ -234,7 +234,7 @@ _app_run_common() {
     fi
 
     info "[dev] Compiling..."
-    mvn -q compile -DskipTests || error "Initial compilation failed"
+    mvn --no-transfer-progress compile -DskipTests || error "Initial compilation failed"
 
     > "$DEV_LOG"
     tail -F "$DEV_LOG" &
@@ -255,7 +255,7 @@ _app_run_common() {
         if [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
             _dev_classpath
         fi
-        if mvn -q compile -DskipTests; then
+        if mvn --no-transfer-progress compile -DskipTests; then
             _dev_stop
             _dev_start
         else
