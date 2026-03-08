@@ -108,7 +108,11 @@ public class ExcelReader
         if (DateUtil.isCellDateFormatted(cell)) {
           return cell.getLocalDateTimeCellValue();
         }
-        return cell.getNumericCellValue();
+        double d = cell.getNumericCellValue();
+        if (d == Math.floor(d) && !Double.isInfinite(d)) {
+          return (long) d;
+        }
+        return d;
       case BOOLEAN :
         return cell.getBooleanCellValue();
       case FORMULA :

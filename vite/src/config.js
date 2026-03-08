@@ -20,7 +20,8 @@ export const MODULE_CONFIG = {
     persistent: false,
     priority: 999,
     init: null
-  }
+  },
+  // [MODULE_ENTRIES]
 };
 
 /**

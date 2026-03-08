@@ -4,9 +4,7 @@ import dev.jms.util.AsyncExecutor;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
-// import dev.jms.util.Mail;
-import dev.jms.util.HandlerAdapter;
-import dev.jms.util.Handler;
+import dev.jms.util.Mail;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -35,7 +33,7 @@ public class App
 
     DB.init(config);
     Auth.init(config.get("jwt.secret", "dev-secret-change-in-production"), config.getInt("jwt.access.expiry.seconds", 900));
-    // Mail.init(config);
+    Mail.init(config);
     AsyncExecutor.init(asyncPoolSize);
     runMigrations();
 
@@ -57,9 +55,7 @@ public class App
       }
     });
 
-    // Aggiungere qui i propri handler:
-    // paths.add("/api/users",      route(new UserHandler(), ds));
-    // paths.add("/api/users/{id}", route(new UserHandler(), ds));
+    // [MODULE_ROUTES]
 
     server = Undertow.builder()
       .addHttpListener(port, "0.0.0.0")
@@ -73,11 +69,6 @@ public class App
 
     server.start();
     System.out.println("[info] Server in ascolto sulla porta " + port);
-  }
-
-  private static HttpHandler route(Handler handler, DataSource ds)
-  {
-    return new HandlerAdapter(handler, ds);
   }
 
   private static void runMigrations()

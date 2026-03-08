@@ -872,27 +872,97 @@ module_install() {
         fi
     fi
 
-    printf '\n'
-    success "Passaggi automatici completati"
-    printf '\n'
-
-    # Display complete README
-    local README="$MODULE_DIR/README"
-    if [ -f "$README" ]; then
-        printf '\n'
-        printf '════════════════════════════════════════════════════════════════\n'
-        printf 'PASSAGGI MANUALI PER COMPLETARE L'\''INSTALLAZIONE\n'
-        printf '════════════════════════════════════════════════════════════════\n'
-        printf '\n'
-        cat "$README"
-        printf '\n'
-        printf '════════════════════════════════════════════════════════════════\n'
-        printf '\n'
+    # Auto-insert route registration into App.java (after // [MODULE_ROUTES] marker)
+    local APP_JAVA="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/App.java"
+    if [ -f "$APP_JAVA" ] && [ -f "$MODULE_DIR/module.json" ]; then
+        local REGISTER_CALL
+        REGISTER_CALL=$(python3 -c "
+import json, sys
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+java = m.get('java')
+if java:
+    print(java.get('register', ''))
+" 2>/dev/null || true)
+        if [ -n "$REGISTER_CALL" ]; then
+            if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
+                if ! grep -qF "$REGISTER_CALL" "$APP_JAVA"; then
+                    sed -i "s|// \[MODULE_ROUTES\]|// [MODULE_ROUTES]\n    ${REGISTER_CALL}|" "$APP_JAVA"
+                    success "  Route registrata in App.java: $REGISTER_CALL"
+                else
+                    warn "  Route già registrata in App.java, skip"
+                fi
+            else
+                warn "  Marker [MODULE_ROUTES] non trovato in App.java — aggiungi manualmente: $REGISTER_CALL"
+            fi
+        fi
     fi
 
+    # Auto-insert config.js entry (after // [MODULE_ENTRIES] marker)
+    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    if [ -f "$CONFIG_JS" ] && [ -f "$MODULE_DIR/module.json" ]; then
+        local CONFIG_ENTRY_KEY
+        CONFIG_ENTRY_KEY=$(python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+print(m.get('name', ''))
+" 2>/dev/null || true)
+        local CONFIG_ENTRY_JS
+        CONFIG_ENTRY_JS=$(python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+cfg = m.get('config')
+if not cfg:
+    sys.exit(0)
+import sys
+name = m.get('name', '')
+lines = ['  ' + name + ': {']
+for k, v in cfg.items():
+    if v is None:
+        lines.append('    ' + k + ': null,')
+    elif isinstance(v, bool):
+        lines.append('    ' + k + ': ' + ('true' if v else 'false') + ',')
+    elif isinstance(v, int):
+        lines.append('    ' + k + ': ' + str(v) + ',')
+    elif isinstance(v, dict):
+        inner = ', '.join(repr(ik) + ': ' + repr(iv) for ik, iv in v.items())
+        lines.append('    ' + k + ': { ' + inner + ' },')
+    else:
+        lines.append('    ' + k + ': ' + repr(str(v)) + ',')
+lines.append('  },')
+print('\n'.join(lines))
+" 2>/dev/null || true)
+        if [ -n "$CONFIG_ENTRY_JS" ] && [ -n "$CONFIG_ENTRY_KEY" ]; then
+            if grep -q '\[MODULE_ENTRIES\]' "$CONFIG_JS"; then
+                if ! grep -qE "^\s+${CONFIG_ENTRY_KEY}:" "$CONFIG_JS"; then
+                    python3 -c "
+import sys
+with open('$CONFIG_JS') as f:
+    content = f.read()
+marker = '  // [MODULE_ENTRIES]'
+entry = '''$CONFIG_ENTRY_JS'''
+replacement = marker + '\n' + entry
+content = content.replace(marker, replacement, 1)
+with open('$CONFIG_JS', 'w') as f:
+    f.write(content)
+" 2>/dev/null && success "  Modulo aggiunto a config.js: $CONFIG_ENTRY_KEY" \
+                       || warn "  Impossibile aggiornare config.js — aggiungi manualmente il modulo '$CONFIG_ENTRY_KEY'"
+                else
+                    warn "  Modulo '$CONFIG_ENTRY_KEY' già presente in config.js, skip"
+                fi
+            else
+                warn "  Marker [MODULE_ENTRIES] non trovato in config.js — aggiungi manualmente il modulo '$CONFIG_ENTRY_KEY'"
+            fi
+        fi
+    fi
+
+    printf '\n'
+    success "Installazione modulo '$MODULE' completata"
+    printf '\n'
     printf 'Prossimi passi:\n'
-    printf '  1. Completa le azioni manuali sopra\n'
-    printf '  2. cmd gui build && cmd app build\n\n'
+    printf '  1. cmd gui build && cmd app build\n\n'
 }
 
 module_import() {
@@ -1007,7 +1077,7 @@ module_export() {
     local TMP_DIR
     TMP_DIR=$(mktemp -d)
 
-    # Java sources — templatize package placeholder (optional)
+    # Java sources — templatize package placeholder
     if [ -d "$JAVA_SRC" ]; then
         info "[module] Copio sorgenti Java ($JAVA_SRC)..."
         mkdir -p "$TMP_DIR/java"
@@ -1022,7 +1092,7 @@ module_export() {
         mkdir -p "$TMP_DIR/gui"
         cp -r "$GUI_SRC" "$TMP_DIR/gui/"
     else
-        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE' (vite/src/$MODULE/)"
+        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE' (vite/src/modules/$MODULE/)"
     fi
 
     # Migration files (matched by module name in filename)
@@ -1038,30 +1108,152 @@ module_export() {
 
     [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
 
-    # README
-    info "[module] Genero README..."
-    # README - usa quello custom se esiste, altrimenti genera automatico
-    if [ -f "$WORKSPACE/modules/$MODULE/README" ]; then
-        info "[module] Uso README custom da modules/$MODULE/README..."
-        cp "$WORKSPACE/modules/$MODULE/README" "$TMP_DIR/README"
-    else
-        warn "[module] README non trovato in modules/$MODULE/README"
-        warn "[module] Creane uno manuale prima di esportare"
-    fi
-
     # Config properties (from modules/$MODULE/config/ if exists)
     if [ -d "$WORKSPACE/modules/$MODULE/config" ]; then
         info "[module] Copio config properties..."
         cp -r "$WORKSPACE/modules/$MODULE/config" "$TMP_DIR/config"
     fi
 
-    # module.json (metadata con dipendenze)
+    # Generate module.json automatically
+    info "[module] Genero module.json..."
+
+    local MODULE_CAP
+    MODULE_CAP=$(python3 -c "print('$MODULE'.capitalize())")
+
+    local EXISTING_DEPS
+    EXISTING_DEPS="{}"
     if [ -f "$WORKSPACE/modules/$MODULE/module.json" ]; then
-        info "[module] Includo module.json..."
-        cp "$WORKSPACE/modules/$MODULE/module.json" "$TMP_DIR/module.json"
-    else
-        warn "[module] module.json non trovato, creane uno con name, version e dependencies"
+        EXISTING_DEPS=$(python3 -c "
+import json
+with open('$WORKSPACE/modules/$MODULE/module.json') as f:
+    m = json.load(f)
+print(json.dumps(m.get('dependencies', {}), indent=4))
+" 2>/dev/null || echo "{}")
     fi
+
+    # Extract Java metadata from Routes.java
+    local JAVA_JSON
+    JAVA_JSON="null"
+    if [ -d "$JAVA_SRC" ]; then
+        local ROUTES_FILE="$JAVA_SRC/Routes.java"
+        if [ -f "$ROUTES_FILE" ]; then
+            local REGISTER_CALL
+            REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds);"
+            # Check if Routes has a config parameter
+            if grep -q 'Config config' "$ROUTES_FILE" 2>/dev/null; then
+                REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds, config);"
+            fi
+            JAVA_JSON=$(python3 -c "
+import json
+data = {'register': '${REGISTER_CALL}'}
+print(json.dumps(data, indent=4))
+" 2>/dev/null || echo "null")
+        fi
+    fi
+
+    # Extract config.js entry for this module
+    local CONFIG_JS_ENTRY
+    CONFIG_JS_ENTRY="null"
+    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    if [ -f "$CONFIG_JS" ]; then
+        CONFIG_JS_ENTRY=$(python3 -c "
+import re, json, sys
+
+with open('$CONFIG_JS') as f:
+    content = f.read()
+
+# Find the module entry block using brace counting
+pattern = r'\b${MODULE}\s*:\s*\{'
+m = re.search(pattern, content)
+if not m:
+    print('null')
+    sys.exit(0)
+
+start = m.end() - 1  # position of opening {
+depth = 0
+i = start
+while i < len(content):
+    if content[i] == '{':
+        depth += 1
+    elif content[i] == '}':
+        depth -= 1
+        if depth == 0:
+            break
+    i += 1
+
+block = content[start:i+1]
+
+# Parse key-value pairs from the JS object block
+inner = block[1:-1]
+result = {}
+for line in inner.splitlines():
+    line = line.strip().rstrip(',')
+    if not line or line.startswith('//'):
+        continue
+    colon = line.find(':')
+    if colon < 0:
+        continue
+    key = line[:colon].strip()
+    val_str = line[colon+1:].strip()
+    if val_str == 'null':
+        result[key] = None
+    elif val_str == 'true':
+        result[key] = True
+    elif val_str == 'false':
+        result[key] = False
+    elif val_str.isdigit():
+        result[key] = int(val_str)
+    elif val_str.startswith('{') and val_str.endswith('}'):
+        try:
+            import re as _re
+            js_obj = val_str
+            js_obj = _re.sub(r\"([{,]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\", r'\\1\"\\2\":', js_obj)
+            js_obj = js_obj.replace(\"'\", '\"')
+            result[key] = json.loads(js_obj)
+        except Exception:
+            result[key] = val_str
+    elif val_str.startswith('(') or val_str.startswith('()'):
+        result[key] = '__LAMBDA__:' + val_str
+    else:
+        result[key] = val_str.strip(\"'\\\"\" )
+
+print(json.dumps(result, indent=4))
+" 2>/dev/null || echo "null")
+    fi
+
+    python3 -c "
+import json, sys
+
+deps_str = '''$EXISTING_DEPS'''
+java_str = '''$JAVA_JSON'''
+config_str = '''$CONFIG_JS_ENTRY'''
+
+try:
+    deps = json.loads(deps_str)
+except Exception:
+    deps = {}
+try:
+    java = json.loads(java_str)
+except Exception:
+    java = None
+try:
+    cfg = json.loads(config_str)
+except Exception:
+    cfg = None
+
+module_data = {
+    'name': '$MODULE',
+    'version': '${VERSION:-dev}',
+    'dependencies': deps,
+    'java': java,
+    'config': cfg
+}
+with open('$TMP_DIR/module.json', 'w') as f:
+    json.dump(module_data, f, indent=4)
+    f.write('\n')
+print('OK')
+" 2>/dev/null && success "[module] module.json generato" \
+    || warn "[module] Impossibile generare module.json automaticamente"
 
     # Package
     COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -C "$TMP_DIR" .

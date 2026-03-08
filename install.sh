@@ -434,6 +434,7 @@ GITIGNORE
     sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{MAILPIT_HOST}}|$MAILPIT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{APP_BASE_URL}}|http://localhost:$API_PORT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/vite && npm install"
