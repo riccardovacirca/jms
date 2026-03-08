@@ -927,10 +927,12 @@ for k, v in cfg.items():
     elif isinstance(v, int):
         lines.append('    ' + k + ': ' + str(v) + ',')
     elif isinstance(v, dict):
-        inner = ', '.join(repr(ik) + ': ' + repr(iv) for ik, iv in v.items())
+        inner = ', '.join(json.dumps(ik) + ': ' + json.dumps(iv) for ik, iv in v.items())
         lines.append('    ' + k + ': { ' + inner + ' },')
+    elif isinstance(v, str) and v.startswith('__LAMBDA__:'):
+        lines.append('    ' + k + ': ' + v[len('__LAMBDA__:'):] + ',')
     else:
-        lines.append('    ' + k + ': ' + repr(str(v)) + ',')
+        lines.append('    ' + k + ': ' + json.dumps(str(v)) + ',')
 lines.append('  },')
 print('\n'.join(lines))
 " 2>/dev/null || true)
@@ -1004,20 +1006,20 @@ module_import() {
         local MISSING_DEPS=""
         local DEP_COUNT=0
 
-        # Extract dependencies using grep and basic parsing
-        while IFS= read -r line; do
-            # Match lines like: "modulename": "^1.0.0"
-            if echo "$line" | grep -qE '^\s*"[^"]+"\s*:\s*"[^"]+"'; then
-                local DEP_NAME
-                DEP_NAME=$(echo "$line" | sed -E 's/^\s*"([^"]+)"\s*:.*/\1/')
-                DEP_COUNT=$((DEP_COUNT + 1))
-
-                # Check if dependency is installed
-                if [ ! -d "$WORKSPACE/modules/$DEP_NAME" ]; then
-                    MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
-                fi
+        # Extract dependencies using python3 to correctly parse JSON
+        while IFS= read -r DEP_NAME; do
+            [ -z "$DEP_NAME" ] && continue
+            DEP_COUNT=$((DEP_COUNT + 1))
+            if [ ! -d "$WORKSPACE/modules/$DEP_NAME" ]; then
+                MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
             fi
-        done < <(sed -n '/"dependencies":/,/}/p' "$DEST/module.json" | grep -E '^\s*"[^"]+"\s*:')
+        done < <(python3 -c "
+import json
+with open('$DEST/module.json') as f:
+    m = json.load(f)
+for dep in m.get('dependencies', {}).keys():
+    print(dep)
+" 2>/dev/null)
 
         if [ -n "$MISSING_DEPS" ]; then
             printf '\n'
