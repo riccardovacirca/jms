@@ -1,0 +1,23 @@
+{
+    "name": "users",
+    "version": "1.0.0",
+    "dependencies": {},
+    "api": {
+        "routes": "dev.jms.app.users.Routes.register(paths, ds, config);",
+        "config": {}
+    },
+    "gui": {
+        "config": {
+            "route": "/users",
+            "path": "users",
+            "container": "main",
+            "authorization": {
+                "redirectTo": "/auth"
+            },
+            "persistent": false,
+            "priority": 999,
+            "init": null
+        }
+    },
+    "install_notice": null
+}

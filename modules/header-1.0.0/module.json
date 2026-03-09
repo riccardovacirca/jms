@@ -1,0 +1,18 @@
+{
+    "name": "header",
+    "version": "1.0.0",
+    "dependencies": {},
+    "api": null,
+    "gui": {
+        "config": {
+            "route": null,
+            "path": "header",
+            "container": "header",
+            "authorization": null,
+            "persistent": true,
+            "priority": 1,
+            "init": null
+        }
+    },
+    "install_notice": null
+}

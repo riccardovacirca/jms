@@ -280,14 +280,27 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Template (`jms/`)
 
-`jms/` is the upstream template repository. Clone it with the project name to start a new project — the Java source structure is already in its final position. It contains:
+`jms/` is the upstream template repository from which projects are cloned. It may be present as a subdirectory of a project root to allow propagating improvements, fixes, or enhancements back to the template so that all future (and other existing) projects can benefit.
+
+**Key distinction — project files vs. template files:**
+- Files in the project root are project-specific and fully instantiated (no placeholders).
+- Files in `jms/` may contain placeholders (e.g. `{{PROJECT_NAME}}`, `{{DB_HOST}}`) that `install.sh` substitutes when creating a new project. Never copy `jms/` files into the project directly without first removing or resolving those placeholders.
+
+**What can be propagated to `jms/`:**
+- Changes that are already fully generic — e.g. additions or fixes to `dev.jms.util` library classes, improvements to `bin/cmd`, `install.sh`, or `release.sh`.
+- Changes that are project-specific must be **generalized first** (re-expressed with placeholders or made fully project-agnostic) before being written into `jms/`.
+
+**What must NOT be propagated as-is:**
+- Any code that references project-specific names, credentials, routes, or domain logic — these belong only in the project root and must be abstracted before touching `jms/`.
+
+Clone it with the project name to start a new project — the Java source structure is already in its final position. It contains:
 - `src/main/java/dev/jms/util/` — Complete utility library source (25 files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `Async`, `AsyncExecutor`, plus `excel/` subpackage)
 - `src/main/java/dev/jms/app/App.java` — Entry point with AsyncExecutor initialization
 - `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
 - `config/application.properties` — Config template with placeholders substituted by `install.sh`
 - `vite/` — Frontend base template (router, stores, init, empty modules/), copied to `vite/` by `install.sh` when creating a new project
-- `modules/` — Distributable module archives (`.tar.gz`): `auth-1.1.0.tar.gz`, `header-1.0.0.tar.gz`, `home-1.0.0.tar.gz`, `contatti-1.0.0.tar.gz`
+- `modules/` — Module sources in expanded folder format: `auth-1.1.0/`, `header-1.0.0/`, `home-1.0.0/`, `contatti-1.0.0/`, `users-1.0.0/`
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
@@ -377,6 +390,7 @@ Full rules in `docs/dsl/java.md` and `docs/dsl/javascript.md`. Key non-obvious c
 **Formatting:**
 - 2-space indentation (no tabs)
 - Class/method opening brace on its **own line**; control flow (`if`, `for`, `try`, etc.) brace on **same line**
+- No empty line immediately after the opening brace of a class or method
 - No extra spaces for vertical alignment of assignments or arguments
 
 **Variables:**
@@ -393,7 +407,15 @@ Full rules in `docs/dsl/java.md` and `docs/dsl/javascript.md`. Key non-obvious c
 - Business errors (validation, auth, not-found): handle in handler, return HTTP 200 with `err: true`, log at WARN level (no stack trace)
 - System errors: let them propagate to `HandlerAdapter`, which returns HTTP 500 and logs at ERROR with stack trace
 
-**Response builder:** Always chain in this exact order before `send()`: `status() → contentType() → [cookie()...] → err() → log() → out()`
+**Response builder:** Always chain in this exact order before `send()`: `status() → contentType() → [cookie()...] → err() → log() → out()`. Each method goes on its own line, continuation lines indented so the `.` aligns 3 spaces past the `res` start:
+```java
+res.status(200)
+   .contentType("application/json")
+   .err(false)
+   .log(null)
+   .out(payload)
+   .send();
+```
 
 **Javadoc:** Required on all public and package-private classes and methods.
 
@@ -407,6 +429,8 @@ Full rules in `docs/dsl/java.md` and `docs/dsl/javascript.md`. Key non-obvious c
 **Exports:**
 - All named exports go in a single `export { }` block at the **end** of the file — never `export function` or `export const` inline
 - Files that only register a custom element (`customElements.define(...)`) export nothing
+
+**JSDoc:** Required on all exported or publicly relevant functions (`/** ... @param ... @returns ... */`); inline `//` comments are for context notes only.
 
 **Module-level state:** Group related variables in a named object (`const refreshState = { active: false, promise: null }`) instead of separate top-level `let` declarations.
 

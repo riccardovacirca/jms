@@ -1,0 +1,21 @@
+{
+    "name": "home",
+    "version": "1.0.0",
+    "dependencies": {},
+    "api": {
+        "routes": "dev.jms.app.home.Routes.register(paths, ds);",
+        "config": {}
+    },
+    "gui": {
+        "config": {
+            "route": "/home",
+            "path": "home",
+            "container": "main",
+            "authorization": null,
+            "persistent": false,
+            "priority": 999,
+            "init": null
+        }
+    },
+    "install_notice": null
+}
