@@ -306,7 +306,7 @@ Clone it with the project name to start a new project — the Java source struct
 
 ### Modules (`modules/`)
 
-Self-contained optional features distributed as `.tar.gz` archives in `modules/`. Each archive contains:
+Self-contained optional features. In `jms/modules/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
 - `java/<module>/` — Java handlers, DAOs, DTOs, and `*Routes.java`
 - `gui/<module>/` — Frontend module sources
 - `migration/` — Flyway SQL migrations
@@ -373,11 +373,12 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, tracker. 
 
 **Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/Routes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
 
-**Available modules** (in `modules/`):
-- `auth-1.1.0.tar.gz` — Complete authentication system with token-based password reset (no dependencies)
-- `header-1.0.0.tar.gz` — Persistent navigation header (no dependencies)
-- `home-1.0.0.tar.gz` — Simple home page with API hello endpoint (no dependencies)
-- `contatti-1.0.0.tar.gz` — Contact management module (requires: auth)
+**Available modules** (in `jms/modules/`, expanded folders):
+- `auth-1.1.0/` — Complete authentication system with token-based password reset (no dependencies)
+- `header-1.0.0/` — Persistent navigation header (no dependencies)
+- `home-1.0.0/` — Simple home page with API hello endpoint (no dependencies)
+- `users-1.0.0/` — User management (no dependencies)
+- `contatti-1.0.0/` — Contact management module (requires: auth)
 
 All modules follow the complete configuration schema with all 7 attributes (`route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 
