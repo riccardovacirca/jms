@@ -7,163 +7,174 @@ Module management and maintenance procedures.
 ### Command
 
 ```bash
-cmd module import modules/<name>-x.y.z.tar.gz
+cmd module import modules/auth-1.1.0.tar.gz   # da archivio .tar.gz
+cmd module import modules/auth-1.1.0           # da cartella estratta
 ```
 
 **Automatic operations:**
-- Extract archive to `modules/<name>/`
-- Replace `{{APP_PACKAGE}}` placeholder with actual package
-- Copy Java sources to `src/main/java/<package>/<name>/`
-- Copy GUI sources to `vite/src/modules/<name>/`
-- Copy migration SQL to `src/main/resources/db/migration/`
-- Append module config to `config/application.properties` (if not present)
-- Verify dependencies from `module.json`
+- Sostituisce il placeholder `{{APP_PACKAGE}}` con il package reale (solo per archivi)
+- Copia sorgenti Java in `src/main/java/<package>/<name>/`
+- Copia sorgenti GUI in `vite/src/modules/<name>/`
+- Copia migration SQL in `src/main/resources/db/migration/`
+- Registra la route in `App.java` (dopo `// [MODULE_ROUTES]`)
+- Aggiunge l'entry in `vite/src/config.js` (dopo `// [MODULE_ENTRIES]`)
+- Verifica dipendenze dal tracker (`src/main/resources/modules/`)
+- Scrive il tracker: `src/main/resources/modules/<nome>/module.json`
 
-**Manual steps after import:**
+**Unico passo manuale:**
 
-1. `pom.xml` - Add dependencies (if module requires external Java libraries)
-2. `App.java` - Add imports for module handlers
-3. `App.java` - Add routes with `paths.add(...)`
-4. `config.js` - Add module entry to `MODULE_CONFIG`
+- `pom.xml` — aggiungere dipendenze Java esterne (solo se il modulo le richiede)
 
-Complete instructions printed in README after import.
-
-**Build after installation:**
+**Build dopo l'installazione:**
 
 ```bash
 cmd gui build && cmd app build
 cmd app restart
 ```
 
-## Structure
-
-**Files locations:**
-
-```
-vite/src/modules/<name>/       ← Live application files (modified during development)
-modules/<name>/gui/<name>/     ← GUI source copy for archiving
-modules/<name>/java/<name>/    ← Java source
-modules/<name>/migration/      ← Flyway migrations
-modules/<name>/module.json     ← Metadata with dependencies
-modules/<name>/README          ← Manual installation steps
-modules/<name>-x.y.z.tar.gz    ← Distributable archive
-jms/modules/<name>-x.y.z.tar.gz ← Template copy (always synchronized)
-```
-
-## Base Files vs Module Files
-
-**Base files** (DO NOT modify when working on modules):
-
-- `vite/src/store.js` - Nanostores (authorized, user)
-- `vite/src/router.js` - Multi-container SPA router
-- `vite/src/config.js` (app) - Contains installed module entries
-- `jms/vite/src/config.js` (template) - Contains only the base `status` entry; must never contain project-specific module entries
-
-**Module files** (modify in both locations):
-
-| Live | Archive |
-|------|---------|
-| `vite/src/modules/<name>/*.js` | `modules/<name>/gui/<name>/*.js` |
-
-**Examples:**
-- `vite/src/modules/auth/init.js` → `modules/auth/gui/auth/init.js`
-- `vite/src/modules/auth/login.js` → `modules/auth/gui/auth/login.js`
-- `vite/src/modules/header/component.js` → `modules/header/gui/header/component.js`
-- `vite/src/modules/home/component.js` → `modules/home/gui/home/component.js`
-
-## Update Workflow
-
-1. Modify live file in `vite/src/modules/<name>/`
-2. Apply same change to `modules/<name>/gui/<name>/`
-3. Rebuild archive
-4. Verify checksums
-
-## Rebuild Archives
-
-**Inside container:**
+## Disinstallazione
 
 ```bash
-cmd module export <name> -v x.y.z
+cmd module remove --name auth
 ```
 
-**Outside container** (sync to template):
+Legge il tracker installato (`src/main/resources/modules/auth/module.json`) e rimuove:
+- Sorgenti Java e GUI
+- Route da `App.java`
+- Entry da `vite/src/config.js`
+- Il tracker stesso
+
+**Nota:** le migration Flyway non vengono rimosse automaticamente. Usare `cmd db reset` per ripristinare il database da zero.
+
+## Export e Distribuzione
+
+### Export (cartella non compressa)
 
 ```bash
-cp modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
+cmd module export --name auth --vers 1.1.0   # → modules/auth-1.1.0/
+cmd module export --name auth                # → modules/auth/
 ```
 
-**Verify identity:**
+Genera automaticamente `module.json` leggendo `*Routes.java` e `vite/src/config.js`.
+
+### Dist (compressione archivio)
 
 ```bash
-md5 modules/<name>-x.y.z.tar.gz jms/modules/<name>-x.y.z.tar.gz
+cmd module dist --name auth-1.1.0   # modules/auth-1.1.0/ → modules/auth-1.1.0.tar.gz
 ```
 
-MD5 must be identical.
+### Sincronizzazione con jms
 
-**Example for all modules:**
-
-Inside container:
-```bash
-cmd module export auth -v 1.1.0
-cmd module export header -v 1.0.0
-cmd module export home -v 1.0.0
-cmd module export contatti -v 1.0.0
-```
-
-Outside container:
 ```bash
 cp modules/auth-1.1.0.tar.gz jms/modules/auth-1.1.0.tar.gz
-cp modules/header-1.0.0.tar.gz jms/modules/header-1.0.0.tar.gz
-cp modules/home-1.0.0.tar.gz jms/modules/home-1.0.0.tar.gz
-cp modules/contatti-1.0.0.tar.gz jms/modules/contatti-1.0.0.tar.gz
+md5sum modules/auth-1.1.0.tar.gz jms/modules/auth-1.1.0.tar.gz   # devono essere identici
 ```
 
-Verify:
-```bash
-md5 modules/*.tar.gz jms/modules/*.tar.gz
+**Invariante:** i MD5 di `modules/*.tar.gz` e `jms/modules/*.tar.gz` devono essere sempre identici.
+
+## Struttura file
+
+```
+modules/<nome>-<vers>/             ← Cartella export (non compressa)
+  java/<nome>/                     ← Sorgenti Java (con placeholder {{APP_PACKAGE}})
+  gui/<nome>/                      ← Sorgenti GUI
+  migration/                       ← Migration SQL Flyway
+  module.json                      ← Metadati (auto-generati da export)
+modules/<nome>-<vers>.tar.gz        ← Archivio distribuibile (generato da dist)
+jms/modules/<nome>-<vers>.tar.gz   ← Copia template (MD5 identico)
+src/main/resources/modules/<nome>/ ← Tracker moduli installati
+  module.json                      ← Copia module.json post-installazione
 ```
 
-## Dependencies
-
-Module dependencies managed via `module.json`:
+## Schema module.json
 
 ```json
 {
-  "name": "contatti",
-  "version": "1.0.0",
+  "name": "auth",
+  "version": "1.1.0",
+  "dependencies": {},
+  "api": {
+    "routes": "dev.jms.app.auth.Routes.register(paths, ds, config);",
+    "config": {}
+  },
+  "gui": {
+    "config": {
+      "route": "/auth",
+      "path": "auth",
+      "container": "main",
+      "authorization": null,
+      "persistent": false,
+      "priority": 999,
+      "init": null
+    }
+  },
+  "install_notice": null
+}
+```
+
+- `api.routes` — chiamata statica da inserire in `App.java`
+- `api.config` — proprietà da aggiungere manualmente a `config/application.properties`
+- `gui.config` — entry da inserire in `vite/src/config.js`
+- `install_notice` — messaggio opzionale mostrato al termine dell'installazione
+
+## File base vs file modulo
+
+**File base** (NON modificare quando si lavora sui moduli):
+
+- `vite/src/store.js`
+- `vite/src/router.js`
+- `jms/vite/src/config.js` — solo entry `status`; non deve contenere entry specifiche del progetto
+
+**Markers obbligatori nel progetto host:**
+- `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni route dei moduli
+- `vite/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status`
+
+## Workflow aggiornamento modulo
+
+1. Modifica il file live in `vite/src/modules/<nome>/` o `src/main/java/.../app/<nome>/`
+2. Esporta: `cmd module export --name <nome> --vers x.y.z`
+3. Crea archivio: `cmd module dist --name <nome>-x.y.z`
+4. Sincronizza: `cp modules/<nome>-x.y.z.tar.gz jms/modules/<nome>-x.y.z.tar.gz`
+5. Verifica MD5
+
+## Dipendenze
+
+Le dipendenze sono dichiarate in `module.json`:
+
+```json
+{
   "dependencies": {
     "auth": "^1.0.0"
   }
 }
 ```
 
-Import verifies dependencies and warns if missing modules detected. User can confirm to proceed anyway or abort installation.
+`cmd module import` verifica le dipendenze controllando la presenza del tracker in `src/main/resources/modules/<nome>/`. Avvisa se mancanti e chiede conferma prima di procedere.
 
-## Available Modules
+## Moduli disponibili
 
 **`auth-1.1.0.tar.gz`**
-- Complete authentication system
-- Login, session, 2FA, password management
-- Dependencies: none
+- Sistema di autenticazione completo
+- Login, sessione, reset password con token
+- Permesso `can_send_mail` disponibile per l'invio email da admin
+- Dipendenze: nessuna
 
 **`header-1.0.0.tar.gz`**
-- Persistent navigation header
-- Auth-aware, user display, login/logout
-- Priority: 1 (loads first)
-- Dependencies: none
+- Header navigazione persistente
+- Link Utenti/Profilo in base al ruolo
+- Dipendenze: nessuna
 
 **`home-1.0.0.tar.gz`**
-- Home page with API hello endpoint
-- Dependencies: none
+- Home page con endpoint `/api/home/hello`
+- Dipendenze: nessuna
 
 **`contatti-1.0.0.tar.gz`**
-- Contact management module
-- Dependencies: auth ^1.0.0
+- Gestione contatti
+- Dipendenze: auth ^1.0.0
 
-## Invariants
+## Invarianti
 
-- Always modify both copies of module files (live + archive)
-- Use `cmd module export` to rebuild archives (handles `COPYFILE_DISABLE=1`, includes `config/`)
-- `modules/*.tar.gz` and `jms/modules/*.tar.gz` must have identical MD5
-- `jms/vite/src/config.js` must not contain project-specific module entries (only `status`)
-- Do not use `cmd sync` to propagate app-specific files to `jms/`
+- MD5 di `modules/*.tar.gz` e `jms/modules/*.tar.gz` devono essere identici
+- `jms/vite/src/config.js` non deve contenere entry specifiche del progetto
+- Ogni modulo Java deve avere una classe `*Routes.java` con metodo statico `register(...)`
+- Il tracker `src/main/resources/modules/<nome>/module.json` è scritto da `import` e letto da `remove`

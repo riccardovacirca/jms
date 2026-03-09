@@ -17,16 +17,21 @@ cmd app run              # Watch src/, recompile and restart on changes (recomme
 cmd app debug            # Same as run + JDWP debugger on port 5005
 cmd app start            # Start JAR in background
 cmd app stop             # Stop background process
+cmd app stop --force     # Force kill: termina per nome e per porta API (cleanup zombie/porta occupata)
 cmd app restart          # Stop + start
-cmd app status           # Show running process info
+cmd app status           # Show running process info + zombie detection + port scan
+cmd app clean            # Rimuove i file compilati (mvn clean → target/)
+cmd gui clean            # Svuota src/main/resources/static/ (output build frontend)
 cmd db                   # Interactive PostgreSQL CLI
 cmd db -f <file>         # Execute SQL file or load CSV
 cmd db status            # Show app DB config, connection health and migrations
 cmd db setup             # Create user and database from .env file
 cmd db reset             # Drop + recreate database (destructive!)
 cmd sync                 # Sync sources → jms/ (requires confirmation)
-cmd module export <name> [-v 1.2.3]  # Export module to modules/<name>[-version].tar.gz
-cmd module import <file.tar.gz>      # Extract and install module into project (Java, GUI, migration, config)
+cmd module export --name <nome> [--vers 1.2.3]  # Esporta modulo in cartella modules/<nome>[-version]/
+cmd module dist --name <nome-versione>           # Comprime cartella → modules/<nome-versione>.tar.gz
+cmd module import <archivio.tar.gz | cartella>   # Installa modulo (accetta archivio o cartella estratta)
+cmd module remove --name <nome>                  # Disinstalla modulo usando il tracker installato
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
 
@@ -300,43 +305,60 @@ Self-contained optional features distributed as `.tar.gz` archives in `modules/`
 {
   "name": "auth",
   "version": "1.1.0",
-  "dependencies": { "auth": "^1.0.0" },
-  "java": {
-    "routeClass": "import dev.jms.app.auth.AuthRoutes;",
-    "register": "AuthRoutes.register(paths, ds, config);"
+  "dependencies": {},
+  "api": {
+    "routes": "dev.jms.app.auth.Routes.register(paths, ds, config);",
+    "config": {}
   },
-  "config": {
-    "route": "/auth", "path": "auth", "container": "main",
-    "authorization": null, "persistent": false, "priority": 999, "init": null
-  }
+  "gui": {
+    "config": {
+      "route": "/auth", "path": "auth", "container": "main",
+      "authorization": null, "persistent": false, "priority": 999, "init": null
+    }
+  },
+  "install_notice": null
 }
 ```
 
-**Export** a module from the current project (auto-generates `module.json`):
+**Export** un modulo dal progetto corrente in cartella non compressa:
 ```bash
-cmd module export auth          # → modules/auth.tar.gz
-cmd module export auth -v 1.1.0 # → modules/auth-1.1.0.tar.gz
+cmd module export --name auth --vers 1.1.0   # → modules/auth-1.1.0/
+cmd module export --name auth                # → modules/auth/
 ```
-Export reads `*Routes.java` (for Java metadata) and `vite/src/config.js` (for the config entry) automatically.
+Export legge automaticamente `*Routes.java` (per i metadati API) e `vite/src/config.js` (per l'entry GUI).
 
-**Import** (extracts the archive and installs the module automatically):
+**Dist** comprime una cartella di modulo in archivio distribuibile:
 ```bash
-cmd module import auth-1.1.0.tar.gz
+cmd module dist --name auth-1.1.0   # modules/auth-1.1.0/ → modules/auth-1.1.0.tar.gz
 ```
-Import automatically:
-1. Verifies dependencies from `module.json` (warns if missing)
-2. Copies Java sources, GUI files, migration SQL, application.properties
-3. Inserts `java.routeClass` import into `App.java` after `// [MODULE_IMPORTS]`
-4. Inserts `java.register` call into `App.java` after `// [MODULE_ROUTES]`
-5. Inserts the `config` entry into `vite/src/config.js` after `// [MODULE_ENTRIES]`
 
-Only one **manual step** may remain: `pom.xml` — add external Java library dependencies (only if the module requires them).
+**Import** installa un modulo da archivio `.tar.gz` o da cartella estratta:
+```bash
+cmd module import modules/auth-1.1.0.tar.gz   # da archivio
+cmd module import modules/auth-1.1.0           # da cartella
+```
+Import automaticamente:
+1. Verifica dipendenze da `module.json` (avvisa se mancanti, controlla tracker installati)
+2. Copia sorgenti Java, GUI, migration SQL
+3. Inserisce la chiamata `api.routes` in `App.java` dopo `// [MODULE_ROUTES]`
+4. Inserisce l'entry `gui.config` in `vite/src/config.js` dopo `// [MODULE_ENTRIES]`
+5. Scrive il tracker in `src/main/resources/modules/<nome>/module.json`
+
+Solo un **passo manuale** può restare: `pom.xml` — aggiungere dipendenze Java esterne se richieste dal modulo.
+
+**Remove** disinstalla un modulo leggendo il tracker:
+```bash
+cmd module remove --name auth
+```
+Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, tracker. Le migration Flyway non vengono rimosse automaticamente (avviso esplicito).
+
+**Tracker installati:** dopo ogni import riuscito viene scritto `src/main/resources/modules/<nome>/module.json`. Le dipendenze vengono verificate contro questi tracker. `module remove` richiede il tracker per operare.
 
 **Markers required in host project:**
-- `App.java`: `// [MODULE_IMPORTS]` after the last module import, `// [MODULE_ROUTES]` before module route registrations
-- `vite/src/config.js`: `// [MODULE_ENTRIES]` after the `status` entry inside `MODULE_CONFIG`
+- `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni di route dei moduli
+- `vite/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status` dentro `MODULE_CONFIG`
 
-**Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/AuthRoutes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
+**Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/Routes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
 
 **Available modules** (in `modules/`):
 - `auth-1.1.0.tar.gz` — Complete authentication system with token-based password reset (no dependencies)

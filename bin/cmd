@@ -94,6 +94,13 @@ app_build() {
     mvn --no-transfer-progress package -DskipTests
     success "Build completed → target/service.jar"
 }
+app_clean() {
+    load_env
+    info "Pulizia file di compilazione Java (Maven clean)..."
+    cd "$WORKSPACE"
+    mvn --no-transfer-progress clean
+    success "Cartella target/ rimossa"
+}
 
 app_start() {
     load_env
@@ -122,6 +129,27 @@ app_start() {
 }
 
 app_stop() {
+    local FORCE=false
+    [ "${1:-}" = "--force" ] && FORCE=true
+
+    if $FORCE; then
+        load_env
+        info "Cleanup forzato in corso..."
+        local API_P="${API_PORT:-8080}"
+        local PIDS PORT_PID KILLED
+        PIDS=$(pgrep -f "dev.jms.app.App" 2>/dev/null || true)
+        PORT_PID=$(ss -tlnp "sport = :${API_P}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+        PIDS=$(printf '%s\n%s' "$PIDS" "${PORT_PID:-}" | sort -u | grep -v '^$' | tr '\n' ' ')
+        KILLED=0
+        for PID in $PIDS; do
+            kill -9 "$PID" 2>/dev/null && KILLED=$((KILLED + 1)) || true
+        done
+        rm -f "$APP_PID_FILE"
+        [ $KILLED -gt 0 ] && success "Terminati $KILLED processo/i" || info "Nessun processo trovato"
+        success "Cleanup completato"
+        return 0
+    fi
+
     if ! app_is_running; then
         info "Application is not running"
         return 0
@@ -266,29 +294,57 @@ _app_run_common() {
 
 app_status() {
     load_env
-    echo "=== Java Undertow Application Status ==="
+
+    local API_P="${API_PORT:-8080}"
+    local VITE_P="${VITE_PORT:-5173}"
+    local DEBUG_P="${DEBUG_PORT:-5005}"
+    local ANOMALIES=0
+
+    echo "=== Application Status ==="
 
     if app_is_running; then
-        local PID
+        local PID STAT ELAPSED
         PID=$(cat "$APP_PID_FILE")
-        echo "Status:   RUNNING"
-        echo "PID:      $PID"
-        echo "JAR:      $APP_JAR"
-        echo "Log:      $APP_LOG_FILE"
-        echo "Internal: http://localhost:${API_PORT:-8080}/"
-        echo "External: http://localhost:${API_PORT_HOST:-2310}/"
-        echo ""
-        echo "Process info:"
-        ps -p "$PID" -o pid,ppid,%cpu,%mem,etime,command 2>/dev/null || true
+        STAT=$(ps -o stat= -p "$PID" 2>/dev/null || echo "?")
+        ELAPSED=$(ps -o etime= -p "$PID" 2>/dev/null | tr -d ' ' || echo "?")
+        success "RUNNING  PID=$PID  stat=$STAT  uptime=$ELAPSED"
+        echo "  Internal: http://localhost:${API_P}/"
+        echo "  External: http://localhost:${API_PORT_HOST:-2310}/"
     else
-        echo "Status: STOPPED"
-        echo ""
-        if [ -f "$APP_JAR" ]; then
-            echo "JAR exists: YES ($APP_JAR)"
-        else
-            echo "JAR exists: NO (run 'cmd app build')"
+        warn "STOPPED"
+        if [ -f "$APP_PID_FILE" ]; then
+            warn "  Stale PID file: $APP_PID_FILE → usa 'cmd app stop --force'"
+            ANOMALIES=$((ANOMALIES + 1))
         fi
     fi
+
+    # Zombie java processes
+    local ZOMBIES
+    ZOMBIES=$(ps aux 2>/dev/null | awk '/dev\.jms\.app\.App/ && /defunct/ {printf "%s ", $2}')
+    if [ -n "$ZOMBIES" ]; then
+        warn "  Zombie Java: PID ${ZOMBIES}→ usa 'cmd app stop --force'"
+        ANOMALIES=$((ANOMALIES + 1))
+    fi
+
+    # Port scan (internal)
+    echo ""
+    echo "Ports:"
+    for ENTRY in "${API_P}:API" "${VITE_P}:Vite" "${DEBUG_P}:JDWP"; do
+        local P="${ENTRY%%:*}"
+        local LABEL="${ENTRY##*:}"
+        local OWNER
+        OWNER=$(ss -tlnp "sport = :${P}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+        if [ -n "$OWNER" ]; then
+            local PNAME
+            PNAME=$(ps -o comm= -p "$OWNER" 2>/dev/null || echo "?")
+            printf "  :%s %-6s → PID %-6s (%s)\n" "$P" "($LABEL)" "$OWNER" "$PNAME"
+        else
+            printf "  :%s %-6s → free\n" "$P" "($LABEL)"
+        fi
+    done
+
+    [ $ANOMALIES -gt 0 ] && printf '\n' && warn "$ANOMALIES anomalia/e — usa 'cmd app stop --force' per il cleanup"
+    return 0
 }
 
 # ============================================================================
@@ -319,6 +375,14 @@ vite_run() {
     info "Press Ctrl+C to stop"
     cd "$VITE_DIR"
     npm run dev -- --host 0.0.0.0
+}
+
+vite_clean() {
+    load_env
+    local STATIC_DIR="$WORKSPACE/src/main/resources/static"
+    info "Pulizia file GUI compilati ($STATIC_DIR)..."
+    rm -rf "${STATIC_DIR:?}"/*
+    success "Cartella static/ svuotata"
 }
 
 # ============================================================================
@@ -812,12 +876,18 @@ _module_app_package() {
 }
 
 
-module_install() {
-    local MODULE="$1"
-    [ -n "$MODULE" ] || error "Usage: cmd module install <nome-modulo>"
+# ============================================================================
+# Module install (internal) — accepts MODULE_DIR, reads name from module.json
+# ============================================================================
 
-    local MODULE_DIR="$WORKSPACE/modules/$MODULE"
-    [ -d "$MODULE_DIR" ] || error "Modulo '$MODULE' non trovato in modules/. Esegui prima: cmd module import <file.tar.gz>"
+module_install() {
+    local MODULE_DIR="$1"
+    [ -d "$MODULE_DIR" ] || error "Cartella modulo non trovata: $MODULE_DIR"
+    [ -f "$MODULE_DIR/module.json" ] || error "module.json non trovato in: $MODULE_DIR"
+
+    local MODULE
+    MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
+    [ -n "$MODULE" ] || error "Impossibile leggere 'name' da $MODULE_DIR/module.json"
 
     local APP_PACKAGE APP_PACKAGE_PATH
     APP_PACKAGE=$(_module_app_package)
@@ -835,7 +905,7 @@ module_install() {
         mkdir -p "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH"
         cp -r "$MODULE_DIR/java/$MODULE" "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/"
         find "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE" -name '*.java' \
-            -exec sed -i "s|com\.example|$APP_PACKAGE|g" {} +
+            -exec sed -i "s|{{APP_PACKAGE}}|$APP_PACKAGE|g; s|com\.example|$APP_PACKAGE|g" {} +
         success "  File Java installati: src/main/java/$APP_PACKAGE_PATH/$MODULE/"
     fi
 
@@ -856,33 +926,17 @@ module_install() {
         done
     fi
 
-    # Append application.properties (only if module has real config values)
-    local CONFIG_FILE="$MODULE_DIR/config/application.properties"
-    if [ -f "$CONFIG_FILE" ]; then
-        if grep -v '^[[:space:]]*#' "$CONFIG_FILE" | grep -qv '^[[:space:]]*$'; then
-            if ! grep -q "# Module: $MODULE" "$WORKSPACE/config/application.properties" 2>/dev/null; then
-                info "[module] Aggiunta configurazioni a config/application.properties..."
-                printf '\n' >> "$WORKSPACE/config/application.properties"
-                cat "$CONFIG_FILE" >> "$WORKSPACE/config/application.properties"
-                success "  Configurazioni aggiunte a config/application.properties"
-                warn "  IMPORTANTE: Rivedi e personalizza i valori di configurazione"
-            else
-                warn "  Configurazione per '$MODULE' già presente, skip"
-            fi
-        fi
-    fi
-
     # Auto-insert route registration into App.java (after // [MODULE_ROUTES] marker)
     local APP_JAVA="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/App.java"
-    if [ -f "$APP_JAVA" ] && [ -f "$MODULE_DIR/module.json" ]; then
+    if [ -f "$APP_JAVA" ]; then
         local REGISTER_CALL
         REGISTER_CALL=$(python3 -c "
 import json, sys
 with open('$MODULE_DIR/module.json') as f:
     m = json.load(f)
-java = m.get('java')
-if java:
-    print(java.get('register', ''))
+api = m.get('api')
+if api:
+    print(api.get('routes', ''))
 " 2>/dev/null || true)
         if [ -n "$REGISTER_CALL" ]; then
             if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
@@ -900,7 +954,7 @@ if java:
 
     # Auto-insert config.js entry (after // [MODULE_ENTRIES] marker)
     local CONFIG_JS="$WORKSPACE/vite/src/config.js"
-    if [ -f "$CONFIG_JS" ] && [ -f "$MODULE_DIR/module.json" ]; then
+    if [ -f "$CONFIG_JS" ]; then
         local CONFIG_ENTRY_KEY
         CONFIG_ENTRY_KEY=$(python3 -c "
 import json
@@ -910,13 +964,12 @@ print(m.get('name', ''))
 " 2>/dev/null || true)
         local CONFIG_ENTRY_JS
         CONFIG_ENTRY_JS=$(python3 -c "
-import json
+import json, sys
 with open('$MODULE_DIR/module.json') as f:
     m = json.load(f)
-cfg = m.get('config')
+cfg = m.get('gui', {}).get('config')
 if not cfg:
     sys.exit(0)
-import sys
 name = m.get('name', '')
 lines = ['  ' + name + ': {']
 for k, v in cfg.items():
@@ -960,103 +1013,140 @@ with open('$CONFIG_JS', 'w') as f:
         fi
     fi
 
+    # Show api.config properties if any
+    python3 -c "
+import json, sys
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+api_cfg = m.get('api', {}).get('config', {})
+if api_cfg:
+    print('\n  Proprietà da aggiungere a config/application.properties:')
+    for k, v in api_cfg.items():
+        print(f'    {k}={v}')
+" 2>/dev/null || true
+
+    # Write tracker: src/main/resources/modules/<nome>/module.json
+    local TRACKER_DIR="$WORKSPACE/src/main/resources/modules/$MODULE"
+    mkdir -p "$TRACKER_DIR"
+    cp "$MODULE_DIR/module.json" "$TRACKER_DIR/module.json"
+    success "  Tracker scritto: src/main/resources/modules/$MODULE/module.json"
+
     printf '\n'
     success "Installazione modulo '$MODULE' completata"
+
+    # Show install_notice if present
+    python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+notice = m.get('install_notice', '')
+if notice:
+    print()
+    print('  NOTA: ' + notice)
+" 2>/dev/null || true
+
     printf '\n'
     printf 'Prossimi passi:\n'
     printf '  1. cmd gui build && cmd app build\n\n'
 }
 
+# ============================================================================
+# module_import — accetta archivio .tar.gz oppure cartella già estratta
+# ============================================================================
+
 module_import() {
-    local ARCHIVE="$1"
+    local INPUT="$1"
+    [ -n "$INPUT" ] || error "Usage: cmd module import <archivio.tar.gz | cartella>"
 
-    [ -n "$ARCHIVE" ] || error "Usage: cmd module import <file.tar.gz>"
-    case "$ARCHIVE" in
+    # Resolve path: se non contiene / cerca in modules/
+    case "$INPUT" in
         */*) ;;
-        *) ARCHIVE="$WORKSPACE/modules/$ARCHIVE" ;;
+        *) INPUT="$WORKSPACE/modules/$INPUT" ;;
     esac
-    [ -f "$ARCHIVE" ] || error "File non trovato: $ARCHIVE"
 
-    local APP_PACKAGE
-    APP_PACKAGE=$(_module_app_package)
-    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
+    local MODULE_DIR
+    local TMP_DIR=""
 
-    # Detect module name from archive filename (strip .tar.gz and optional -X.Y.Z version)
-    local MODULE
-    MODULE=$(basename "$ARCHIVE" | sed 's|\.tar\.gz$||; s|-[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$||')
-    [ -n "$MODULE" ] || error "Impossibile rilevare il nome del modulo dal nome dell'archivio"
-
-    local DEST="$WORKSPACE/modules/$MODULE"
-    if [ -d "$DEST" ]; then
-        error "Cartella '$DEST' già esistente. Rimuoverla prima di eseguire l'import."
+    if [ -f "$INPUT" ]; then
+        # Archivio .tar.gz: estrai in cartella temporanea
+        TMP_DIR=$(mktemp -d)
+        tar -xzf "$INPUT" -C "$TMP_DIR" --warning=no-unknown-keyword 2>/dev/null || \
+            tar -xzf "$INPUT" -C "$TMP_DIR"
+        # Sostituisci {{APP_PACKAGE}} nel sorgenti estratti
+        local APP_PACKAGE
+        APP_PACKAGE=$(_module_app_package)
+        find "$TMP_DIR" -type f \( -name "*.java" -o -name "*.js" -o -name "*.html" -o -name "*.md" \) \
+            -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} + 2>/dev/null || true
+        MODULE_DIR="$TMP_DIR"
+    elif [ -d "$INPUT" ]; then
+        MODULE_DIR="$INPUT"
+    else
+        error "Non trovato (né archivio né cartella): $INPUT"
     fi
 
-    mkdir -p "$DEST"
-    tar -xzf "$ARCHIVE" -C "$DEST" --warning=no-unknown-keyword
+    [ -f "$MODULE_DIR/module.json" ] || error "module.json non trovato in: $MODULE_DIR"
 
-    # Replace {{APP_PACKAGE}} placeholder in all text files
-    find "$DEST" -type f \( -name "*.java" -o -name "*.js" -o -name "*.html" -o -name "*.md" \) \
-        -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} +
+    local MODULE
+    MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
+    [ -n "$MODULE" ] || error "Impossibile leggere 'name' da module.json"
 
-    success "Modulo '$MODULE' estratto in $DEST"
-
-    # Check dependencies from module.json
-    if [ -f "$DEST/module.json" ]; then
-        info "Verifica dipendenze da module.json..."
-        local MISSING_DEPS=""
-        local DEP_COUNT=0
-
-        # Extract dependencies using python3 to correctly parse JSON
-        while IFS= read -r DEP_NAME; do
-            [ -z "$DEP_NAME" ] && continue
-            DEP_COUNT=$((DEP_COUNT + 1))
-            if [ ! -d "$WORKSPACE/modules/$DEP_NAME" ]; then
-                MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
-            fi
-        done < <(python3 -c "
+    # Verifica dipendenze
+    local MISSING_DEPS="" DEP_COUNT=0
+    while IFS= read -r DEP_NAME; do
+        [ -z "$DEP_NAME" ] && continue
+        DEP_COUNT=$((DEP_COUNT + 1))
+        if [ ! -f "$WORKSPACE/src/main/resources/modules/$DEP_NAME/module.json" ]; then
+            MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
+        fi
+    done < <(python3 -c "
 import json
-with open('$DEST/module.json') as f:
+with open('$MODULE_DIR/module.json') as f:
     m = json.load(f)
 for dep in m.get('dependencies', {}).keys():
     print(dep)
 " 2>/dev/null)
 
-        if [ -n "$MISSING_DEPS" ]; then
-            printf '\n'
-            warn "ATTENZIONE: Il modulo '$MODULE' richiede le seguenti dipendenze:"
-            printf "$MISSING_DEPS"
-            warn "Installa prima i moduli mancanti con: cmd module import <modulo.tar.gz>"
-            printf '\n'
-            if ! confirm "Vuoi continuare comunque con l'installazione?"; then
-                rm -rf "$DEST"
-                error "Installazione annullata"
-            fi
-        elif [ "$DEP_COUNT" -gt 0 ]; then
-            success "Tutte le dipendenze sono soddisfatte"
+    if [ -n "$MISSING_DEPS" ]; then
+        printf '\n'
+        warn "ATTENZIONE: Il modulo '$MODULE' richiede le seguenti dipendenze:"
+        printf "$MISSING_DEPS"
+        warn "Installa prima i moduli mancanti con: cmd module import <modulo>"
+        printf '\n'
+        if ! confirm "Vuoi continuare comunque con l'installazione?"; then
+            [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+            error "Installazione annullata"
         fi
+    elif [ "$DEP_COUNT" -gt 0 ]; then
+        success "Tutte le dipendenze sono soddisfatte"
     fi
 
-    module_install "$MODULE"
+    module_install "$MODULE_DIR"
+
+    [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
 }
+
+# ============================================================================
+# module_export — esporta in cartella modules/<name>[-version]/
+# ============================================================================
 
 module_export() {
     local MODULE=""
     local VERSION=""
-    local OUTPUT=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            -v|--version)
-                [ -n "$2" ] || error "-v|--version richiede un valore (es. 1.2.3)"
+            --name)
+                [ -n "$2" ] || error "--name richiede un valore"
+                MODULE="$2"; shift 2 ;;
+            --vers|--version|-v)
+                [ -n "$2" ] || error "--vers richiede un valore (es. 1.2.3)"
                 VERSION="$2"; shift 2 ;;
-            -*) error "Opzione sconosciuta: $1" ;;
-            *)
-                [ -z "$MODULE" ] && MODULE="$1" || OUTPUT="$1"
-                shift ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module export --name <nome> [--vers 1.2.3]" ;;
+            *) error "Usage: cmd module export --name <nome> [--vers 1.2.3]" ;;
         esac
     done
 
-    [ -n "$MODULE" ] || error "Usage: cmd module export <name> [-v 1.2.3] [output.tar.gz]"
+    [ -n "$MODULE" ] || error "Usage: cmd module export --name <nome> [--vers 1.2.3]"
 
     local APP_PACKAGE
     APP_PACKAGE=$(_module_app_package)
@@ -1067,95 +1157,117 @@ module_export() {
     local GUI_SRC="$WORKSPACE/vite/src/modules/$MODULE"
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
-    [ -d "$JAVA_SRC" ] || [ -d "$GUI_SRC" ] || error "No Java or GUI sources found for module '$MODULE'"
+    [ -d "$JAVA_SRC" ] || [ -d "$GUI_SRC" ] || error "Nessuna sorgente Java o GUI trovata per il modulo '$MODULE'"
 
+    local FOLDER_NAME
     if [ -n "$VERSION" ]; then
-        [ -n "$OUTPUT" ] || OUTPUT="$WORKSPACE/modules/${MODULE}-${VERSION}.tar.gz"
+        FOLDER_NAME="${MODULE}-${VERSION}"
     else
-        [ -n "$OUTPUT" ] || OUTPUT="$WORKSPACE/modules/${MODULE}.tar.gz"
+        FOLDER_NAME="$MODULE"
     fi
-    mkdir -p "$(dirname "$OUTPUT")"
+    local OUTPUT="$WORKSPACE/modules/$FOLDER_NAME"
 
-    local TMP_DIR
-    TMP_DIR=$(mktemp -d)
+    if [ -d "$OUTPUT" ]; then
+        warn "La cartella '$OUTPUT' esiste già — verrà sovrascritta"
+        rm -rf "$OUTPUT"
+    fi
+    mkdir -p "$OUTPUT"
 
     # Java sources — templatize package placeholder
     if [ -d "$JAVA_SRC" ]; then
         info "[module] Copio sorgenti Java ($JAVA_SRC)..."
-        mkdir -p "$TMP_DIR/java"
-        cp -r "$JAVA_SRC" "$TMP_DIR/java/"
-        find "$TMP_DIR/java" -name "*.java" \
+        mkdir -p "$OUTPUT/java"
+        cp -r "$JAVA_SRC" "$OUTPUT/java/"
+        find "$OUTPUT/java" -name "*.java" \
             -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
     fi
 
     # GUI sources
     if [ -d "$GUI_SRC" ]; then
         info "[module] Copio sorgenti GUI ($GUI_SRC)..."
-        mkdir -p "$TMP_DIR/gui"
-        cp -r "$GUI_SRC" "$TMP_DIR/gui/"
+        mkdir -p "$OUTPUT/gui"
+        cp -r "$GUI_SRC" "$OUTPUT/gui/"
     else
-        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE' (vite/src/modules/$MODULE/)"
+        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE'"
     fi
 
     # Migration files (matched by module name in filename)
     local HAS_MIGRATIONS=false
     while IFS= read -r -d '' f; do
         if [ "$HAS_MIGRATIONS" = false ]; then
-            mkdir -p "$TMP_DIR/migration"
+            mkdir -p "$OUTPUT/migration"
             info "[module] Copio migration..."
         fi
-        cp "$f" "$TMP_DIR/migration/"
+        cp "$f" "$OUTPUT/migration/"
         HAS_MIGRATIONS=true
     done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" -print0 2>/dev/null)
 
     [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
 
-    # Config properties (from modules/$MODULE/config/ if exists)
-    if [ -d "$WORKSPACE/modules/$MODULE/config" ]; then
-        info "[module] Copio config properties..."
-        cp -r "$WORKSPACE/modules/$MODULE/config" "$TMP_DIR/config"
-    fi
-
     # Generate module.json automatically
     info "[module] Genero module.json..."
 
-    local MODULE_CAP
-    MODULE_CAP=$(python3 -c "print('$MODULE'.capitalize())")
-
-    local EXISTING_DEPS
-    EXISTING_DEPS="{}"
-    if [ -f "$WORKSPACE/modules/$MODULE/module.json" ]; then
+    # Preserve existing dependencies and install_notice from tracker or existing export folder
+    local EXISTING_DEPS="{}"
+    local EXISTING_NOTICE=""
+    local TRACKER="$WORKSPACE/src/main/resources/modules/$MODULE/module.json"
+    local PREV_EXPORT="$WORKSPACE/modules/$MODULE/module.json"
+    local META_SOURCE=""
+    if [ -f "$TRACKER" ]; then
+        META_SOURCE="$TRACKER"
+    elif [ -f "$PREV_EXPORT" ]; then
+        META_SOURCE="$PREV_EXPORT"
+    fi
+    if [ -n "$META_SOURCE" ]; then
         EXISTING_DEPS=$(python3 -c "
 import json
-with open('$WORKSPACE/modules/$MODULE/module.json') as f:
+with open('$META_SOURCE') as f:
     m = json.load(f)
 print(json.dumps(m.get('dependencies', {}), indent=4))
 " 2>/dev/null || echo "{}")
+        EXISTING_NOTICE=$(python3 -c "
+import json
+with open('$META_SOURCE') as f:
+    m = json.load(f)
+v = m.get('install_notice')
+print(v if v else '')
+" 2>/dev/null || true)
     fi
 
-    # Extract Java metadata from Routes.java
-    local JAVA_JSON
-    JAVA_JSON="null"
+    # Extract api.routes from Routes.java + api.config from application.properties
+    local API_JSON="null"
     if [ -d "$JAVA_SRC" ]; then
         local ROUTES_FILE="$JAVA_SRC/Routes.java"
         if [ -f "$ROUTES_FILE" ]; then
-            local REGISTER_CALL
-            REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds);"
-            # Check if Routes has a config parameter
+            local REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds);"
             if grep -q 'Config config' "$ROUTES_FILE" 2>/dev/null; then
                 REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds, config);"
             fi
-            JAVA_JSON=$(python3 -c "
+            API_JSON=$(python3 -c "
 import json
-data = {'register': '${REGISTER_CALL}'}
+routes = '${REGISTER_CALL}'
+api_cfg = {}
+props_file = '$WORKSPACE/config/application.properties'
+try:
+    with open(props_file) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('#') or '=' not in line:
+                continue
+            key, _, val = line.partition('=')
+            key = key.strip()
+            if key.startswith('${MODULE}.'):
+                api_cfg[key] = val.strip()
+except Exception:
+    pass
+data = {'routes': routes, 'config': api_cfg}
 print(json.dumps(data, indent=4))
 " 2>/dev/null || echo "null")
         fi
     fi
 
     # Extract config.js entry for this module
-    local CONFIG_JS_ENTRY
-    CONFIG_JS_ENTRY="null"
+    local CONFIG_JS_ENTRY="null"
     local CONFIG_JS="$WORKSPACE/vite/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         CONFIG_JS_ENTRY=$(python3 -c "
@@ -1164,14 +1276,13 @@ import re, json, sys
 with open('$CONFIG_JS') as f:
     content = f.read()
 
-# Find the module entry block using brace counting
 pattern = r'\b${MODULE}\s*:\s*\{'
 m = re.search(pattern, content)
 if not m:
     print('null')
     sys.exit(0)
 
-start = m.end() - 1  # position of opening {
+start = m.end() - 1
 depth = 0
 i = start
 while i < len(content):
@@ -1184,8 +1295,6 @@ while i < len(content):
     i += 1
 
 block = content[start:i+1]
-
-# Parse key-value pairs from the JS object block
 inner = block[1:-1]
 result = {}
 for line in inner.splitlines():
@@ -1209,7 +1318,7 @@ for line in inner.splitlines():
         try:
             import re as _re
             js_obj = val_str
-            js_obj = _re.sub(r\"([{,]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\", r'\\1\"\\2\":', js_obj)
+            js_obj = _re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1\"\2\":', js_obj)
             js_obj = js_obj.replace(\"'\", '\"')
             result[key] = json.loads(js_obj)
         except Exception:
@@ -1227,17 +1336,18 @@ print(json.dumps(result, indent=4))
 import json, sys
 
 deps_str = '''$EXISTING_DEPS'''
-java_str = '''$JAVA_JSON'''
+api_str = '''$API_JSON'''
 config_str = '''$CONFIG_JS_ENTRY'''
+notice = '''$EXISTING_NOTICE'''
 
 try:
     deps = json.loads(deps_str)
 except Exception:
     deps = {}
 try:
-    java = json.loads(java_str)
+    api = json.loads(api_str)
 except Exception:
-    java = None
+    api = None
 try:
     cfg = json.loads(config_str)
 except Exception:
@@ -1247,21 +1357,178 @@ module_data = {
     'name': '$MODULE',
     'version': '${VERSION:-dev}',
     'dependencies': deps,
-    'java': java,
-    'config': cfg
+    'api': api,
+    'gui': {'config': cfg},
+    'install_notice': notice.strip() if notice.strip() else None
 }
-with open('$TMP_DIR/module.json', 'w') as f:
+with open('$OUTPUT/module.json', 'w') as f:
     json.dump(module_data, f, indent=4)
     f.write('\n')
 print('OK')
 " 2>/dev/null && success "[module] module.json generato" \
     || warn "[module] Impossibile generare module.json automaticamente"
 
-    # Package
-    COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -C "$TMP_DIR" .
-    rm -rf "$TMP_DIR"
-
     success "Modulo '$MODULE' esportato → $OUTPUT"
+}
+
+# ============================================================================
+# module_dist — comprime una cartella di modulo in archivio .tar.gz
+# ============================================================================
+
+module_dist() {
+    local FOLDER_NAME=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name)
+                [ -n "$2" ] || error "--name richiede un valore"
+                FOLDER_NAME="$2"; shift 2 ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module dist --name <nome-versione>" ;;
+            *) error "Usage: cmd module dist --name <nome-versione>" ;;
+        esac
+    done
+
+    [ -n "$FOLDER_NAME" ] || error "Usage: cmd module dist --name <nome-versione>"
+
+    local SRC="$WORKSPACE/modules/$FOLDER_NAME"
+    [ -d "$SRC" ] || error "Cartella non trovata: $SRC"
+
+    local OUTPUT="$WORKSPACE/modules/${FOLDER_NAME}.tar.gz"
+    COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -C "$SRC" .
+    success "Archivio creato → $OUTPUT"
+}
+
+# ============================================================================
+# module_remove — rimuove un modulo installato leggendo il tracker
+# ============================================================================
+
+module_remove() {
+    local MODULE=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name)
+                [ -n "$2" ] || error "--name richiede un valore"
+                MODULE="$2"; shift 2 ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <nome>" ;;
+            *) error "Usage: cmd module remove --name <nome>" ;;
+        esac
+    done
+
+    [ -n "$MODULE" ] || error "Usage: cmd module remove --name <nome>"
+
+    local TRACKER="$WORKSPACE/src/main/resources/modules/$MODULE/module.json"
+    [ -f "$TRACKER" ] || error "Modulo '$MODULE' non risulta installato (tracker non trovato: $TRACKER)"
+
+    local APP_PACKAGE APP_PACKAGE_PATH
+    APP_PACKAGE=$(_module_app_package)
+    APP_PACKAGE_PATH="${APP_PACKAGE//.//}"
+
+    if ! confirm "Rimuovere il modulo '$MODULE'?"; then
+        info "Operazione annullata"
+        return 0
+    fi
+
+    printf '\n'
+    info "[module] Rimozione modulo: $MODULE"
+    printf '\n'
+
+    # Java sources
+    local JAVA_DIR="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE"
+    if [ -d "$JAVA_DIR" ]; then
+        rm -rf "$JAVA_DIR"
+        success "  Sorgenti Java rimossi: $JAVA_DIR"
+    fi
+
+    # GUI sources
+    local GUI_DIR="$WORKSPACE/vite/src/modules/$MODULE"
+    if [ -d "$GUI_DIR" ]; then
+        rm -rf "$GUI_DIR"
+        success "  Sorgenti GUI rimossi: $GUI_DIR"
+    fi
+
+    # Remove route from App.java
+    local APP_JAVA="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/App.java"
+    if [ -f "$APP_JAVA" ]; then
+        local REGISTER_CALL
+        REGISTER_CALL=$(python3 -c "
+import json
+with open('$TRACKER') as f:
+    m = json.load(f)
+api = m.get('api')
+if api:
+    print(api.get('routes', ''))
+" 2>/dev/null || true)
+        if [ -n "$REGISTER_CALL" ]; then
+            if grep -qF "$REGISTER_CALL" "$APP_JAVA"; then
+                python3 -c "
+with open('$APP_JAVA') as f:
+    lines = f.readlines()
+call = '${REGISTER_CALL}'.strip()
+lines = [l for l in lines if call not in l]
+with open('$APP_JAVA', 'w') as f:
+    f.writelines(lines)
+" 2>/dev/null && success "  Route rimossa da App.java" || warn "  Impossibile rimuovere route da App.java"
+            fi
+        fi
+    fi
+
+    # Remove entry from config.js
+    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    if [ -f "$CONFIG_JS" ]; then
+        python3 -c "
+import re, sys
+
+with open('$CONFIG_JS') as f:
+    content = f.read()
+
+pattern = r'(\n\s+${MODULE}\s*:\s*\{)'
+m = re.search(pattern, content)
+if not m:
+    sys.exit(0)
+
+# Find full block with brace counting
+start = m.start(1)
+brace_start = content.index('{', m.start(1))
+depth = 0
+i = brace_start
+while i < len(content):
+    if content[i] == '{':
+        depth += 1
+    elif content[i] == '}':
+        depth -= 1
+        if depth == 0:
+            break
+    i += 1
+
+# Include trailing comma and newline if present
+end = i + 1
+if end < len(content) and content[end] == ',':
+    end += 1
+
+content = content[:start] + content[end:]
+with open('$CONFIG_JS', 'w') as f:
+    f.write(content)
+print('OK')
+" 2>/dev/null && success "  Modulo rimosso da config.js" || warn "  Impossibile rimuovere da config.js — rimuovi manualmente '$MODULE'"
+    fi
+
+    # Migration files: warn only (Flyway state cannot be rolled back automatically)
+    local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
+    local MIGR_FILES
+    MIGR_FILES=$(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" 2>/dev/null | sort)
+    if [ -n "$MIGR_FILES" ]; then
+        warn "  Le seguenti migration NON vengono rimosse automaticamente (Flyway):"
+        echo "$MIGR_FILES" | while IFS= read -r f; do warn "    $(basename "$f")"; done
+        warn "  Esegui 'cmd db reset' se vuoi ripristinare il database da zero"
+    fi
+
+    # Remove tracker
+    rm -rf "$WORKSPACE/src/main/resources/modules/$MODULE"
+    success "  Tracker rimosso"
+
+    printf '\n'
+    success "Modulo '$MODULE' rimosso"
 }
 
 
@@ -1369,17 +1636,19 @@ case "$1" in
             run)     app_run ;;
             debug)   app_debug ;;
             start)   app_start ;;
-            stop)    app_stop ;;
+            stop)    app_stop "${@:3}" ;;
             restart) app_restart ;;
             status)  app_status ;;
-            *) error "Unknown app command: $2. Use: build, run, debug, start, stop, restart, status" ;;
+            clean)   app_clean ;;
+            *) error "Unknown app command: $2. Use: build, clean, run, debug, start, stop, restart, status" ;;
         esac
         ;;
     gui)
         case "$2" in
             build) vite_build ;;
             run)   vite_run ;;
-            *) error "Unknown gui command: $2. Use: build, run" ;;
+            clean) vite_clean ;;
+            *) error "Unknown gui command: $2. Use: build, clean, run" ;;
         esac
         ;;
     git)
@@ -1436,8 +1705,10 @@ case "$1" in
     module)
         case "$2" in
             export) shift 2; module_export "$@" ;;
-            import) module_import "$3" ;;
-            *) error "Unknown module command: $2. Use: export, import" ;;
+            import) shift 2; module_import "$@" ;;
+            dist)   shift 2; module_dist "$@" ;;
+            remove) shift 2; module_remove "$@" ;;
+            *) error "Unknown module command: $2. Use: export, import, dist, remove" ;;
         esac
         ;;
     -h|--help|help|"")
