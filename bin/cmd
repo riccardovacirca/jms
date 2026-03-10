@@ -51,6 +51,7 @@ Usage: cmd COMMAND [OPTIONS]
   git update                       Update git config and remote URL from .env
 
   db                               Open interactive PostgreSQL CLI
+  db -c <sql>                      Execute inline SQL query
   db -f <file>                     Execute SQL or CSV file
   db status                        Show app DB config, connection health and migrations
   db setup                         Create user and database from .env file
@@ -58,8 +59,10 @@ Usage: cmd COMMAND [OPTIONS]
 
   sync                             Sync using .sync config file in project root
 
-  module import <file.tar.gz>       Extract module and install it into the project (Java, GUI, migration, config)
-  module export <name> [-v 1.2.3]   Export module to tar.gz (default: modules/<name>.tar.gz, or modules/<name>-1.2.3.tar.gz with -v)
+  module import <path>              Install module from path relative to modules/ (folder or .tar.gz)
+  module export --name <n> [-v x]   Export current project module to modules/<name>[-version]/
+  module dist <path>                Package module folder (relative to modules/) → dist/<name>-<version>.tar.gz
+  module remove --name <nome>       Remove installed module
 
   bench [options]                  Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 
@@ -740,6 +743,19 @@ db_cli() {
     fi
 }
 
+db_cli_query() {
+    load_env
+    local SQL="$1"
+
+    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+
+    export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
+    local PG_HOST="${PGSQL_HOST:-postgres}"
+    local PG_PORT="${PGSQL_PORT:-5432}"
+
+    psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" -c "$SQL"
+}
+
 db_reset() {
     load_env
     [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
@@ -1056,13 +1072,10 @@ if notice:
 
 module_import() {
     local INPUT="$1"
-    [ -n "$INPUT" ] || error "Usage: cmd module import <archivio.tar.gz | cartella>"
+    [ -n "$INPUT" ] || error "Usage: cmd module import <path>"
 
-    # Resolve path: se non contiene / cerca in modules/
-    case "$INPUT" in
-        */*) ;;
-        *) INPUT="$WORKSPACE/modules/$INPUT" ;;
-    esac
+    # Path sempre relativo a modules/
+    INPUT="$WORKSPACE/modules/$INPUT"
 
     local MODULE_DIR
     local TMP_DIR=""
@@ -1376,24 +1389,23 @@ print('OK')
 # ============================================================================
 
 module_dist() {
-    local FOLDER_NAME=""
+    local REL_PATH="$1"
+    [ -n "$REL_PATH" ] || error "Usage: cmd module dist <path>"
 
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --name)
-                [ -n "$2" ] || error "--name richiede un valore"
-                FOLDER_NAME="$2"; shift 2 ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module dist --name <nome-versione>" ;;
-            *) error "Usage: cmd module dist --name <nome-versione>" ;;
-        esac
-    done
-
-    [ -n "$FOLDER_NAME" ] || error "Usage: cmd module dist --name <nome-versione>"
-
-    local SRC="$WORKSPACE/modules/$FOLDER_NAME"
+    local SRC="$WORKSPACE/modules/$REL_PATH"
     [ -d "$SRC" ] || error "Cartella non trovata: $SRC"
+    [ -f "$SRC/module.json" ] || error "module.json non trovato in: $SRC"
 
-    local OUTPUT="$WORKSPACE/modules/${FOLDER_NAME}.tar.gz"
+    local NAME VERSION
+    NAME=$(python3 -c "import json; print(json.load(open('$SRC/module.json'))['name'])" 2>/dev/null)
+    VERSION=$(python3 -c "import json; print(json.load(open('$SRC/module.json'))['version'])" 2>/dev/null)
+    [ -n "$NAME" ] || error "Impossibile leggere 'name' da module.json"
+    [ -n "$VERSION" ] || error "Impossibile leggere 'version' da module.json"
+
+    local DIST_DIR="$WORKSPACE/dist"
+    mkdir -p "$DIST_DIR"
+
+    local OUTPUT="$DIST_DIR/${NAME}-${VERSION}.tar.gz"
     COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -C "$SRC" .
     success "Archivio creato → $OUTPUT"
 }
@@ -1685,6 +1697,9 @@ case "$1" in
         elif [ "$1" = "-f" ]; then
             [ -n "$2" ] || error "Option -f requires a file path"
             db_cli "$2"
+        elif [ "$1" = "-c" ]; then
+            [ -n "$2" ] || error "Option -c requires a SQL query"
+            db_cli_query "$2"
         elif [ "$1" = "status" ]; then
             db_status
         elif [ "$1" = "reset" ]; then
@@ -1692,7 +1707,7 @@ case "$1" in
         elif [ "$1" = "setup" ]; then
             db_setup
         else
-            error "Unknown db option: $1. Use: db, db -f <file>, db status, db reset, db setup"
+            error "Unknown db option: $1. Use: db, db -c <sql>, db -f <file>, db status, db reset, db setup"
         fi
         ;;
     sync)

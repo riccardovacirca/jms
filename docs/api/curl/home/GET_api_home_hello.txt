@@ -1,2 +1,0 @@
-curl -s http://localhost:8080/api/home/hello \
-  -b cookies.txt

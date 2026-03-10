@@ -99,7 +99,7 @@ src/main/resources/modules/<nome>/ ← Tracker moduli installati
   },
   "gui": {
     "config": {
-      "route": "/auth",
+      "route": "/accounts",
       "path": "auth",
       "container": "main",
       "authorization": null,

@@ -9,7 +9,7 @@ export async function login(username, password) {
   error.set(null);
 
   try {
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch('/api/accounts/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -33,7 +33,7 @@ export async function login(username, password) {
 }
 
 export async function logout() {
-  await fetch('/api/auth/logout', {
+  await fetch('/api/accounts/logout', {
     method: 'POST',
     credentials: 'include'
   });
@@ -42,7 +42,7 @@ export async function logout() {
 
 export async function checkSession() {
   try {
-    const response = await fetch('/api/auth/session', {
+    const response = await fetch('/api/accounts/session', {
       credentials: 'include'
     });
 

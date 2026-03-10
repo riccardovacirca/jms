@@ -29,8 +29,8 @@ cmd db setup             # Create user and database from .env file
 cmd db reset             # Drop + recreate database (destructive!)
 cmd sync                 # Sync sources → jms/ (requires confirmation)
 cmd module export --name <nome> [--vers 1.2.3]  # Esporta modulo in cartella modules/<nome>[-version]/
-cmd module dist --name <nome-versione>           # Comprime cartella → modules/<nome-versione>.tar.gz
-cmd module import <archivio.tar.gz | cartella>   # Installa modulo (accetta archivio o cartella estratta)
+cmd module import <path>                         # Installa modulo da path relativo a modules/ (cartella o .tar.gz)
+cmd module dist <path>                           # Pacchettizza modulo (path relativo a modules/) → dist/<nome>-<vers>.tar.gz
 cmd module remove --name <nome>                  # Disinstalla modulo usando il tracker installato
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
@@ -263,7 +263,7 @@ Router and modules subscribe to these stores for reactive updates.
 
 ### Database Migrations
 
-Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__create_users.sql`). The base scaffold has no migrations — they are introduced by modules.
+Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__{description}.sql` where timestamp format is `YYYYMMdd_HHmmss` (e.g., `V20260222_163602__auth.sql`). The base scaffold has no migrations — they are introduced by modules.
 
 ### Docker / Deployment
 
@@ -300,7 +300,7 @@ Clone it with the project name to start a new project — the Java source struct
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
 - `config/application.properties` — Config template with placeholders substituted by `install.sh`
 - `vite/` — Frontend base template (router, stores, init, empty modules/), copied to `vite/` by `install.sh` when creating a new project
-- `modules/` — Module sources in expanded folder format: `auth-1.1.0/`, `header-1.0.0/`, `home-1.0.0/`, `contatti-1.0.0/`, `users-1.0.0/`
+- `modules/` — Module sources in expanded folder format organized in subdirectories (`common/`, `crm/`, etc.)
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
@@ -317,7 +317,7 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
 ```json
 {
   "name": "auth",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "dependencies": {},
   "api": {
     "routes": "dev.jms.app.auth.Routes.register(paths, ds, config);",
@@ -335,20 +335,20 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
 
 **Export** un modulo dal progetto corrente in cartella non compressa:
 ```bash
-cmd module export --name auth --vers 1.1.0   # → modules/auth-1.1.0/
+cmd module export --name auth --vers 1.0.0   # → modules/auth-1.0.0/
 cmd module export --name auth                # → modules/auth/
 ```
 Export legge automaticamente `*Routes.java` (per i metadati API) e `vite/src/config.js` (per l'entry GUI).
 
-**Dist** comprime una cartella di modulo in archivio distribuibile:
+**Dist** pacchettizza una cartella di modulo in archivio distribuibile. Il path è relativo a `modules/`; nome e versione vengono letti da `module.json`; l'archivio viene scritto in `dist/`:
 ```bash
-cmd module dist --name auth-1.1.0   # modules/auth-1.1.0/ → modules/auth-1.1.0.tar.gz
+cmd module dist common/auth   # → dist/auth-1.0.0.tar.gz
 ```
 
-**Import** installa un modulo da archivio `.tar.gz` o da cartella estratta:
+**Import** installa un modulo da cartella o archivio `.tar.gz`. Il path è sempre relativo a `modules/`:
 ```bash
-cmd module import modules/auth-1.1.0.tar.gz   # da archivio
-cmd module import modules/auth-1.1.0           # da cartella
+cmd module import common/auth              # da cartella
+cmd module import common/auth-1.0.0.tar.gz  # da archivio
 ```
 Import automaticamente:
 1. Verifica dipendenze da `module.json` (avvisa se mancanti, controlla tracker installati)
@@ -373,12 +373,12 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, tracker. 
 
 **Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/Routes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
 
-**Available modules** (in `jms/modules/`, expanded folders):
-- `auth-1.1.0/` — Complete authentication system with token-based password reset (no dependencies)
-- `header-1.0.0/` — Persistent navigation header (no dependencies)
-- `home-1.0.0/` — Simple home page with API hello endpoint (no dependencies)
-- `users-1.0.0/` — User management (no dependencies)
-- `contatti-1.0.0/` — Contact management module (requires: auth)
+**Available modules** (in `modules/`, expanded folders organized in subdirectories):
+- `common/auth/` — Autenticazione (login, logout, sessione, 2FA, reset/change password); route `/auth`, pubblico
+- `common/account/` — Gestione account utenti (CRUD admin, self-edit operatore); route `/account`, richiede `auth`
+- `common/header/` — Persistent navigation header (no dependencies)
+- `common/home/` — Simple home page with API hello endpoint (no dependencies)
+- `crm/contatti/` — Contact management module (requires: `auth`)
 
 All modules follow the complete configuration schema with all 7 attributes (`route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 

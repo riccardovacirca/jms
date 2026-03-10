@@ -124,7 +124,7 @@ Simulates realistic user behavior with think time.
 ### 4. POST request with JSON payload
 
 ```bash
-docker exec -it myproject bash -c 'cmd bench -c 5 -r 10 --content-type="application/json" --header="Content-Length: 45" "http://localhost:8080/api/auth/login POST {\"username\":\"admin\",\"password\":\"test\"}"'
+docker exec -it myproject bash -c 'cmd bench -c 5 -r 10 --content-type="application/json" --header="Content-Length: 45" "http://localhost:8080/api/accounts/login POST {\"username\":\"admin\",\"password\":\"test\"}"'
 ```
 
 ### 5. Multiple endpoints from file
@@ -135,7 +135,7 @@ docker exec -it myproject bash -c 'cmd bench -c 5 -r 10 --content-type="applicat
 cat > urls.txt <<EOF
 http://localhost:8080/api/status
 http://localhost:8080/api/home/hello
-http://localhost:8080/api/auth/session
+http://localhost:8080/api/accounts/session
 EOF
 ```
 

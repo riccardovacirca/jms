@@ -1,0 +1,25 @@
+{
+    "name": "account",
+    "version": "1.0.0",
+    "dependencies": {
+        "auth": "^1.0.0"
+    },
+    "api": {
+        "routes": "dev.jms.app.account.Routes.register(paths, ds, config);",
+        "config": {}
+    },
+    "gui": {
+        "config": {
+            "route": "/account",
+            "path": "account",
+            "container": "main",
+            "authorization": {
+                "redirectTo": "/auth"
+            },
+            "persistent": false,
+            "priority": 999,
+            "init": null
+        }
+    },
+    "install_notice": null
+}
