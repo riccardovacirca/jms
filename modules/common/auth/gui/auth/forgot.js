@@ -1,12 +1,11 @@
 import { LitElement, html } from 'lit';
-import { authorized, user } from '../../store.js';
-import { MODULE_CONFIG, DEFAULT_MODULE } from '../../config.js';
 
-class AuthLoginPage extends LitElement {
+class AuthForgotPage extends LitElement {
 
   static properties = {
     _loading: { state: true },
     _error:   { state: true },
+    _success: { state: true },
   };
 
   createRenderRoot() { return this; }
@@ -15,6 +14,7 @@ class AuthLoginPage extends LitElement {
     super();
     this._loading = false;
     this._error   = null;
+    this._success = null;
   }
 
   _onKeydown(e) {
@@ -24,28 +24,22 @@ class AuthLoginPage extends LitElement {
   async _submit() {
     this._loading = true;
     this._error   = null;
+    this._success = null;
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: this.querySelector('#username').value,
-          password: this.querySelector('#password').value,
+          username:   this.querySelector('#username').value,
+          reset_link: window.location.origin + '/#/auth/reset',
         })
       });
       const data = await res.json();
-      if (!res.ok || data.err) throw new Error(data.log || 'Credenziali non valide');
-
-      authorized.set(true);
-      user.set(data.out);
-
-      if (data.out.must_change_password) {
-        window.location.hash = '/auth/changepass';
-      } else {
-        window.location.hash = MODULE_CONFIG[DEFAULT_MODULE].route;
-      }
+      if (!res.ok || data.err) throw new Error(data.log || 'Errore durante il recupero password');
+      this._success = "Se l'utente esiste, riceverà una password temporanea via email.";
     } catch (e) {
-      this._error   = e.message;
+      this._error = e.message;
+    } finally {
       this._loading = false;
     }
   }
@@ -54,29 +48,24 @@ class AuthLoginPage extends LitElement {
     return html`
       <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
         <div style="width:100%;max-width:360px">
-          <h4 class="mb-4">Accedi</h4>
-          ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
+          <h4 class="mb-4">Recupera password</h4>
+          ${this._error   ? html`<div class="alert alert-danger py-2">${this._error}</div>`   : ''}
+          ${this._success ? html`<div class="alert alert-success py-2">${this._success}</div>` : ''}
           <div class="mb-3">
             <label class="form-label" for="username">Username</label>
             <input id="username" class="form-control"
                    ?disabled=${this._loading}
                    @keydown=${this._onKeydown}>
           </div>
-          <div class="mb-3">
-            <label class="form-label" for="password">Password</label>
-            <input id="password" type="password" class="form-control"
-                   ?disabled=${this._loading}
-                   @keydown=${this._onKeydown}>
-          </div>
           <button class="btn btn-primary w-100"
                   ?disabled=${this._loading}
                   @click=${this._submit}>
-            ${this._loading ? 'Accesso in corso...' : 'Accedi'}
+            ${this._loading ? 'Invio in corso...' : 'Invia password temporanea'}
           </button>
           <div class="text-center mt-3">
             <button class="btn btn-link btn-sm p-0 text-muted"
-                    @click=${() => { window.location.hash = '/auth/forgot'; }}>
-              Password dimenticata?
+                    @click=${() => { window.location.hash = '/auth'; }}>
+              ← Torna al login
             </button>
           </div>
         </div>
@@ -85,4 +74,4 @@ class AuthLoginPage extends LitElement {
   }
 }
 
-customElements.define('auth-login-page', AuthLoginPage);
+customElements.define('auth-forgot-page', AuthForgotPage);

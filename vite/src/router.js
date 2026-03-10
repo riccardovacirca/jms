@@ -31,8 +31,9 @@ class Router
    * garantire che authorized e user siano già impostati al primo routing.
    */
   constructor() {
-    this.containers = {};  // Map: containerId -> HTMLElement
-    this.currentModule = null;  // Modulo corrente montato nell'area main
+    this.containers = {};          // Map: containerId -> HTMLElement
+    this.currentModule = null;     // Nome del modulo corrente montato nell'area main
+    this.currentModuleInstance = null;  // Istanza del modulo corrente (per chiamare unmount())
     this._navId = 0;
     this._init();
   }
@@ -118,7 +119,11 @@ class Router
     const hash = window.location.hash.slice(1).split('?')[0];
 
     const moduleName = hash
-      ? Object.keys(MODULE_CONFIG).find(name => MODULE_CONFIG[name].route === hash)
+      ? Object.keys(MODULE_CONFIG).find(name => {
+          const route = MODULE_CONFIG[name].route;
+          if (!route) return false;
+          return hash === route || hash.startsWith(route + '/');
+        })
       : DEFAULT_MODULE;
 
     if (!moduleName) {
@@ -185,9 +190,11 @@ class Router
 
       const container = this._getContainer(config.container);
       if (container) {
+        this.currentModuleInstance?.unmount?.();
         container.innerHTML = '';
         module.default.mount(container);
         this.currentModule = moduleName;
+        this.currentModuleInstance = module.default;
       } else {
         console.error(`[Router] Container "${config.container}" not found for module "${moduleName}"`);
         this.showStatus('main', 'Errore di configurazione');
@@ -195,6 +202,7 @@ class Router
     } catch (err) {
       if (navId !== this._navId) return;
       this.currentModule = null;
+      this.currentModuleInstance = null;
       this.showStatus(config.container, 'Modulo non disponibile');
       console.error(`[Router] Failed to load module "${moduleName}":`, err);
     }

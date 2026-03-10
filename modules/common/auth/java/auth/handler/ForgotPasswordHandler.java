@@ -5,7 +5,6 @@ import {{APP_PACKAGE}}.auth.dao.AccountDAO;
 import {{APP_PACKAGE}}.auth.dao.PasswordResetDAO;
 import {{APP_PACKAGE}}.auth.dto.AccountAuthDTO;
 import {{APP_PACKAGE}}.auth.dto.ForgotPasswordDTO;
-import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Handler;
 import dev.jms.util.HttpRequest;
@@ -21,13 +20,6 @@ import java.util.HexFormat;
 public class ForgotPasswordHandler implements Handler
 {
   private static final Log log = Log.get(ForgotPasswordHandler.class);
-
-  private final String baseUrl;
-
-  public ForgotPasswordHandler(Config config)
-  {
-    this.baseUrl = config.get("app.base.url", "http://localhost:2350");
-  }
 
   /** Genera un token di reset, lo salva nel DB e invia il link all'email dell'account.
    *  Risponde sempre con successo per evitare user enumeration. */
@@ -47,7 +39,7 @@ public class ForgotPasswordHandler implements Handler
         bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);
         token = HexFormat.of().formatHex(bytes);
-        resetLink = baseUrl + "/#/auth?token=" + token;
+        resetLink = input.resetLink() + "?token=" + token;
         new PasswordResetDAO(db).saveToken(account.id(), token);
         Mail.get().send(
           account.email(),

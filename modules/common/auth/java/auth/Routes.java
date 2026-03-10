@@ -25,7 +25,7 @@ public class Routes
     paths.add("/api/auth/refresh",         new HandlerAdapter(new RefreshHandler(), ds));
     paths.add("/api/auth/session",         new HandlerAdapter(new SessionHandler(), ds));
     paths.add("/api/auth/2fa",             new HandlerAdapter(new TwoFactorHandler(), ds));
-    paths.add("/api/auth/forgot-password", new HandlerAdapter(new ForgotPasswordHandler(config), ds));
+    paths.add("/api/auth/forgot-password", new HandlerAdapter(new ForgotPasswordHandler(), ds));
     paths.add("/api/auth/reset-password",  new HandlerAdapter(new ResetPasswordHandler(), ds));
     paths.add("/api/auth/change-password", new HandlerAdapter(new ChangePasswordHandler(), ds));
   }

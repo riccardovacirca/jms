@@ -1,10 +1,11 @@
 import { LitElement, html } from 'lit';
+import { authorized, user } from '../../store.js';
 
-class ChangepassComponent extends LitElement {
+class AuthChangepassPage extends LitElement {
 
   static properties = {
     _loading: { state: true },
-    _error:   { state: true }
+    _error:   { state: true },
   };
 
   createRenderRoot() { return this; }
@@ -13,41 +14,6 @@ class ChangepassComponent extends LitElement {
     super();
     this._loading = false;
     this._error   = null;
-  }
-
-  render() {
-    return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
-          <h4 class="mb-1">Imposta nuova password</h4>
-          <p class="text-muted small mb-4">La password temporanea deve essere modificata prima di continuare.</p>
-          ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
-          <div class="mb-3">
-            <label class="form-label" for="current_password">Password attuale</label>
-            <input id="current_password" type="password" class="form-control"
-                   ?disabled=${this._loading}
-                   @keydown=${this._onKeydown}>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="new_password">Nuova password</label>
-            <input id="new_password" type="password" class="form-control"
-                   ?disabled=${this._loading}
-                   @keydown=${this._onKeydown}>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="confirm_password">Conferma nuova password</label>
-            <input id="confirm_password" type="password" class="form-control"
-                   ?disabled=${this._loading}
-                   @keydown=${this._onKeydown}>
-          </div>
-          <button class="btn btn-primary w-100"
-                  ?disabled=${this._loading}
-                  @click=${this._submit}>
-            ${this._loading ? 'Salvataggio in corso...' : 'Imposta password'}
-          </button>
-        </div>
-      </div>
-    `;
   }
 
   _onKeydown(e) {
@@ -84,7 +50,7 @@ class ChangepassComponent extends LitElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           current_password: currentPassword,
-          new_password:     newPassword
+          new_password:     newPassword,
         })
       });
       const data = await res.json();
@@ -93,15 +59,52 @@ class ChangepassComponent extends LitElement {
       try {
         await fetch('/api/auth/logout', { method: 'POST' });
       } finally {
-        this.dispatchEvent(new CustomEvent('password-changed', { bubbles: true }));
+        authorized.set(false);
+        user.set(null);
+        window.location.hash = '/auth';
       }
     } catch (e) {
       this._error   = e.message;
       this._loading = false;
     }
   }
+
+  render() {
+    return html`
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+        <div style="width:100%;max-width:360px">
+          <h4 class="mb-1">Imposta nuova password</h4>
+          <p class="text-muted small mb-4">
+            La password temporanea deve essere modificata prima di continuare.
+          </p>
+          ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
+          <div class="mb-3">
+            <label class="form-label" for="current_password">Password attuale</label>
+            <input id="current_password" type="password" class="form-control"
+                   ?disabled=${this._loading}
+                   @keydown=${this._onKeydown}>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="new_password">Nuova password</label>
+            <input id="new_password" type="password" class="form-control"
+                   ?disabled=${this._loading}
+                   @keydown=${this._onKeydown}>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="confirm_password">Conferma nuova password</label>
+            <input id="confirm_password" type="password" class="form-control"
+                   ?disabled=${this._loading}
+                   @keydown=${this._onKeydown}>
+          </div>
+          <button class="btn btn-primary w-100"
+                  ?disabled=${this._loading}
+                  @click=${this._submit}>
+            ${this._loading ? 'Salvataggio in corso...' : 'Imposta password'}
+          </button>
+        </div>
+      </div>
+    `;
+  }
 }
 
-customElements.define('changepass-layout', ChangepassComponent);
-
-export default ChangepassComponent;
+customElements.define('auth-changepass-page', AuthChangepassPage);
