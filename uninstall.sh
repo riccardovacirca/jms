@@ -7,13 +7,13 @@
 #
 # Removes:
 #   - Development container (PROJECT_NAME)
-#   - Development image (PROJECT_NAME-dev:latest)
-#   - PostgreSQL container (PROJECT_NAME-db) and volume
+#   - Development image (PROJECT_NAME-image)
+#   - PostgreSQL container (PROJECT_NAME-db), image (PROJECT_NAME-db-image) and volume
+#   - Mailpit container (PROJECT_NAME-mail) and image (PROJECT_NAME-mail-image)
 #   - Docker network (DEV_NETWORK)
 #
 # Preserves:
 #   - Source code, .env, logs/, config/
-#   - Standalone PostgreSQL and Mailpit containers
 #
 # =============================================================================
 set -e
@@ -27,35 +27,47 @@ echo "Loading configuration from .env..."
 . ./.env
 
 DEV_CONTAINER="$PROJECT_NAME"
-DEV_IMAGE="${PROJECT_NAME}-dev:latest"
+DEV_IMAGE="${PROJECT_NAME}-image"
 PG_CONTAINER="${PROJECT_NAME}-db"
-PG_VOLUME="${PG_CONTAINER}-data"
+PG_IMAGE="${PROJECT_NAME}-db-image"
+PG_VOLUME="${PROJECT_NAME}-db-volume"
+MAIL_CONTAINER="${PROJECT_NAME}-mail"
+MAIL_IMAGE="${PROJECT_NAME}-mail-image"
 
 echo ""
 echo "Configuration:"
-echo "  Dev container:  $DEV_CONTAINER"
-echo "  Dev image:      $DEV_IMAGE"
-echo "  PG container:   $PG_CONTAINER"
-echo "  PG volume:      $PG_VOLUME"
-echo "  Network:        $DEV_NETWORK"
+echo "  Dev container:    $DEV_CONTAINER"
+echo "  Dev image:        $DEV_IMAGE"
+echo "  PG container:     $PG_CONTAINER"
+echo "  PG image:         $PG_IMAGE"
+echo "  PG volume:        $PG_VOLUME"
+echo "  Mail container:   $MAIL_CONTAINER"
+echo "  Mail image:       $MAIL_IMAGE"
+echo "  Network:          $DEV_NETWORK"
 echo ""
 
 # Check what exists
 CONTAINER_EXISTS=$(docker ps -a --format "{{.Names}}" | grep -q "^${DEV_CONTAINER}$" && echo "true" || echo "false")
-IMAGE_EXISTS=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${DEV_IMAGE}$" && echo "true" || echo "false")
+IMAGE_EXISTS=$(docker images --format "{{.Repository}}" | grep -q "^${DEV_IMAGE}$" && echo "true" || echo "false")
 PG_CONTAINER_EXISTS=$(docker ps -a --format "{{.Names}}" | grep -q "^${PG_CONTAINER}$" && echo "true" || echo "false")
+PG_IMAGE_EXISTS=$(docker images --format "{{.Repository}}" | grep -q "^${PG_IMAGE}$" && echo "true" || echo "false")
 PG_VOLUME_EXISTS=$(docker volume ls --format "{{.Name}}" | grep -q "^${PG_VOLUME}$" && echo "true" || echo "false")
+MAIL_CONTAINER_EXISTS=$(docker ps -a --format "{{.Names}}" | grep -q "^${MAIL_CONTAINER}$" && echo "true" || echo "false")
+MAIL_IMAGE_EXISTS=$(docker images --format "{{.Repository}}" | grep -q "^${MAIL_IMAGE}$" && echo "true" || echo "false")
 NETWORK_EXISTS=$(docker network ls --format "{{.Name}}" | grep -q "^${DEV_NETWORK}$" && echo "true" || echo "false")
 
 echo "Found:"
 [ "$CONTAINER_EXISTS" = "true" ] && echo "  ✓ Dev container" || echo "  ✗ Dev container"
 [ "$IMAGE_EXISTS" = "true" ] && echo "  ✓ Dev image" || echo "  ✗ Dev image"
 [ "$PG_CONTAINER_EXISTS" = "true" ] && echo "  ✓ PostgreSQL container" || echo "  ✗ PostgreSQL container"
+[ "$PG_IMAGE_EXISTS" = "true" ] && echo "  ✓ PostgreSQL image" || echo "  ✗ PostgreSQL image"
 [ "$PG_VOLUME_EXISTS" = "true" ] && echo "  ✓ PostgreSQL volume" || echo "  ✗ PostgreSQL volume"
+[ "$MAIL_CONTAINER_EXISTS" = "true" ] && echo "  ✓ Mailpit container" || echo "  ✗ Mailpit container"
+[ "$MAIL_IMAGE_EXISTS" = "true" ] && echo "  ✓ Mailpit image" || echo "  ✗ Mailpit image"
 [ "$NETWORK_EXISTS" = "true" ] && echo "  ✓ Network" || echo "  ✗ Network"
 echo ""
 
-if [ "$CONTAINER_EXISTS" = "false" ] && [ "$IMAGE_EXISTS" = "false" ] && [ "$PG_CONTAINER_EXISTS" = "false" ] && [ "$PG_VOLUME_EXISTS" = "false" ] && [ "$NETWORK_EXISTS" = "false" ]; then
+if [ "$CONTAINER_EXISTS" = "false" ] && [ "$IMAGE_EXISTS" = "false" ] && [ "$PG_CONTAINER_EXISTS" = "false" ] && [ "$PG_IMAGE_EXISTS" = "false" ] && [ "$PG_VOLUME_EXISTS" = "false" ] && [ "$MAIL_CONTAINER_EXISTS" = "false" ] && [ "$MAIL_IMAGE_EXISTS" = "false" ] && [ "$NETWORK_EXISTS" = "false" ]; then
     echo "Nothing to remove"
     exit 0
 fi
@@ -93,10 +105,32 @@ if [ "$PG_CONTAINER_EXISTS" = "true" ]; then
     docker rm "$PG_CONTAINER" >/dev/null
 fi
 
+# Remove PostgreSQL image
+if [ "$PG_IMAGE_EXISTS" = "true" ]; then
+    echo "Removing PostgreSQL image..."
+    docker rmi "$PG_IMAGE" >/dev/null 2>&1 || echo "WARNING: Could not remove PostgreSQL image"
+fi
+
 # Remove PostgreSQL volume
 if [ "$PG_VOLUME_EXISTS" = "true" ]; then
     echo "Removing PostgreSQL volume..."
     docker volume rm "$PG_VOLUME" >/dev/null
+fi
+
+# Remove Mailpit container
+if [ "$MAIL_CONTAINER_EXISTS" = "true" ]; then
+    if docker ps --format "{{.Names}}" | grep -q "^${MAIL_CONTAINER}$"; then
+        echo "Stopping Mailpit container..."
+        docker stop "$MAIL_CONTAINER" >/dev/null
+    fi
+    echo "Removing Mailpit container..."
+    docker rm "$MAIL_CONTAINER" >/dev/null
+fi
+
+# Remove Mailpit image
+if [ "$MAIL_IMAGE_EXISTS" = "true" ]; then
+    echo "Removing Mailpit image..."
+    docker rmi "$MAIL_IMAGE" >/dev/null 2>&1 || echo "WARNING: Could not remove Mailpit image"
 fi
 
 # Remove network (only if empty)

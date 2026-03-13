@@ -217,9 +217,9 @@ MAILPIT_CONTAINER=PROJECT_DIR_PLACEHOLDER-mail
 MAILPIT_IMAGE=axllent/mailpit
 MAILPIT_HOST=PROJECT_DIR_PLACEHOLDER-mail
 MAILPIT_SMTP_PORT=1025
-MAILPIT_SMTP_PORT_HOST=1025
+MAILPIT_SMTP_PORT_HOST=2325
 MAILPIT_UI_PORT=8025
-MAILPIT_UI_PORT_HOST=8025
+MAILPIT_UI_PORT_HOST=2335
 MAILPIT_USER=
 MAILPIT_PASSWORD=
 
@@ -247,10 +247,11 @@ install_postgres() {
 
     local CONTAINER_NAME="$PGSQL_HOST"
     local IMAGE="${PGSQL_IMAGE:-postgres:16}"
+    local LOCAL_TAG="${PROJECT_NAME}-db-image"
     local ROOT_USER="${PGSQL_ROOT_USER:-postgres}"
     local ROOT_PASSWORD="${PGSQL_ROOT_PASSWORD:-postgres}"
     local PORT_HOST="${PGSQL_PORT_HOST:-5432}"
-    local VOLUME="${CONTAINER_NAME}-data"
+    local VOLUME="${PROJECT_NAME}-db-volume"
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
         echo "PostgreSQL container '$CONTAINER_NAME' already exists."
@@ -269,9 +270,13 @@ install_postgres() {
         docker network create "$DEV_NETWORK" >/dev/null
     fi
 
-    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
-        echo "Pulling PostgreSQL image..."
-        docker pull "$IMAGE"
+    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${LOCAL_TAG}:latest$"; then
+        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
+            echo "Pulling PostgreSQL image..."
+            docker pull "$IMAGE"
+        fi
+        echo "Tagging PostgreSQL image as '$LOCAL_TAG:latest'..."
+        docker tag "$IMAGE" "$LOCAL_TAG:latest"
     fi
 
     echo "Creating PostgreSQL container '$CONTAINER_NAME'..."
@@ -282,7 +287,7 @@ install_postgres() {
         -e POSTGRES_PASSWORD="$ROOT_PASSWORD" \
         -p "${PORT_HOST}:5432" \
         -v "${VOLUME}:/var/lib/postgresql/data" \
-        "$IMAGE" >/dev/null
+        "$LOCAL_TAG:latest" >/dev/null
 
     echo "Waiting for PostgreSQL to be ready..."
     local MAX_WAIT=30
@@ -326,8 +331,9 @@ install_mailpit() {
 
     local CONTAINER_NAME="$MAILPIT_CONTAINER"
     local IMAGE="${MAILPIT_IMAGE:-axllent/mailpit}"
-    local SMTP_PORT_HOST="${MAILPIT_SMTP_PORT_HOST:-1025}"
-    local UI_PORT_HOST="${MAILPIT_UI_PORT_HOST:-8025}"
+    local LOCAL_TAG="${PROJECT_NAME}-mail-image"
+    local SMTP_PORT_HOST="${MAILPIT_SMTP_PORT_HOST:-2325}"
+    local UI_PORT_HOST="${MAILPIT_UI_PORT_HOST:-2335}"
 
     if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
         echo "Mailpit container '$CONTAINER_NAME' already exists."
@@ -346,9 +352,13 @@ install_mailpit() {
         docker network create "$DEV_NETWORK" >/dev/null
     fi
 
-    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
-        echo "Pulling Mailpit image..."
-        docker pull "$IMAGE"
+    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${LOCAL_TAG}:latest$"; then
+        if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${IMAGE}$"; then
+            echo "Pulling Mailpit image..."
+            docker pull "$IMAGE"
+        fi
+        echo "Tagging Mailpit image as '$LOCAL_TAG:latest'..."
+        docker tag "$IMAGE" "$LOCAL_TAG:latest"
     fi
 
     echo "Creating Mailpit container '$CONTAINER_NAME'..."
@@ -357,7 +367,7 @@ install_mailpit() {
         --network "$DEV_NETWORK" \
         -p "${SMTP_PORT_HOST}:1025" \
         -p "${UI_PORT_HOST}:8025" \
-        "$IMAGE" >/dev/null
+        "$LOCAL_TAG:latest" >/dev/null
 
     echo ""
     echo "Done"
@@ -400,7 +410,7 @@ install_dev() {
         fi
 
         echo "Building development image..."
-        docker build -t "$PROJECT_NAME-dev:latest" -f docker/Dockerfile.dev .
+        docker build -t "$PROJECT_NAME-image" -f docker/Dockerfile.dev .
 
         mkdir -p logs
         echo "Starting development container..."
@@ -414,7 +424,7 @@ install_dev() {
             -p "$VITE_PORT_HOST:$VITE_PORT" \
             -p "$DEBUG_PORT_HOST:$DEBUG_PORT" \
             --network "$DEV_NETWORK" \
-            "$PROJECT_NAME-dev:latest" \
+            "$PROJECT_NAME-image" \
             tail -f /dev/null >/dev/null
     fi
 
