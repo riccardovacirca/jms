@@ -37,7 +37,7 @@ cmd bench [options]      # Run siege benchmark (options passed to siege, log to 
 
 **Note:** The `cmd` script is located in `bin/cmd` and is available in PATH inside the Docker container.
 
-### Directly (from `vite/` folder)
+### Directly (from `gui/` folder)
 ```bash
 npm run dev              # Dev server on port 5173 (proxy /api → :8080)
 npm run build            # Build → src/main/resources/static/
@@ -192,12 +192,12 @@ Key configuration parameters:
 
 **Excel utilities** (`dev.jms.util.excel`): `ExcelReader` parses `.xlsx` files; `ExcelImporter` handles full import with pluggable `MappingStrategy` (column mapping) and `NormalizationStrategy` (data normalization). `ExcelAnalyzer` provides preview/validation without loading the full file.
 
-### Frontend (`vite/`)
+### Frontend (`gui/`)
 
-Vite 6 SPA project with modular multi-container architecture. Sources in `vite/src/`, build output in `src/main/resources/static/` (bundled in JAR by Maven).
+Vite 6 SPA project with modular multi-container architecture. Sources in `gui/src/`, build output in `src/main/resources/static/` (bundled in JAR by Maven).
 
 ```
-vite/src/
+gui/src/
 ├── index.html           → Entry point with multi-area layout (header, main, footer)
 ├── router.js            → Multi-container SPA router with persistent modules support
 ├── config.js            → Module configuration template (no project-specific entries)
@@ -212,14 +212,14 @@ vite/src/
 - `#main` — For dynamic page content
 - `#footer` — For persistent modules like footers (optional)
 
-**Module pattern:** Each module is a directory in `vite/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration.
+**Module pattern:** Each module is a directory in `gui/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration.
 
 **Module configuration** (`config.js`): All modules declare these attributes explicitly:
 ```javascript
 export const MODULE_CONFIG = {
   moduleName: {
     route: '/path' | null,             // URL hash route or null (not navigable, e.g. header)
-    path: 'dirname' | null,            // Folder under vite/src/modules/ or null (no frontend module)
+    path: 'dirname' | null,            // Folder under gui/src/modules/ or null (no frontend module)
     container: 'main' | 'header' | 'footer',  // DOM container ID
     authorization: null | { redirectTo: '/route' },  // Access control
     persistent: true | false,          // persistent requires path !== null
@@ -234,10 +234,10 @@ export const DEFAULT_MODULE = 'status';
 
 `path: null` is reserved for routes handled entirely by the backend with no frontend module to mount. `persistent: true` with `path: null` is a configuration error — the router throws explicitly.
 
-A new installation includes `status` as the only pre-installed frontend module (`vite/src/modules/status/`), which calls `/api/status` and displays the result. It is the `DEFAULT_MODULE`.
+A new installation includes `status` as the only pre-installed frontend module (`gui/src/modules/status/`), which calls `/api/status` and displays the result. It is the `DEFAULT_MODULE`.
 
 **Adding a new module:**
-1. Create `vite/src/modules/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
+1. Create `gui/src/modules/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
 2. Add complete entry to `config.js` with `route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`
 3. Access via `http://localhost:5173/#/newmodule`
 
@@ -299,7 +299,7 @@ Clone it with the project name to start a new project — the Java source struct
 - `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
 - `config/application.properties` — Config template with placeholders substituted by `install.sh`
-- `vite/` — Frontend base template (router, stores, init, empty modules/), copied to `vite/` by `install.sh` when creating a new project
+- `gui/` — Frontend base template (router, stores, init, empty modules/), copied to `gui/` by `install.sh` when creating a new project
 - `modules/` — Module sources in expanded folder format (each module is a top-level subdirectory)
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
@@ -308,7 +308,7 @@ Clone it with the project name to start a new project — the Java source struct
 
 Self-contained optional features. In `jms/modules/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
 - `api/` — Java handlers, DAOs, DTOs, and `Routes.java` (content copied directly into `src/main/java/.../<module>/`)
-- `gui/` — Frontend module sources (content copied directly into `vite/src/modules/<module>/`)
+- `gui/` — Frontend module sources (content copied directly into `gui/src/modules/<module>/`)
 - `migration/` — Flyway SQL migrations
 - `config/` — Application properties
 - `module.json` — Module metadata (auto-generated by `cmd module export`)
@@ -338,7 +338,7 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
 cmd module export --name auth --vers 1.0.0   # → modules/auth-1.0.0/
 cmd module export --name auth                # → modules/auth/
 ```
-Export legge automaticamente `*Routes.java` (per i metadati API) e `vite/src/config.js` (per l'entry GUI).
+Export legge automaticamente `*Routes.java` (per i metadati API) e `gui/src/config.js` (per l'entry GUI).
 
 **Dist** pacchettizza una cartella di modulo in archivio distribuibile. Il path è relativo a `modules/`; nome e versione vengono letti da `module.json`; l'archivio viene scritto in `dist/`:
 ```bash
@@ -354,7 +354,7 @@ Import automaticamente:
 1. Verifica dipendenze da `module.json` (avvisa se mancanti, controlla tracker installati)
 2. Copia sorgenti Java, GUI, migration SQL
 3. Inserisce la chiamata `api.routes` in `App.java` dopo `// [MODULE_ROUTES]`
-4. Inserisce l'entry `gui.config` in `vite/src/config.js` dopo `// [MODULE_ENTRIES]`
+4. Inserisce l'entry `gui.config` in `gui/src/config.js` dopo `// [MODULE_ENTRIES]`
 5. Scrive il tracker in `src/main/resources/modules/<nome>/module.json`
 
 Solo un **passo manuale** può restare: `pom.xml` — aggiungere dipendenze Java esterne se richieste dal modulo.
@@ -369,7 +369,7 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, tracker. 
 
 **Markers required in host project:**
 - `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni di route dei moduli
-- `vite/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status` dentro `MODULE_CONFIG`
+- `gui/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status` dentro `MODULE_CONFIG`
 
 **Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/Routes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
 

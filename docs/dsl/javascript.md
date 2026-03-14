@@ -2,7 +2,7 @@
 
 ```
 version: 1.0
-scope:   vite/src/**/*.js
+scope:   gui/src/**/*.js
 ```
 
 ---

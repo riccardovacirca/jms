@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.user.handler;
+package {{APP_PACKAGE}}.auth.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
@@ -11,7 +11,7 @@ import dev.jms.util.Log;
 
 import java.util.HashMap;
 
-/** GET /api/users/generate-password — restituisce una password casuale valida per la policy. */
+/** GET /api/auth/generate-password — restituisce una password casuale valida per la policy. */
 public class GeneratePasswordHandler implements Handler
 {
   private static final Log log = Log.get(GeneratePasswordHandler.class);

@@ -1,6 +1,7 @@
 package {{APP_PACKAGE}}.auth;
 
 import {{APP_PACKAGE}}.auth.handler.AccountHandler;
+import {{APP_PACKAGE}}.auth.handler.GeneratePasswordHandler;
 import {{APP_PACKAGE}}.auth.handler.ChangePasswordHandler;
 import {{APP_PACKAGE}}.auth.handler.ForgotPasswordHandler;
 import {{APP_PACKAGE}}.auth.handler.LoginHandler;
@@ -21,8 +22,8 @@ public class Routes
   /** Registra le rotte /api/auth/*. */
   public static void register(PathTemplateHandler paths, DataSource ds, Config config)
   {
-    paths.add("/api/auth/account",         new HandlerAdapter(new AccountHandler(config), ds));
-    paths.add("/api/auth/account/{id}",    new HandlerAdapter(new AccountHandler(config), ds));
+    paths.add("/api/auth/account/generate-password", new HandlerAdapter(new GeneratePasswordHandler(), ds));
+    paths.add("/api/auth/account",                   new HandlerAdapter(new AccountHandler(), ds));
     paths.add("/api/auth/login",           new HandlerAdapter(new LoginHandler(), ds));
     paths.add("/api/auth/logout",          new HandlerAdapter(new LogoutHandler(), ds));
     paths.add("/api/auth/refresh",         new HandlerAdapter(new RefreshHandler(), ds));

@@ -21,13 +21,9 @@ function renderRoute(container) {
     return;
   }
 
-  if (section === 'account' && sub === 'edit') {
-    import('./account-edit.js').then(() => {
-      container.innerHTML = '<auth-account-edit-page></auth-account-edit-page>';
-    });
-  } else if (section === 'account') {
-    import('./account-list.js').then(() => {
-      container.innerHTML = '<auth-account-list-page></auth-account-list-page>';
+  if (section === 'account') {
+    import('./account.js').then(() => {
+      container.innerHTML = '<auth-account-page></auth-account-page>';
     });
   } else if (section === 'forgot') {
     import('./forgot.js').then(() => {

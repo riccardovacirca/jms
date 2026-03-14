@@ -1,22 +1,10 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-/** Restituisce la sezione corrente dall'hash: 'list' | 'edit'. */
-function parseSection() {
-  const parts = window.location.hash.replace(/^#\//, '').split('/');
-  return parts[1] === 'edit' ? 'edit' : 'list';
-}
-
 function renderRoute(container) {
-  const section = parseSection();
-  if (section === 'edit') {
-    import('./edit.js').then(() => {
-      container.innerHTML = '<user-edit-page></user-edit-page>';
-    });
-  } else {
-    import('./list.js').then(() => {
-      container.innerHTML = '<user-list-page></user-list-page>';
-    });
-  }
+  if (!window.location.hash.startsWith('#/user')) { return; }
+  import('./profile.js').then(() => {
+    container.innerHTML = '<user-profile-page></user-profile-page>';
+  });
 }
 
 let _handler = null;

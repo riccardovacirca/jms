@@ -354,7 +354,7 @@ app_status() {
 # Vite Operations
 # ============================================================================
 
-VITE_DIR="$WORKSPACE/vite"
+VITE_DIR="$WORKSPACE/gui"
 
 vite_build() {
     load_env
@@ -928,9 +928,9 @@ module_install() {
     # GUI sources
     if [ -d "$MODULE_DIR/gui" ]; then
         info "[module] Copia file GUI..."
-        mkdir -p "$WORKSPACE/vite/src/modules/$MODULE"
-        cp -r "$MODULE_DIR/gui/." "$WORKSPACE/vite/src/modules/$MODULE/"
-        success "  File GUI installati: vite/src/modules/$MODULE/"
+        mkdir -p "$WORKSPACE/gui/src/modules/$MODULE"
+        cp -r "$MODULE_DIR/gui/." "$WORKSPACE/gui/src/modules/$MODULE/"
+        success "  File GUI installati: gui/src/modules/$MODULE/"
     fi
 
     # Migration SQL (copy as-is, no timestamp rename)
@@ -969,7 +969,7 @@ if api:
     fi
 
     # Auto-insert config.js entry (after // [MODULE_ENTRIES] marker)
-    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    local CONFIG_JS="$WORKSPACE/gui/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         local CONFIG_ENTRY_KEY
         CONFIG_ENTRY_KEY=$(python3 -c "
@@ -1167,7 +1167,7 @@ module_export() {
 
     local PKG_PATH="${APP_PACKAGE//.//}"
     local JAVA_SRC="$WORKSPACE/src/main/java/$PKG_PATH/$MODULE"
-    local GUI_SRC="$WORKSPACE/vite/src/modules/$MODULE"
+    local GUI_SRC="$WORKSPACE/gui/src/modules/$MODULE"
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
     [ -d "$JAVA_SRC" ] || [ -d "$GUI_SRC" ] || error "Nessuna sorgente Java o GUI trovata per il modulo '$MODULE'"
@@ -1281,7 +1281,7 @@ print(json.dumps(data, indent=4))
 
     # Extract config.js entry for this module
     local CONFIG_JS_ENTRY="null"
-    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    local CONFIG_JS="$WORKSPACE/gui/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         CONFIG_JS_ENTRY=$(python3 -c "
 import re, json, sys
@@ -1453,7 +1453,7 @@ module_remove() {
     fi
 
     # GUI sources
-    local GUI_DIR="$WORKSPACE/vite/src/modules/$MODULE"
+    local GUI_DIR="$WORKSPACE/gui/src/modules/$MODULE"
     if [ -d "$GUI_DIR" ]; then
         rm -rf "$GUI_DIR"
         success "  Sorgenti GUI rimossi: $GUI_DIR"
@@ -1486,7 +1486,7 @@ with open('$APP_JAVA', 'w') as f:
     fi
 
     # Remove entry from config.js
-    local CONFIG_JS="$WORKSPACE/vite/src/config.js"
+    local CONFIG_JS="$WORKSPACE/gui/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         python3 -c "
 import re, sys

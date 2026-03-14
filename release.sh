@@ -246,9 +246,9 @@ info "Step 2/6: Building Vite frontend..."
 
 # DEBUG: If this fails, check:
 # - Node.js and npm are installed in container
-# - vite/package.json exists and is valid
+# - gui/package.json exists and is valid
 # - All npm dependencies are installed: cd vite && npm install
-# - Vite config is correct: vite/vite.config.js
+# - Vite config is correct: gui/vite.config.js
 
 docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd gui build" || {
     error "Failed to build Vite frontend. Check npm/vite logs above."

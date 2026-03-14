@@ -431,7 +431,7 @@ install_dev() {
     rm -f .gitignore
     cat > .gitignore << 'GITIGNORE'
 target/
-vite/node_modules/
+gui/node_modules/
 src/main/resources/static/
 docker/
 .env

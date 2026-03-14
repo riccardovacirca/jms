@@ -31,7 +31,7 @@ Project name (`myproject`) becomes:
 Creates:
 - Docker container with Java 21, Maven, Node.js, PostgreSQL client, siege
 - `config/application.properties` (substituted from `.env`)
-- `vite/` directory with npm dependencies
+- `gui/` directory with npm dependencies
 - `cmd` tool registered globally in container
 
 ### Optional: Install PostgreSQL

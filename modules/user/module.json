@@ -5,7 +5,7 @@
         "auth": "^1.0.0"
     },
     "api": {
-        "routes": "{{APP_PACKAGE}}.user.Routes.register(paths, ds, config);",
+        "routes": "dev.jms.app.user.Routes.register(paths, ds);",
         "config": {}
     },
     "gui": {

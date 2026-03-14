@@ -11,9 +11,9 @@
 !modules/**
 !src/
 !src/**
-!vite/
-!vite/**
-vite/node_modules/
+!gui/
+!gui/**
+gui/node_modules/
 !.vscode/
 !.vscode/**
 !CLAUDE.md

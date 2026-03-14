@@ -14,10 +14,10 @@ cmd module import modules/auth-1.1.0           # da cartella estratta
 **Automatic operations:**
 - Sostituisce il placeholder `{{APP_PACKAGE}}` con il package reale (solo per archivi)
 - Copia sorgenti Java in `src/main/java/<package>/<name>/`
-- Copia sorgenti GUI in `vite/src/modules/<name>/`
+- Copia sorgenti GUI in `gui/src/modules/<name>/`
 - Copia migration SQL in `src/main/resources/db/migration/`
 - Registra la route in `App.java` (dopo `// [MODULE_ROUTES]`)
-- Aggiunge l'entry in `vite/src/config.js` (dopo `// [MODULE_ENTRIES]`)
+- Aggiunge l'entry in `gui/src/config.js` (dopo `// [MODULE_ENTRIES]`)
 - Verifica dipendenze dal tracker (`src/main/resources/modules/`)
 - Scrive il tracker: `src/main/resources/modules/<nome>/module.json`
 
@@ -41,7 +41,7 @@ cmd module remove --name auth
 Legge il tracker installato (`src/main/resources/modules/auth/module.json`) e rimuove:
 - Sorgenti Java e GUI
 - Route da `App.java`
-- Entry da `vite/src/config.js`
+- Entry da `gui/src/config.js`
 - Il tracker stesso
 
 **Nota:** le migration Flyway non vengono rimosse automaticamente. Usare `cmd db reset` per ripristinare il database da zero.
@@ -55,7 +55,7 @@ cmd module export --name auth --vers 1.1.0   # → modules/auth-1.1.0/
 cmd module export --name auth                # → modules/auth/
 ```
 
-Genera automaticamente `module.json` leggendo `*Routes.java` e `vite/src/config.js`.
+Genera automaticamente `module.json` leggendo `*Routes.java` e `gui/src/config.js`.
 
 ### Dist (compressione archivio)
 
@@ -114,24 +114,24 @@ src/main/resources/modules/<nome>/ ← Tracker moduli installati
 
 - `api.routes` — chiamata statica da inserire in `App.java`
 - `api.config` — proprietà da aggiungere manualmente a `config/application.properties`
-- `gui.config` — entry da inserire in `vite/src/config.js`
+- `gui.config` — entry da inserire in `gui/src/config.js`
 - `install_notice` — messaggio opzionale mostrato al termine dell'installazione
 
 ## File base vs file modulo
 
 **File base** (NON modificare quando si lavora sui moduli):
 
-- `vite/src/store.js`
-- `vite/src/router.js`
-- `jms/vite/src/config.js` — solo entry `status`; non deve contenere entry specifiche del progetto
+- `gui/src/store.js`
+- `gui/src/router.js`
+- `jms/gui/src/config.js` — solo entry `status`; non deve contenere entry specifiche del progetto
 
 **Markers obbligatori nel progetto host:**
 - `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni route dei moduli
-- `vite/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status`
+- `gui/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status`
 
 ## Workflow aggiornamento modulo
 
-1. Modifica il file live in `vite/src/modules/<nome>/` o `src/main/java/.../app/<nome>/`
+1. Modifica il file live in `gui/src/modules/<nome>/` o `src/main/java/.../app/<nome>/`
 2. Esporta: `cmd module export --name <nome> --vers x.y.z`
 3. Crea archivio: `cmd module dist --name <nome>-x.y.z`
 4. Sincronizza: `cp modules/<nome>-x.y.z.tar.gz jms/modules/<nome>-x.y.z.tar.gz`
@@ -175,6 +175,6 @@ Le dipendenze sono dichiarate in `module.json`:
 ## Invarianti
 
 - MD5 di `modules/*.tar.gz` e `jms/modules/*.tar.gz` devono essere identici
-- `jms/vite/src/config.js` non deve contenere entry specifiche del progetto
+- `jms/gui/src/config.js` non deve contenere entry specifiche del progetto
 - Ogni modulo Java deve avere una classe `*Routes.java` con metodo statico `register(...)`
 - Il tracker `src/main/resources/modules/<nome>/module.json` è scritto da `import` e letto da `remove`
