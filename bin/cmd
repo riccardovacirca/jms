@@ -271,7 +271,7 @@ _app_run_common() {
     tail -F "$DEV_LOG" &
     TAIL_PID=$!
 
-    info "[dev] Watching src/ for changes (Ctrl+C to stop)"
+    info "[dev] Watching src/, config/ for changes (Ctrl+C to stop)"
     info "Internal: http://localhost:${API_PORT:-8080}/"
     info "External: http://localhost:${API_PORT_HOST:-2310}/"
 
@@ -280,7 +280,7 @@ _app_run_common() {
     while true; do
         inotifywait -r -q -e modify,close_write,create,delete,moved_to \
             --exclude '.*/resources/static(/.*)?$' \
-            "$WORKSPACE/src/" "$WORKSPACE/pom.xml" 2>/dev/null || true
+            "$WORKSPACE/src/" "$WORKSPACE/pom.xml" "$WORKSPACE/config/" 2>/dev/null || true
         sleep 0.3
         info "[dev] Change detected — recompiling..."
         if [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
@@ -916,20 +916,20 @@ module_install() {
     printf '\n'
 
     # Java sources
-    if [ -d "$MODULE_DIR/java/$MODULE" ]; then
+    if [ -d "$MODULE_DIR/api" ]; then
         info "[module] Copia file Java..."
-        mkdir -p "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH"
-        cp -r "$MODULE_DIR/java/$MODULE" "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/"
+        mkdir -p "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE"
+        cp -r "$MODULE_DIR/api/." "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE/"
         find "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE" -name '*.java' \
             -exec sed -i "s|{{APP_PACKAGE}}|$APP_PACKAGE|g; s|com\.example|$APP_PACKAGE|g" {} +
         success "  File Java installati: src/main/java/$APP_PACKAGE_PATH/$MODULE/"
     fi
 
     # GUI sources
-    if [ -d "$MODULE_DIR/gui/$MODULE" ]; then
+    if [ -d "$MODULE_DIR/gui" ]; then
         info "[module] Copia file GUI..."
-        mkdir -p "$WORKSPACE/vite/src/modules"
-        cp -r "$MODULE_DIR/gui/$MODULE" "$WORKSPACE/vite/src/modules/"
+        mkdir -p "$WORKSPACE/vite/src/modules/$MODULE"
+        cp -r "$MODULE_DIR/gui/." "$WORKSPACE/vite/src/modules/$MODULE/"
         success "  File GUI installati: vite/src/modules/$MODULE/"
     fi
 
@@ -1126,7 +1126,7 @@ for dep in m.get('dependencies', {}).keys():
         warn "Installa prima i moduli mancanti con: cmd module import <modulo>"
         printf '\n'
         if ! confirm "Vuoi continuare comunque con l'installazione?"; then
-            [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+            if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
             error "Installazione annullata"
         fi
     elif [ "$DEP_COUNT" -gt 0 ]; then
@@ -1135,7 +1135,7 @@ for dep in m.get('dependencies', {}).keys():
 
     module_install "$MODULE_DIR"
 
-    [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+    if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
 }
 
 # ============================================================================
@@ -1189,9 +1189,9 @@ module_export() {
     # Java sources — templatize package placeholder
     if [ -d "$JAVA_SRC" ]; then
         info "[module] Copio sorgenti Java ($JAVA_SRC)..."
-        mkdir -p "$OUTPUT/java"
-        cp -r "$JAVA_SRC" "$OUTPUT/java/"
-        find "$OUTPUT/java" -name "*.java" \
+        mkdir -p "$OUTPUT/api"
+        cp -r "$JAVA_SRC/." "$OUTPUT/api/"
+        find "$OUTPUT/api" -name "*.java" \
             -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
     fi
 
@@ -1199,7 +1199,7 @@ module_export() {
     if [ -d "$GUI_SRC" ]; then
         info "[module] Copio sorgenti GUI ($GUI_SRC)..."
         mkdir -p "$OUTPUT/gui"
-        cp -r "$GUI_SRC" "$OUTPUT/gui/"
+        cp -r "$GUI_SRC/." "$OUTPUT/gui/"
     else
         warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE'"
     fi

@@ -2,11 +2,11 @@ import { LitElement, html } from 'lit';
 import { user } from '../../store.js';
 
 /**
- * Vista lista account.
- * Admin: tabella di tutti gli account con ricerca, creazione, modifica, eliminazione.
- * Operatore: card con i propri dati e pulsante di modifica.
+ * Lista account.
+ * Admin: tabella con tutti gli account, ricerca, modifica, disattiva/riattiva.
+ * Operatore: card con i propri dati e pulsante modifica profilo.
  */
-class AccountListPage extends LitElement {
+class AuthAccountListPage extends LitElement {
 
   static properties = {
     _user:    { state: true },
@@ -43,11 +43,11 @@ class AccountListPage extends LitElement {
   }
 
   async _load() {
-    const qs = this._search ? `?q=${encodeURIComponent(this._search)}` : '';
+    const qs      = this._search ? `?q=${encodeURIComponent(this._search)}` : '';
     this._loading = true;
     this._error   = null;
-    const r    = await fetch(`/api/account${qs}`);
-    const data = await r.json();
+    const r       = await fetch(`/api/auth/account${qs}`);
+    const data    = await r.json();
     this._loading = false;
     if (!data.err) {
       this._users = Array.isArray(data.out) ? data.out : [];
@@ -56,9 +56,26 @@ class AccountListPage extends LitElement {
     }
   }
 
+  async _toggleActive(u) {
+    const action  = u.attivo ? 'disattivare' : 'riattivare';
+    if (!confirm(`Vuoi ${action} l'account "${u.username}"?`)) { return; }
+    const body = { username: u.username, email: u.email, ruolo: u.ruolo, attivo: !u.attivo };
+    const r    = await fetch(`/api/auth/account/${u.id}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!data.err) {
+      this._load();
+    } else {
+      alert(data.log);
+    }
+  }
+
   async _delete(u) {
-    if (!confirm(`Eliminare l'account "${u.username}"?`)) { return; }
-    const r    = await fetch(`/api/account/${u.id}`, { method: 'DELETE' });
+    if (!confirm(`Disattivare l'account "${u.username}"?`)) { return; }
+    const r    = await fetch(`/api/auth/account/${u.id}`, { method: 'DELETE' });
     const data = await r.json();
     if (!data.err) {
       this._load();
@@ -74,7 +91,7 @@ class AccountListPage extends LitElement {
                .value=${this._search}
                @input=${e => { this._search = e.target.value; this._load(); }}>
         <button class="btn btn-primary btn-sm"
-                @click=${() => { window.location.hash = '/account/edit'; }}>
+                @click=${() => { window.location.hash = '/auth/account/edit'; }}>
           + Nuovo account
         </button>
       </div>
@@ -93,9 +110,9 @@ class AccountListPage extends LitElement {
             </thead>
             <tbody>
               ${this._users.map(u => html`
-                <tr>
+                <tr class="${u.attivo ? '' : 'text-muted'}">
                   <td>${u.username}</td>
-                  <td class="text-muted small">${u.email || '—'}</td>
+                  <td class="small">${u.email || '—'}</td>
                   <td>
                     <span class="badge ${u.ruolo === 'admin' ? 'bg-danger' : 'bg-secondary'}">
                       ${u.ruolo}
@@ -108,12 +125,12 @@ class AccountListPage extends LitElement {
                   </td>
                   <td class="text-end">
                     <button class="btn btn-sm btn-outline-secondary me-1"
-                            @click=${() => { window.location.hash = `/account/edit/${u.id}`; }}>
+                            @click=${() => { window.location.hash = `/auth/account/edit/${u.id}`; }}>
                       Modifica
                     </button>
-                    <button class="btn btn-sm btn-outline-danger"
-                            @click=${() => this._delete(u)}>
-                      Elimina
+                    <button class="btn btn-sm ${u.attivo ? 'btn-outline-danger' : 'btn-outline-success'}"
+                            @click=${() => u.attivo ? this._delete(u) : this._toggleActive(u)}>
+                      ${u.attivo ? 'Disattiva' : 'Riattiva'}
                     </button>
                   </td>
                 </tr>
@@ -140,7 +157,7 @@ class AccountListPage extends LitElement {
                 <span class="badge bg-secondary">${u.ruolo}</span>
               </p>
               <button class="btn btn-outline-primary btn-sm"
-                      @click=${() => { window.location.hash = '/account/edit'; }}>
+                      @click=${() => { window.location.hash = '/auth/account/edit'; }}>
                 Modifica profilo
               </button>
             </div>
@@ -160,4 +177,4 @@ class AccountListPage extends LitElement {
   }
 }
 
-customElements.define('account-list-page', AccountListPage);
+customElements.define('auth-account-list-page', AuthAccountListPage);

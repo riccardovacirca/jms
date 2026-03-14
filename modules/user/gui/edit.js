@@ -8,7 +8,7 @@ import { user } from '../../store.js';
  * Admin, id presente (/account/edit/42)  → form precompilato con i dati dell'account 42.
  * Operatore           (/account/edit)    → form precompilato con i propri dati (id ignorato).
  */
-class AccountEditPage extends LitElement {
+class UserEditPage extends LitElement {
 
   static properties = {
     _user:    { state: true },
@@ -77,7 +77,7 @@ class AccountEditPage extends LitElement {
   async _loadUser(id) {
     this._loading = true;
     this._error   = null;
-    const r    = await fetch(`/api/account/${id}`);
+    const r    = await fetch(`/api/user/${id}`);
     const data = await r.json();
     this._loading = false;
     if (!data.err) {
@@ -100,7 +100,7 @@ class AccountEditPage extends LitElement {
   }
 
   async _generatePassword() {
-    const r    = await fetch('/api/account/generate-password');
+    const r    = await fetch('/api/user/generate-password');
     const data = await r.json();
     if (!data.err) {
       this._form = { ...this._form, password: data.out.password };
@@ -111,7 +111,7 @@ class AccountEditPage extends LitElement {
     this._saving  = true;
     this._formErr = null;
 
-    const url    = this._isNew ? '/api/account' : `/api/account/${this._targetId}`;
+    const url    = this._isNew ? '/api/user' : `/api/user/${this._targetId}`;
     const method = this._isNew ? 'POST' : 'PUT';
     const body   = { ...this._form };
     if (!body.password) { delete body.password; }
@@ -121,7 +121,7 @@ class AccountEditPage extends LitElement {
     const data = await r.json();
     this._saving = false;
     if (!data.err) {
-      window.location.hash = '/account';
+      window.location.hash = '/user';
     } else {
       this._formErr = data.log;
     }
@@ -138,7 +138,7 @@ class AccountEditPage extends LitElement {
       <div class="container py-4" style="max-width:560px">
         <div class="d-flex align-items-center gap-3 mb-4">
           <button class="btn btn-outline-secondary btn-sm"
-                  @click=${() => { window.location.hash = '/account'; }}>
+                  @click=${() => { window.location.hash = '/user'; }}>
             ← Indietro
           </button>
           <h4 class="mb-0">${title}</h4>
@@ -203,7 +203,7 @@ class AccountEditPage extends LitElement {
                   ${this._saving ? 'Salvataggio...' : 'Salva'}
                 </button>
                 <button class="btn btn-outline-secondary"
-                        @click=${() => { window.location.hash = '/account'; }}>
+                        @click=${() => { window.location.hash = '/user'; }}>
                   Annulla
                 </button>
               </div>
@@ -215,4 +215,4 @@ class AccountEditPage extends LitElement {
   }
 }
 
-customElements.define('account-edit-page', AccountEditPage);
+customElements.define('user-edit-page', UserEditPage);

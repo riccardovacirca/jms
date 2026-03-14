@@ -10,11 +10,11 @@ function renderRoute(container) {
   const section = parseSection();
   if (section === 'edit') {
     import('./edit.js').then(() => {
-      container.innerHTML = '<account-edit-page></account-edit-page>';
+      container.innerHTML = '<user-edit-page></user-edit-page>';
     });
   } else {
     import('./list.js').then(() => {
-      container.innerHTML = '<account-list-page></account-list-page>';
+      container.innerHTML = '<user-list-page></user-list-page>';
     });
   }
 }

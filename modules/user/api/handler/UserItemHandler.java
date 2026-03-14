@@ -1,8 +1,8 @@
-package {{APP_PACKAGE}}.account.handler;
+package {{APP_PACKAGE}}.user.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import {{APP_PACKAGE}}.account.dao.UserDAO;
+import {{APP_PACKAGE}}.user.dao.UserDAO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.Handler;

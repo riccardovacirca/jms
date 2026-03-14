@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.account.dao;
+package {{APP_PACKAGE}}.user.dao;
 
 import dev.jms.util.DB;
 
