@@ -18,6 +18,7 @@ vite/node_modules/
 !.vscode/**
 !CLAUDE.md
 !README.md
+!app.sh
 !install.sh
 !release.sh
 !pom.xml
