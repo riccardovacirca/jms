@@ -39,7 +39,7 @@ cp -r modules/rapporti/gui/rapporti/  /path/to/frontend/gui/rapporti/
 Add the module configuration to your routing system:
 
 ```javascript
-// esempio: vite/src/config.js
+// esempio: gui/src/config.js
 rapporti: {
   path: '/rapporti',
   authorization: { redirectTo: '/auth' }

@@ -64,12 +64,12 @@ paths.add("/api/home/hello", route(new HelloHandler(), ds));
 Copy `gui/home/` into the Vite modules directory:
 
 ```sh
-cp -r gui/home/  vite/src/modules/home/
+cp -r gui/home/  gui/src/modules/home/
 ```
 
 ### 4. Register module in config.js
 
-Add the complete module configuration to `vite/src/config.js`:
+Add the complete module configuration to `gui/src/config.js`:
 
 ```javascript
 export const MODULE_CONFIG = {
@@ -93,7 +93,7 @@ export const MODULE_CONFIG = {
 
 ### 5. Set as default route (optional)
 
-In `vite/src/config.js`, set home as the default route:
+In `gui/src/config.js`, set home as the default route:
 
 ```javascript
 export const DEFAULT_ROUTE = '/home';

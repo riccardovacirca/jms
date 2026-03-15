@@ -123,8 +123,8 @@
 #   cmd app dev         — avvia in modalità sviluppo con hot reload (inotifywait)
 #   cmd app run         — avvia il backend compilato in foreground
 #   cmd app start       — avvia il backend compilato in background
-#   cmd vite run        — avvia il dev server Vite con proxy API
-#   cmd vite build      — compila il frontend per la produzione
+#   cmd gui run         — avvia il dev server Vite con proxy API
+#   cmd gui build       — compila il frontend per la produzione
 #   cmd db              — apre la CLI PostgreSQL interattiva
 #   cmd db setup        — crea utente e database dal file .env
 #   cmd git push/pull   — operazioni git con credenziali da .env
@@ -447,7 +447,7 @@ GITIGNORE
     sed "s|{{APP_BASE_URL}}|http://localhost:$API_PORT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
-    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/vite && npm install"
+    docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
 
     echo "Setting up cmd tool..."
     chmod +x bin/cmd

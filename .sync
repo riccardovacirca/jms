@@ -7,6 +7,6 @@
 /workspace/release.sh -> /workspace/jms/release.sh
 /workspace/modules/auth-1.0.0.tar.gz -> /workspace/jms/modules/auth-1.0.0.tar.gz
 /workspace/modules/home-1.0.0.tar.gz -> /workspace/jms/modules/home-1.0.0.tar.gz
-/workspace/vite/package.json -> /workspace/jms/template/vite/package.json
-/workspace/vite/package-lock.json -> /workspace/jms/template/vite/package-lock.json
-/workspace/vite/vite.config.js -> /workspace/jms/template/vite/vite.config.js
+/workspace/gui/package.json -> /workspace/jms/template/gui/package.json
+/workspace/gui/package-lock.json -> /workspace/jms/template/gui/package-lock.json
+/workspace/gui/vite.config.js -> /workspace/jms/template/gui/vite.config.js

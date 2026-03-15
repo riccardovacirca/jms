@@ -184,7 +184,7 @@ cp -r gui/rapporti/ /path/to/sportello-scai_fe/gui/rapporti/
 
 ### 2. Registra route in config
 
-Aggiungi la configurazione del modulo in `vite/src/config.js` o nel file di routing dell'applicazione:
+Aggiungi la configurazione del modulo in `gui/src/config.js` o nel file di routing dell'applicazione:
 
 ```javascript
 rapporti: {

@@ -4,7 +4,7 @@
  * Ogni modulo dichiara tutti gli attributi seguenti:
  *
  * route         → stringa (es. '/home') o null (modulo non navigabile via URL)
- * path          → nome della cartella sotto vite/src/modules/ (es. 'home')
+ * path          → nome della cartella sotto gui/src/modules/ (es. 'home')
  * container     → ID dell'elemento DOM in cui montare il modulo (es. 'main', 'header', 'footer')
  * authorization → null (pubblico) o { redirectTo: '/route' } (protetto, reindirizza se non autorizzato)
  * persistent    → true (sempre montato, non smontato) o false (montato/smontato durante la navigazione)
