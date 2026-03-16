@@ -5,146 +5,145 @@ import io.undertow.server.HttpServerExchange;
 import io.undertow.util.Headers;
 
 import javax.sql.DataSource;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
- * Adattatore tra l'interfaccia Handler della libreria e HttpHandler di Undertow.
- * Supporta due modalità di esecuzione:
+ * Adattatore tra {@link RouteHandler} e {@link HttpHandler} di Undertow.
  *
- * - BLOCKING (default): handler senza @Async, eseguiti su worker thread con startBlocking()
- * - ASYNC: handler con @Async, lettura body non-blocking + esecuzione su AsyncExecutor
+ * <p>Creato e popolato da {@link Router}. Ogni istanza corrisponde a un path
+ * e può gestire più metodi HTTP tramite {@link #register(HttpMethod, RouteHandler)}.
  *
- * La modalità viene rilevata automaticamente tramite reflection sulla classe handler.
+ * <p>Compatibilità backward: il costruttore
+ * {@link #HandlerAdapter(Handler, DataSource)} accetta ancora i vecchi handler
+ * che implementano {@link Handler}, registrando automaticamente tutti i metodi.
  *
- * Gestione eccezioni:
- * Gli handler gestiscono autonomamente le eccezioni di business (es. credenziali errate, token scaduto)
- * restituendo HTTP 200 con err:true e un messaggio amichevole, e loggando a livello WARN.
- * Qualsiasi eccezione non intercettata dall'handler (errore di sistema inaspettato) risale qui:
- * viene loggata a livello ERROR con stack trace e restituisce HTTP 500 al client.
+ * <p>Threading:
+ * <ul>
+ *   <li>BLOCKING (default): dispatch su worker thread Undertow tramite {@code exchange.dispatch()}</li>
+ *   <li>ASYNC: dispatch su {@link AsyncExecutor} — per operazioni lente (query pesanti, API esterne)</li>
+ * </ul>
+ *
+ * <p>Gestione eccezioni:
+ * <ul>
+ *   <li>{@link UnauthorizedException} → HTTP 401</li>
+ *   <li>Qualsiasi altra eccezione non intercettata → HTTP 500 con log ERROR</li>
+ * </ul>
  */
 public class HandlerAdapter implements HttpHandler
 {
   private static final Log log = Log.get(HandlerAdapter.class);
 
-  private final Handler handler;
+  private final Map<HttpMethod, RouteHandler> routes;
+  private final Map<HttpMethod, Boolean>      asyncFlags;
   private final DataSource dataSource;
-  private final boolean isAsync;
 
-  public HandlerAdapter(Handler handler, DataSource dataSource)
+  /**
+   * Costruttore per {@link Router} — package-private.
+   * I metodi vengono registrati successivamente con {@link #register}.
+   */
+  HandlerAdapter(DataSource dataSource)
   {
-    this.handler = handler;
-    this.dataSource = dataSource;
-    this.isAsync = handler.getClass().isAnnotationPresent(Async.class);
+    this.dataSource  = dataSource;
+    this.routes      = new EnumMap<>(HttpMethod.class);
+    this.asyncFlags  = new EnumMap<>(HttpMethod.class);
   }
 
+  /**
+   * Costruttore backward-compat per handler che implementano {@link Handler}.
+   *
+   * @deprecated usare {@link Router} con method reference.
+   */
+  @Deprecated
+  public HandlerAdapter(Handler handler, DataSource dataSource)
+  {
+    this(dataSource);
+    routes.put(HttpMethod.GET,    (req, res, db) -> handler.get(req, res, db));
+    routes.put(HttpMethod.POST,   (req, res, db) -> handler.post(req, res, db));
+    routes.put(HttpMethod.PUT,    (req, res, db) -> handler.put(req, res, db));
+    routes.put(HttpMethod.DELETE, (req, res, db) -> handler.delete(req, res, db));
+  }
+
+  /**
+   * Costruttore backward-compat senza DataSource.
+   *
+   * @deprecated usare {@link Router} con method reference.
+   */
+  @Deprecated
   public HandlerAdapter(Handler handler)
   {
     this(handler, null);
   }
 
+  /** Registra un RouteHandler blocking per il metodo HTTP indicato. */
+  void register(HttpMethod method, RouteHandler handler)
+  {
+    routes.put(method, handler);
+  }
+
+  /** Registra un RouteHandler async per il metodo HTTP indicato. */
+  void registerAsync(HttpMethod method, RouteHandler handler)
+  {
+    routes.put(method, handler);
+    asyncFlags.put(method, Boolean.TRUE);
+  }
+
   @Override
   public void handleRequest(HttpServerExchange exchange) throws Exception
   {
-    if (isAsync) {
-      handleAsyncRequest(exchange);
-    } else {
-      handleBlockingRequest(exchange);
-    }
-  }
+    HttpMethod method;
+    boolean    async;
 
-  /**
-   * Modalità blocking (comportamento attuale, invariato).
-   */
-  private void handleBlockingRequest(HttpServerExchange exchange) throws Exception
-  {
     if (exchange.isInIoThread()) {
-      exchange.dispatch(this);
-    } else {
-      DB db;
-      HttpResponse res;
-
-      exchange.startBlocking();
-      db = dataSource != null ? new DB(dataSource) : null;
-      res = new HttpResponse(exchange);
-
-      try {
-        HttpRequest req;
-
-        if (db != null) {
-          db.open();
-        }
-        req = new HttpRequest(exchange);
-        switch (req.getMethod()) {
-          case "GET"    -> handler.get(req, res, db);
-          case "POST"   -> handler.post(req, res, db);
-          case "PUT"    -> handler.put(req, res, db);
-          case "DELETE" -> handler.delete(req, res, db);
-          default -> res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
-        }
-      } catch (Exception e) {
-        log.error("Errore di sistema in {}", handler.getClass().getSimpleName(), e);
-        if (!exchange.isResponseStarted()) {
-          res.status(500)
-             .contentType("application/json")
-             .err(true)
-             .log("Errore interno del server")
-             .out(null)
-             .send();
-        }
-      } finally {
-        if (db != null) {
-          db.close();
-        }
+      method = parseMethod(exchange.getRequestMethod().toString());
+      async  = method != null && asyncFlags.getOrDefault(method, Boolean.FALSE);
+      if (async) {
+        exchange.dispatch(AsyncExecutor.getExecutor(), () -> executeBlocking(exchange));
+      } else {
+        exchange.dispatch(this);
       }
+      return;
     }
+    executeBlocking(exchange);
   }
 
-  /**
-   * Modalità async: lettura non-blocking → dispatch executor → risposta non-blocking.
-   */
-  private void handleAsyncRequest(HttpServerExchange exchange)
+  private void executeBlocking(HttpServerExchange exchange)
   {
-    // Lettura body non-blocking (su IO thread)
-    exchange.getRequestReceiver().receiveFullBytes(
-      (ex, bodyBytes) -> {
-        // Body letto: ora dispatch su executor dedicato
-        ex.dispatch(AsyncExecutor.getExecutor(), () -> {
-          executeAsyncHandler(ex, bodyBytes);
-        });
-      },
-      (ex, error) -> {
-        // Errore lettura body
-        sendErrorResponse(ex, 400, "Errore lettura body: " + error.getMessage());
-      }
-    );
-  }
+    DB db;
+    HttpResponse res;
+    HttpRequest req;
+    HttpMethod method;
+    RouteHandler handler;
 
-  /**
-   * Esegue handler async su thread dedicato.
-   * Questo metodo gira su AsyncExecutor thread (NON su IO thread).
-   */
-  private void executeAsyncHandler(HttpServerExchange exchange, byte[] bodyBytes)
-  {
-    HttpRequest req = new HttpRequest(exchange, bodyBytes);
-    HttpResponse res = new HttpResponse(exchange);
-    DB db = dataSource != null ? new DB(dataSource) : null;
+    exchange.startBlocking();
+    db  = dataSource != null ? new DB(dataSource) : null;
+    res = new HttpResponse(exchange);
 
     try {
       if (db != null) {
-        db.open(); // BLOCKING ma su thread executor dedicato
+        db.open();
       }
+      req     = new HttpRequest(exchange);
+      method  = parseMethod(exchange.getRequestMethod().toString());
+      handler = method != null ? routes.get(method) : null;
 
-      String method = exchange.getRequestMethod().toString();
-      switch (method) {
-        case "GET"    -> handler.get(req, res, db);
-        case "POST"   -> handler.post(req, res, db);
-        case "PUT"    -> handler.put(req, res, db);
-        case "DELETE" -> handler.delete(req, res, db);
-        default -> res.status(405).contentType("application/json").err(true).log("Method Not Allowed").out(null).send();
+      if (handler == null) {
+        res.status(405).contentType("application/json")
+           .err(true).log("Method Not Allowed").out(null).send();
+        return;
+      }
+      handler.handle(req, res, db);
+
+    } catch (UnauthorizedException e) {
+      if (!exchange.isResponseStarted()) {
+        res.status(401).contentType("application/json")
+           .err(true).log(e.getMessage()).out(null).send();
       }
     } catch (Exception e) {
-      log.error("Errore di sistema in {} (async)", handler.getClass().getSimpleName(), e);
+      log.error("Errore di sistema in handler per {}", exchange.getRequestPath(), e);
       if (!exchange.isResponseStarted()) {
-        sendErrorResponse(exchange, 500, "Errore interno del server");
+        res.status(500).contentType("application/json")
+           .err(true).log("Errore interno del server").out(null).send();
       }
     } finally {
       if (db != null) {
@@ -153,14 +152,22 @@ public class HandlerAdapter implements HttpHandler
     }
   }
 
-  /**
-   * Invia risposta errore in modo non-blocking.
-   */
+  private static HttpMethod parseMethod(String method)
+  {
+    try {
+      return HttpMethod.valueOf(method);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+  }
+
   private void sendErrorResponse(HttpServerExchange exchange, int status, String message)
   {
+    String payload;
+
     exchange.setStatusCode(status);
     exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-    String payload = String.format(
+    payload = String.format(
       "{\"err\":true,\"log\":\"%s\",\"out\":null}",
       message.replace("\"", "\\\"")
     );

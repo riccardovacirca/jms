@@ -59,7 +59,7 @@ There are no test or lint commands configured.
 ```bash
 # Start the development environment
 ./install.sh                 # First time or restart existing container
-docker exec -it hello bash   # Enter dev container (container name matches PROJECT_NAME in .env)
+docker exec -it <PROJECT_NAME> bash   # Enter dev container (container name matches PROJECT_NAME in .env)
 
 # Terminal 1: Backend (watch mode with hot reload)
 cmd app run
@@ -77,8 +77,8 @@ cmd db status          # Check connections + migrations
 cmd db                 # Interactive psql
 
 # Access points:
-# - Frontend: http://localhost:2350 (VITE_PORT_HOST from .env)
-# - API: http://localhost:2310 (API_PORT_HOST from .env)
+# - Frontend: http://localhost:<VITE_PORT_HOST> (VITE_PORT_HOST from .env)
+# - API: http://localhost:<API_PORT_HOST> (API_PORT_HOST from .env)
 ```
 
 ### Debugging (VSCode + Java Extension Pack)
@@ -144,28 +144,15 @@ Two packages:
 - **`<groupId>/`** — App-specific code: `App.java` (entry point + server setup), plus any installed module subpackages (e.g. `auth/` with `handler/`, `dao/`, `dto/`, `adapter/`).
 - **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `Async`, `AsyncExecutor`, and an `excel/` subpackage.
 
-**Handler pattern:** Each route is a class implementing `Handler`. Override `get()`, `post()`, `put()`, or `delete()` as needed — unimplemented methods return 405. `HandlerAdapter` wires the handler to Undertow, dispatches to a blocking thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` via `PathTemplateHandler`.
+**Handler pattern:** Routes use the `RouteHandler` functional interface `(HttpRequest, HttpResponse, DB) throws Exception`. Handlers are plain classes with methods matching this signature, registered as method references. `HandlerAdapter` wires the handler to Undertow, dispatches to a worker thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` (or a module's `Routes.java`) via a `Router` instance.
 
-**Async handlers:** Add `@Async` annotation to enable non-blocking execution. Async handlers use dedicated thread pool (`AsyncExecutor`) and non-blocking body reading. Useful for slow queries, external API calls, or CPU-intensive operations. Example:
-
-```java
-@Async
-public class SlowQueryHandler implements Handler {
-  @Override
-  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception {
-    List<HashMap<String, Object>> results = db.select(
-      "SELECT pg_sleep(1), 'slow query' as message"
-    );
-    res.status(200).contentType("application/json")
-       .err(false).log(null).out(results.get(0)).send();
-  }
-}
-```
+**Async routes:** Use `router.async()` instead of `router.route()` to dispatch to the `AsyncExecutor` dedicated thread pool (not Undertow worker threads). Use for slow DB queries, external API calls, or CPU-intensive operations. The thread name will be `async-handler-N`.
 
 **Adding a new route:**
-1. Create `src/main/java/<groupId>/handler/FooHandler.java` implementing `Handler`
-2. Optionally add `@Async` annotation for non-blocking execution
-3. Register in `App.java`: `paths.add("/api/foo", route(new FooHandler(), ds))`
+1. Create `src/main/java/<groupId>/handler/FooHandler.java` with methods `(HttpRequest req, HttpResponse res, DB db) throws Exception`
+2. Register in `App.java` or a module's `Routes.java`:
+   - Blocking (Undertow worker): `router.route(HttpMethod.GET, "/api/foo", h::fooMethod)`
+   - Async (dedicated pool): `router.async(HttpMethod.GET, "/api/foo", h::fooMethod)`
 
 **Path parameters:** Use `{param}` in route path (e.g., `/api/users/{id}`) and access via `req.urlArgs().get("id")` in the handler.
 
@@ -177,6 +164,8 @@ public class SlowQueryHandler implements Handler {
 - `db.cursor(sql, params)` → streaming `Cursor` for large result sets
 - `db.begin()` / `db.commit()` / `db.rollback()` — manual transaction control
 - Type helpers: `DB.toLong(obj)`, `DB.toLocalDate(obj)`, `DB.toBoolean(obj)`, `DB.toBigDecimal(obj)`, etc.
+
+SQL parameters use JDBC `?` placeholders (not PostgreSQL `$1` syntax): `db.select("SELECT * FROM t WHERE id = ?", id)`.
 
 **Config:** `Config.java` reads `/app/config/application.properties` (bind-mounted from `./config/` — not bundled in JAR). Environment variables override properties using uppercase+underscore notation: `DB_HOST` → `db.host`, `JWT_SECRET` → `jwt.secret`. Use `config.get(key, default)` and `config.getInt(key, default)`.
 
@@ -224,7 +213,7 @@ export const MODULE_CONFIG = {
     authorization: null | { redirectTo: '/route' },  // Access control
     persistent: true | false,          // persistent requires path !== null
     priority: 999,                     // Load order (lower = first, only for persistent)
-    init: null | async function        // Initialization function
+    init: null | true | async function  // Initialization function; true = auto-import ./modules/<path>/init.js
   }
 };
 
@@ -249,6 +238,7 @@ A new installation includes `status` as the only pre-installed frontend module (
 - **Init procedures**: Executed before first routing to prepare shared state
 - **Authorization**: Redirects or shows 403 for protected routes
 - **Navigation ID tracking**: Discards stale module loads during rapid navigation
+- **`/#/` redirect**: Hash exactly equal to `/` redirects to the root URL `/` (not treated as a route)
 
 **Authorization model:**
 - `authorization: null` — Publicly accessible
@@ -267,20 +257,20 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Docker / Deployment
 
-- Dev container name matches `PROJECT_NAME` in `.env` (currently: `hello`)
+- Dev container name matches `PROJECT_NAME` in `.env`
 - Network: `<project>-net` (e.g., `hello-net`)
 - PostgreSQL: shared `postgres` container (not project-specific), connected to the project network
 - Dev ports (configurable in `.env`):
-  - API: `API_PORT_HOST` (2310) → 8080
-  - Vite: `VITE_PORT_HOST` (2350) → 5173
-  - JDWP: `DEBUG_PORT_HOST` (5005) → 5005
-  - PostgreSQL: `PGSQL_PORT_HOST` (2340) → 5432
+  - API: `API_PORT_HOST` → 8080
+  - Vite: `VITE_PORT_HOST` → 5173
+  - JDWP: `DEBUG_PORT_HOST` → 5005
+  - PostgreSQL: `PGSQL_PORT_HOST` → 5432
 - Bind mounts: `./` → `/workspace`, `./logs/` → `/app/logs`, `./config/` → `/app/config`
 - Production: non-root `appuser` (UID 1001), 512MB memory / 1.0 CPU limits, single JAR
 
 ### Template (`jms/`)
 
-`jms/` is the upstream template repository from which projects are cloned. It may be present as a subdirectory of a project root to allow propagating improvements, fixes, or enhancements back to the template so that all future (and other existing) projects can benefit.
+`jms/` is a clone of the original jms repository in its non-contextualized state — not customized for any specific application. When present inside a project root, it means the original repo has been cloned here to keep it aligned with the project. The purpose is to propagate back to this repo any functionality that is general or generalizable (not project-specific), so that all current and future applications built from jms can benefit from those improvements.
 
 **Key distinction — project files vs. template files:**
 - Files in the project root are project-specific and fully instantiated (no placeholders).
@@ -307,7 +297,7 @@ Clone it with the project name to start a new project — the Java source struct
 ### Modules (`modules/`)
 
 Self-contained optional features. In `jms/modules/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
-- `api/` — Java handlers, DAOs, DTOs, and `Routes.java` (content copied directly into `src/main/java/.../<module>/`)
+- `api/` — Java sources copied into `src/main/java/.../<module>/`. Internal layout: `handler/` (route handlers), `dao/`, `dto/`, `helper/` (shared logic, at the same level as `handler/`, not inside it), `Routes.java`
 - `gui/` — Frontend module sources (content copied directly into `gui/src/modules/<module>/`)
 - `migration/` — Flyway SQL migrations
 - `config/` — Application properties
@@ -316,16 +306,16 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
 **`module.json` schema:**
 ```json
 {
-  "name": "auth",
+  "name": "mymodule",
   "version": "1.0.0",
   "dependencies": {},
   "api": {
-    "routes": "dev.jms.app.auth.Routes.register(paths, ds, config);",
+    "routes": "{{APP_PACKAGE}}.mymodule.Routes.register(router);",
     "config": {}
   },
   "gui": {
     "config": {
-      "route": "/auth", "path": "auth", "container": "main",
+      "route": "/mymodule", "path": "mymodule", "container": "main",
       "authorization": null, "persistent": false, "priority": 999, "init": null
     }
   },
@@ -371,14 +361,14 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, tracker. 
 - `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni di route dei moduli
 - `gui/src/config.js`: `// [MODULE_ENTRIES]` dopo l'entry `status` dentro `MODULE_CONFIG`
 
-**Each Java module must have a `*Routes.java` class** at the module root (e.g. `auth/Routes.java`) with a static `register(PathTemplateHandler paths, DataSource ds)` method. Modules that need `Config` add it as a third parameter.
+**Each Java module must have a `*Routes.java` class** at the module root (e.g. `mymodule/Routes.java`) with a static `register(Router router)` method. Modules that also need `Config` add it as a second parameter: `register(Router router, Config config)`.
 
 **Available modules** (in `modules/`):
-- `auth/` — Autenticazione (login, logout, sessione, 2FA, reset/change password, gestione account); route `/auth`, pubblico
-- `user/` — Gestione account utenti (CRUD admin, self-edit operatore); route `/user`, richiede `auth`
+- `user/` — Authentication + account management (login, logout, 2FA, reset/change password, CRUD admin, self-edit); route `/user`, no dependencies
 - `header/` — Persistent navigation header (no dependencies)
 - `home/` — Simple home page with API hello endpoint (no dependencies)
-- `crm/contatti/` — Contact management module (requires: `auth`)
+- `crm/contatti/` — Contact management module (requires: `user`)
+- `asynctest/` — Test module for async vs blocking behavior comparison; no frontend, not for production
 
 All modules follow the complete configuration schema with all 7 attributes (`route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 
@@ -408,7 +398,11 @@ Full rules in `docs/dsl/java.md` and `docs/dsl/javascript.md`. Key non-obvious c
 - Business errors (validation, auth, not-found): handle in handler, return HTTP 200 with `err: true`, log at WARN level (no stack trace)
 - System errors: let them propagate to `HandlerAdapter`, which returns HTTP 500 and logs at ERROR with stack trace
 
-**Response builder:** Always chain in this exact order before `send()`: `status() → contentType() → [cookie()...] → err() → log() → out()`. Each method goes on its own line, continuation lines indented so the `.` aligns 3 spaces past the `res` start:
+**`HttpResponse` extras:** `res.clearCookie(name)` sets a cookie with `maxAge=0` to delete it client-side. Goes between `contentType()` and `err()` in the chain.
+
+**`Validator`:** Static utility class — `final` with private constructor, cannot be instantiated. All validation methods are static: `Validator.required(value, "fieldName")`, etc. Throws `ValidationException` directly.
+
+**Response builder:** Always chain in this exact order before `send()`: `status() → contentType() → [cookie()/clearCookie()...] → err() → log() → out()`. Each method goes on its own line, continuation lines indented so the `.` aligns 3 spaces past the `res` start:
 ```java
 res.status(200)
    .contentType("application/json")

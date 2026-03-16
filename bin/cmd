@@ -139,10 +139,15 @@ app_stop() {
         load_env
         info "Cleanup forzato in corso..."
         local API_P="${API_PORT:-8080}"
+        local VITE_P="${VITE_PORT:-5173}"
+        local DEBUG_P="${DEBUG_PORT:-5005}"
         local PIDS PORT_PID KILLED
         PIDS=$(pgrep -f "dev.jms.app.App" 2>/dev/null || true)
-        PORT_PID=$(ss -tlnp "sport = :${API_P}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
-        PIDS=$(printf '%s\n%s' "$PIDS" "${PORT_PID:-}" | sort -u | grep -v '^$' | tr '\n' ' ')
+        for P in "$API_P" "$VITE_P" "$DEBUG_P"; do
+            PORT_PID=$(ss -tlnp "sport = :${P}" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+            PIDS=$(printf '%s\n%s' "$PIDS" "${PORT_PID:-}")
+        done
+        PIDS=$(echo "$PIDS" | sort -u | grep -v '^$' | tr '\n' ' ')
         KILLED=0
         for PID in $PIDS; do
             kill -9 "$PID" 2>/dev/null && KILLED=$((KILLED + 1)) || true
@@ -330,6 +335,9 @@ app_status() {
     fi
 
     # Port scan (internal)
+    local EXPECTED_PID=""
+    [ -f "$APP_PID_FILE" ] && EXPECTED_PID=$(cat "$APP_PID_FILE")
+
     echo ""
     echo "Ports:"
     for ENTRY in "${API_P}:API" "${VITE_P}:Vite" "${DEBUG_P}:JDWP"; do
@@ -341,6 +349,13 @@ app_status() {
             local PNAME
             PNAME=$(ps -o comm= -p "$OWNER" 2>/dev/null || echo "?")
             printf "  :%s %-6s → PID %-6s (%s)\n" "$P" "($LABEL)" "$OWNER" "$PNAME"
+            if [ -z "$EXPECTED_PID" ]; then
+                warn "  ↳ anomalia: porta :${P} occupata ma nessun PID file → processo orfano"
+                ANOMALIES=$((ANOMALIES + 1))
+            elif [ "$OWNER" != "$EXPECTED_PID" ]; then
+                warn "  ↳ anomalia: porta :${P} occupata da PID $OWNER, atteso PID $EXPECTED_PID"
+                ANOMALIES=$((ANOMALIES + 1))
+            fi
         else
             printf "  :%s %-6s → free\n" "$P" "($LABEL)"
         fi
@@ -954,6 +969,7 @@ api = m.get('api')
 if api:
     print(api.get('routes', ''))
 " 2>/dev/null || true)
+        REGISTER_CALL="${REGISTER_CALL//\{\{APP_PACKAGE\}\}/$APP_PACKAGE}"
         if [ -n "$REGISTER_CALL" ]; then
             if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
                 if ! grep -qF "$REGISTER_CALL" "$APP_JAVA"; then

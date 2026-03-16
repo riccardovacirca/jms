@@ -5,6 +5,7 @@ import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Mail;
+import dev.jms.util.Router;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -24,15 +25,17 @@ public class App
     int asyncPoolSize;
     ResourceHandler staticHandler;
     PathTemplateHandler paths;
+    Router router;
     Undertow server;
     DataSource ds;
 
-    config = new Config();
-    port = config.getInt("server.port", 8080);
+    config        = new Config();
+    port          = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
 
     DB.init(config);
-    Auth.init(config.get("jwt.secret", "dev-secret-change-in-production"), config.getInt("jwt.access.expiry.seconds", 900));
+    Auth.init(config.get("jwt.secret", "dev-secret-change-in-production"),
+              config.getInt("jwt.access.expiry.seconds", 900));
     Mail.init(config);
     AsyncExecutor.init(asyncPoolSize);
     runMigrations();
@@ -43,9 +46,10 @@ public class App
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
     ).setWelcomeFiles("index.html");
 
-    paths = new PathTemplateHandler(staticHandler);
+    paths  = new PathTemplateHandler(staticHandler);
+    router = new Router(paths, ds);
 
-    // Default status endpoint
+    // Status endpoint
     paths.add("/api/status", new HttpHandler() {
       @Override
       public void handleRequest(HttpServerExchange exchange) throws Exception

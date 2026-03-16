@@ -48,11 +48,16 @@ class Router
   async _init() {
     appInit();
 
-    // Esegui tutte le init in parallelo
+    // Esegui tutte le init in parallelo.
+    // init può essere una funzione (chiamata direttamente) o true (carica automaticamente
+    // ./modules/<path>/init.js ed esegue il default export).
     await Promise.all(
-      Object.values(MODULE_CONFIG)
-        .filter(c => c.init)
-        .map(c => c.init())
+      Object.entries(MODULE_CONFIG)
+        .filter(([_, c]) => c.init)
+        .map(([_, c]) => {
+          if (typeof c.init === 'function') return c.init();
+          return import(`./modules/${c.path}/init.js`).then(m => m.default());
+        })
     );
 
     // Monta i moduli persistent (es. header, footer)
@@ -117,6 +122,12 @@ class Router
    */
   route() {
     const hash = window.location.hash.slice(1).split('?')[0];
+
+    // /#/ non è una rotta valida: reindirizza alla root
+    if (hash === '/') {
+      window.location.replace('/');
+      return;
+    }
 
     const moduleName = hash
       ? Object.keys(MODULE_CONFIG).find(name => {

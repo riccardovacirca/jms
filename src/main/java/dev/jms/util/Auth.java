@@ -225,4 +225,14 @@ public class Auth
     result = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
     return result;
   }
+
+  /**
+   * Alias di {@link #verifyPassword(String, String)}.
+   * Confronta la password in chiaro con il valore "salt:hash" salvato nel DB.
+   */
+  public static boolean checkPassword(String password, String stored) throws Exception
+  {
+    return verifyPassword(password, stored);
+  }
+
 }

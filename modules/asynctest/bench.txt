@@ -1,0 +1,9 @@
+# Async — thread pool AsyncExecutor (confronto sotto carico)
+http://localhost:8080/api/asynctest/slow-query?ms=500 GET
+http://localhost:8080/api/asynctest/slow-task?ms=500 GET
+
+# Blocking — worker thread Undertow
+http://localhost:8080/api/asynctest/blocking-query?ms=500 GET
+
+# Stato pool
+http://localhost:8080/api/asynctest/status GET

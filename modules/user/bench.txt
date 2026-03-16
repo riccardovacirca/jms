@@ -1,0 +1,24 @@
+# Account
+http://localhost:8080/api/user/accounts GET
+http://localhost:8080/api/user/accounts/sid GET
+http://localhost:8080/api/user/accounts/sid PUT {"username":"admin","email":"admin@example.com"}
+http://localhost:8080/api/user/accounts/1 GET
+http://localhost:8080/api/user/accounts POST {"username":"test","email":"test@example.com","password":"Test1234!"}
+
+# Auth
+http://localhost:8080/api/user/auth/session GET
+http://localhost:8080/api/user/auth/generate-password GET
+http://localhost:8080/api/user/auth/login POST {"username":"admin","password":"Admin@2026!"}
+http://localhost:8080/api/user/auth/logout POST
+http://localhost:8080/api/user/auth/refresh POST
+http://localhost:8080/api/user/auth/forgot-password POST {"username":"admin"}
+http://localhost:8080/api/user/auth/reset-password POST {"token":"TOKEN","new_password":"NewPass1!"}
+http://localhost:8080/api/user/auth/change-password PUT {"current_password":"Admin@2026!","new_password":"NewPass1!"}
+
+# Profile
+http://localhost:8080/api/user/users/sid GET
+http://localhost:8080/api/user/users/sid PUT {"nome":"Mario","cognome":"Rossi"}
+http://localhost:8080/api/user/users/sid/settings GET
+http://localhost:8080/api/user/users/sid/settings POST {"chiave":"theme","valore":"dark"}
+http://localhost:8080/api/user/users/sid/settings/theme GET
+http://localhost:8080/api/user/users/sid/settings/theme DELETE

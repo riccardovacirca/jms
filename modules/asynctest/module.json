@@ -1,21 +1,21 @@
 {
-    "name": "user",
+    "name": "asynctest",
     "version": "1.0.0",
     "dependencies": {},
     "api": {
-        "routes": "{{APP_PACKAGE}}.user.Routes.register(router, config);",
+        "routes": "{{APP_PACKAGE}}.asynctest.Routes.register(router);",
         "config": {}
     },
     "gui": {
         "config": {
-            "route": "/user",
-            "path": "user",
+            "route": "/asynctest",
+            "path": null,
             "container": "main",
             "authorization": null,
             "persistent": false,
             "priority": 999,
-            "init": true
+            "init": null
         }
     },
-    "install_notice": null
+    "install_notice": "Modulo di test — non installare in produzione."
 }

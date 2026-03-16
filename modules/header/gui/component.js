@@ -38,10 +38,11 @@ class HeaderComponent extends LitElement {
 
   async _logout() {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/user/auth/logout', { method: 'POST' });
     } finally {
       authorized.set(false);
       user.set(null);
+      window.location.hash = '/user/auth/login';
     }
   }
 
@@ -56,7 +57,7 @@ class HeaderComponent extends LitElement {
   render() {
     return html`
       <nav class="navbar navbar-expand-md bg-white border-bottom px-3">
-        <a class="navbar-brand fw-bold" href="#/home" @click=${this._closeMenu}>App</a>
+        <a class="navbar-brand fw-bold" href="/" @click=${this._closeMenu}>App</a>
         <button class="navbar-toggler" type="button" @click=${this._toggleMenu}
                 aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
@@ -78,7 +79,7 @@ class HeaderComponent extends LitElement {
                   <button class="btn btn-sm btn-outline-danger" @click=${this._logout}>Esci</button>`
               : html`
                   <button class="btn btn-sm btn-outline-primary"
-                          @click=${() => { window.location.hash = '/auth'; this._closeMenu(); }}>
+                          @click=${() => { window.location.hash = '/user/auth/login'; this._closeMenu(); }}>
                     Accedi
                   </button>`
             }

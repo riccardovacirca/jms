@@ -202,4 +202,76 @@ public class HttpRequest
     }
     return formData;
   }
+
+  /**
+   * Verifica il cookie {@code access_token} e restituisce i claims del JWT.
+   * Lancia {@link UnauthorizedException} se il token è assente o non valido.
+   *
+   * @return mappa dei claims: sub, username, ruolo, permissions, must_change_password
+   * @throws UnauthorizedException se non autenticato o token scaduto
+   */
+  public java.util.Map<String, Object> requireAuth()
+  {
+    String token;
+    com.auth0.jwt.interfaces.DecodedJWT jwt;
+    java.util.Map<String, Object> claims;
+
+    token = getCookie("access_token");
+    if (token == null || token.isBlank()) {
+      throw new UnauthorizedException("Non autenticato");
+    }
+    try {
+      jwt    = Auth.get().verifyAccessToken(token);
+      claims = new java.util.HashMap<>();
+      claims.put("sub",                 jwt.getSubject());
+      claims.put("username",            jwt.getClaim("username").asString());
+      claims.put("ruolo",               jwt.getClaim("ruolo").asString());
+      claims.put("permissions",         jwt.getClaim("permissions").asList(String.class));
+      claims.put("must_change_password", jwt.getClaim("must_change_password").asBoolean());
+      return claims;
+    } catch (com.auth0.jwt.exceptions.JWTVerificationException e) {
+      throw new UnauthorizedException("Token non valido o scaduto");
+    }
+  }
+
+  /**
+   * Parsa il body JSON e lo restituisce come mappa.
+   * Restituisce una mappa vuota se il body è assente o vuoto.
+   *
+   * @return mappa chiave/valore del body JSON
+   */
+  @SuppressWarnings("unchecked")
+  public java.util.HashMap<String, Object> body() throws Exception
+  {
+    String raw;
+
+    raw = getBody();
+    if (raw == null || raw.isBlank()) {
+      return new java.util.HashMap<>();
+    }
+    return Json.decode(raw, java.util.HashMap.class);
+  }
+
+  /**
+   * Alias di {@link #getQueryParam(String)}.
+   *
+   * @param name nome del parametro querystring
+   * @return valore o null
+   */
+  public String queryParam(String name)
+  {
+    return getQueryParam(name);
+  }
+
+  /**
+   * Alias di {@link #getCookie(String)}.
+   *
+   * @param name nome del cookie
+   * @return valore o null
+   */
+  public String cookie(String name)
+  {
+    return getCookie(name);
+  }
+
 }

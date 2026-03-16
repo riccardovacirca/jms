@@ -91,6 +91,17 @@ public class HttpResponse
     return this;
   }
 
+  /** Cancella un cookie impostando maxAge=0 e value vuoto. Può essere chiamato zero o più volte. */
+  public HttpResponse clearCookie(String name)
+  {
+    exchange.setResponseCookie(new CookieImpl(name, "")
+      .setHttpOnly(true)
+      .setPath("/")
+      .setMaxAge(0)
+      .setSameSiteMode("Strict"));
+    return this;
+  }
+
   /** Valida che status(), contentType(), err(), log() e out() siano stati tutti chiamati, poi invia. */
   public void send()
   {
