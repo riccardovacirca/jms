@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.contatti.dto;
+package dev.jms.app.contatti.dto;
 
 /** Rappresenta un contatto con tutti i suoi campi. */
 public record ContattoDTO(

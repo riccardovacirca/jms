@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "dependencies": {},
     "api": {
-        "routes": "{{APP_PACKAGE}}.asynctest.Routes.register(router);",
+        "routes": "dev.jms.app.asynctest.Routes.register(router);",
         "config": {}
     },
     "gui": {

@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.repertorio.dto;
+package dev.jms.app.repertorio.dto;
 
 /**
  * Rappresenta un repertorio.

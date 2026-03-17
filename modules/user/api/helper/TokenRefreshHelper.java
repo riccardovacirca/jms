@@ -1,8 +1,8 @@
-package {{APP_PACKAGE}}.user.helper;
+package dev.jms.app.user.helper;
 
-import {{APP_PACKAGE}}.user.dao.AccountDAO;
-import {{APP_PACKAGE}}.user.dao.RefreshTokenDAO;
-import {{APP_PACKAGE}}.user.dto.AuthenticatedAccountDTO;
+import dev.jms.app.user.dao.AccountDAO;
+import dev.jms.app.user.dao.RefreshTokenDAO;
+import dev.jms.app.user.dto.AuthenticatedAccountDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;

@@ -294,6 +294,10 @@ Clone it with the project name to start a new project — the Java source struct
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support, synced from project via `cmd sync`
 - `docs/` — Documentation including architecture details
 
+### Java package
+
+The Java base package is always `dev.jms.app` — it never changes across projects and is not a substitutable placeholder. All module sources use `dev.jms.app` directly in `package` and `import` statements.
+
 ### Modules (`modules/`)
 
 Self-contained optional features. In `jms/modules/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
@@ -310,7 +314,7 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
   "version": "1.0.0",
   "dependencies": {},
   "api": {
-    "routes": "{{APP_PACKAGE}}.mymodule.Routes.register(router);",
+    "routes": "dev.jms.app.mymodule.Routes.register(router);",
     "config": {}
   },
   "gui": {

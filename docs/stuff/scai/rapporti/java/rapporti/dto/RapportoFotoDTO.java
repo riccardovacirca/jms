@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.rapporti.dto;
+package dev.jms.app.rapporti.dto;
 
 /**
  * Rappresenta la fotografia di un dipendente associata al rapporto.

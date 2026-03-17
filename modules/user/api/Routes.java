@@ -1,8 +1,8 @@
-package {{APP_PACKAGE}}.user;
+package dev.jms.app.user;
 
-import {{APP_PACKAGE}}.user.handler.AccountHandler;
-import {{APP_PACKAGE}}.user.handler.AuthHandler;
-import {{APP_PACKAGE}}.user.handler.ProfileHandler;
+import dev.jms.app.user.handler.AccountHandler;
+import dev.jms.app.user.handler.AuthHandler;
+import dev.jms.app.user.handler.ProfileHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;

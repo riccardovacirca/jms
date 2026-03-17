@@ -1,9 +1,9 @@
-package {{APP_PACKAGE}}.contatti.handler;
+package dev.jms.app.contatti.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
-import {{APP_PACKAGE}}.contatti.adapter.ListaAdapter;
-import {{APP_PACKAGE}}.contatti.dao.ListaDAO;
-import {{APP_PACKAGE}}.contatti.dto.ListaDTO;
+import dev.jms.app.contatti.adapter.ListaAdapter;
+import dev.jms.app.contatti.dao.ListaDAO;
+import dev.jms.app.contatti.dto.ListaDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.Handler;

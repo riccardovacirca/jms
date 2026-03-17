@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.sede.dto;
+package dev.jms.app.sede.dto;
 
 /**
  * Rappresenta l'anagrafica di una sede di lavoro.

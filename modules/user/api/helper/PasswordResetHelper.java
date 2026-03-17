@@ -1,8 +1,8 @@
-package {{APP_PACKAGE}}.user.helper;
+package dev.jms.app.user.helper;
 
-import {{APP_PACKAGE}}.user.dao.AccountDAO;
-import {{APP_PACKAGE}}.user.dao.PasswordResetDAO;
-import {{APP_PACKAGE}}.user.dto.AccountAuthDTO;
+import dev.jms.app.user.dao.AccountDAO;
+import dev.jms.app.user.dao.PasswordResetDAO;
+import dev.jms.app.user.dto.AccountAuthDTO;
 import dev.jms.util.DB;
 import dev.jms.util.Log;
 import dev.jms.util.Mail;

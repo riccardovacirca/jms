@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.home.handler;
+package dev.jms.app.home.handler;
 
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;

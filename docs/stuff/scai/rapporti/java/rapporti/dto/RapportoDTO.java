@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.rapporti.dto;
+package dev.jms.app.rapporti.dto;
 
 /**
  * Rappresenta un rapporto di lavoro con tutti i suoi campi.

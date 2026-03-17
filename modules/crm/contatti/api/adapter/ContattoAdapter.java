@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.contatti.adapter;
+package dev.jms.app.contatti.adapter;
 
-import {{APP_PACKAGE}}.contatti.dto.ContattoDTO;
+import dev.jms.app.contatti.dto.ContattoDTO;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.Json;
 import dev.jms.util.ValidationException;

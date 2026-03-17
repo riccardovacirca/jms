@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.user.dto;
+package dev.jms.app.user.dto;
 
 import java.time.LocalDateTime;
 

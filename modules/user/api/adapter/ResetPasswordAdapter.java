@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.user.adapter;
+package dev.jms.app.user.adapter;
 
-import {{APP_PACKAGE}}.user.dto.ResetPasswordDTO;
+import dev.jms.app.user.dto.ResetPasswordDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.Json;

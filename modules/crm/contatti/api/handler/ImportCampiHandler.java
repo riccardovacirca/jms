@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.contatti.handler;
+package dev.jms.app.contatti.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import dev.jms.util.Auth;

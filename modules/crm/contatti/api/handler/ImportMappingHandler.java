@@ -1,8 +1,8 @@
-package {{APP_PACKAGE}}.contatti.handler;
+package dev.jms.app.contatti.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
-import {{APP_PACKAGE}}.contatti.dao.ImportSessionDAO;
-import {{APP_PACKAGE}}.contatti.dto.ImportSessionDTO;
+import dev.jms.app.contatti.dao.ImportSessionDAO;
+import dev.jms.app.contatti.dto.ImportSessionDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.Handler;

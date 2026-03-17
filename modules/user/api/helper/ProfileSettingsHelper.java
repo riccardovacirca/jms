@@ -1,7 +1,7 @@
-package {{APP_PACKAGE}}.user.helper;
+package dev.jms.app.user.helper;
 
-import {{APP_PACKAGE}}.user.dao.ProfileDAO;
-import {{APP_PACKAGE}}.user.dao.ProfileSettingsDAO;
+import dev.jms.app.user.dao.ProfileDAO;
+import dev.jms.app.user.dao.ProfileSettingsDAO;
 import dev.jms.util.DB;
 
 import java.util.HashMap;

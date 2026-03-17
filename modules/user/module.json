@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "dependencies": {},
     "api": {
-        "routes": "{{APP_PACKAGE}}.user.Routes.register(router, config);",
+        "routes": "dev.jms.app.user.Routes.register(router, config);",
         "config": {}
     },
     "gui": {

@@ -12,8 +12,7 @@ cmd module import modules/auth-1.1.0           # da cartella estratta
 ```
 
 **Automatic operations:**
-- Sostituisce il placeholder `{{APP_PACKAGE}}` con il package reale (solo per archivi)
-- Copia sorgenti Java in `src/main/java/<package>/<name>/`
+- Copia sorgenti Java in `src/main/java/dev/jms/app/<name>/`
 - Copia sorgenti GUI in `gui/src/modules/<name>/`
 - Copia migration SQL in `src/main/resources/db/migration/`
 - Registra la route in `App.java` (dopo `// [MODULE_ROUTES]`)
@@ -76,7 +75,7 @@ md5sum modules/auth-1.1.0.tar.gz jms/modules/auth-1.1.0.tar.gz   # devono essere
 
 ```
 modules/<nome>-<vers>/             ← Cartella export (non compressa)
-  java/<nome>/                     ← Sorgenti Java (con placeholder {{APP_PACKAGE}})
+  java/<nome>/                     ← Sorgenti Java (package dev.jms.app)
   gui/<nome>/                      ← Sorgenti GUI
   migration/                       ← Migration SQL Flyway
   module.json                      ← Metadati (auto-generati da export)

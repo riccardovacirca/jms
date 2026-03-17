@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.contatti.dto;
+package dev.jms.app.contatti.dto;
 
 public record ListaDTO(
   Integer id,

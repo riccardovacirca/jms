@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.asynctest.handler;
+package dev.jms.app.asynctest.handler;
 
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;

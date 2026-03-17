@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.sdc.dto;
+package dev.jms.app.sdc.dto;
 
 /**
  * Rappresenta un sistema di campo.

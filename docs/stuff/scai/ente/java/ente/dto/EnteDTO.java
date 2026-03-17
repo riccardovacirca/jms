@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.ente.dto;
+package dev.jms.app.ente.dto;
 
 /**
  * Rappresenta l'anagrafica di un ente regionale.

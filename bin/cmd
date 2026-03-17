@@ -907,11 +907,6 @@ db_status() {
 # Module Operations (export / import)
 # ============================================================================
 
-_module_app_package() {
-    # Extract groupId from pom.xml (first occurrence = project's own)
-    sed -n 's|[[:space:]]*<groupId>\(.*\)</groupId>|\1|p' "$WORKSPACE/pom.xml" | head -1 | tr -d ' '
-}
-
 
 # ============================================================================
 # Module install (internal) — accepts MODULE_DIR, reads name from module.json
@@ -926,24 +921,16 @@ module_install() {
     MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
     [ -n "$MODULE" ] || error "Impossibile leggere 'name' da $MODULE_DIR/module.json"
 
-    local APP_PACKAGE APP_PACKAGE_PATH
-    APP_PACKAGE=$(_module_app_package)
-    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
-    APP_PACKAGE_PATH="${APP_PACKAGE//.//}"
-
     printf '\n'
     info "[module] Installazione modulo: $MODULE"
-    info "[module] Package applicazione: $APP_PACKAGE"
     printf '\n'
 
     # Java sources
     if [ -d "$MODULE_DIR/api" ]; then
         info "[module] Copia file Java..."
-        mkdir -p "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE"
-        cp -r "$MODULE_DIR/api/." "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE/"
-        find "$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE" -name '*.java' \
-            -exec sed -i "s|{{APP_PACKAGE}}|$APP_PACKAGE|g; s|com\.example|$APP_PACKAGE|g" {} +
-        success "  File Java installati: src/main/java/$APP_PACKAGE_PATH/$MODULE/"
+        mkdir -p "$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
+        cp -r "$MODULE_DIR/api/." "$WORKSPACE/src/main/java/dev/jms/app/$MODULE/"
+        success "  File Java installati: src/main/java/dev/jms/app/$MODULE/"
     fi
 
     # GUI sources
@@ -964,7 +951,7 @@ module_install() {
     fi
 
     # Auto-insert route registration into App.java (after // [MODULE_ROUTES] marker)
-    local APP_JAVA="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/App.java"
+    local APP_JAVA="$WORKSPACE/src/main/java/dev/jms/app/App.java"
     if [ -f "$APP_JAVA" ]; then
         local REGISTER_CALL
         REGISTER_CALL=$(python3 -c "
@@ -975,7 +962,6 @@ api = m.get('api')
 if api:
     print(api.get('routes', ''))
 " 2>/dev/null || true)
-        REGISTER_CALL="${REGISTER_CALL//\{\{APP_PACKAGE\}\}/$APP_PACKAGE}"
         if [ -n "$REGISTER_CALL" ]; then
             if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
                 if ! grep -qF "$REGISTER_CALL" "$APP_JAVA"; then
@@ -1107,11 +1093,6 @@ module_import() {
         TMP_DIR=$(mktemp -d)
         tar -xzf "$INPUT" -C "$TMP_DIR" --warning=no-unknown-keyword 2>/dev/null || \
             tar -xzf "$INPUT" -C "$TMP_DIR"
-        # Sostituisci {{APP_PACKAGE}} nel sorgenti estratti
-        local APP_PACKAGE
-        APP_PACKAGE=$(_module_app_package)
-        find "$TMP_DIR" -type f \( -name "*.java" -o -name "*.js" -o -name "*.html" -o -name "*.md" \) \
-            -exec sed -i "s|{{APP_PACKAGE}}|${APP_PACKAGE}|g" {} + 2>/dev/null || true
         MODULE_DIR="$TMP_DIR"
     elif [ -d "$INPUT" ]; then
         MODULE_DIR="$INPUT"
@@ -1183,12 +1164,7 @@ module_export() {
 
     [ -n "$MODULE" ] || error "Usage: cmd module export --name <nome> [--vers 1.2.3]"
 
-    local APP_PACKAGE
-    APP_PACKAGE=$(_module_app_package)
-    [ -n "$APP_PACKAGE" ] || error "Cannot detect groupId from pom.xml"
-
-    local PKG_PATH="${APP_PACKAGE//.//}"
-    local JAVA_SRC="$WORKSPACE/src/main/java/$PKG_PATH/$MODULE"
+    local JAVA_SRC="$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
     local GUI_SRC="$WORKSPACE/gui/src/modules/$MODULE"
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
@@ -1213,8 +1189,6 @@ module_export() {
         info "[module] Copio sorgenti Java ($JAVA_SRC)..."
         mkdir -p "$OUTPUT/api"
         cp -r "$JAVA_SRC/." "$OUTPUT/api/"
-        find "$OUTPUT/api" -name "*.java" \
-            -exec sed -i "s|${APP_PACKAGE}|{{APP_PACKAGE}}|g" {} +
     fi
 
     # GUI sources
@@ -1274,9 +1248,9 @@ print(v if v else '')
     if [ -d "$JAVA_SRC" ]; then
         local ROUTES_FILE="$JAVA_SRC/Routes.java"
         if [ -f "$ROUTES_FILE" ]; then
-            local REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds);"
+            local REGISTER_CALL="dev.jms.app.${MODULE}.Routes.register(paths, ds);"
             if grep -q 'Config config' "$ROUTES_FILE" 2>/dev/null; then
-                REGISTER_CALL="${APP_PACKAGE}.${MODULE}.Routes.register(paths, ds, config);"
+                REGISTER_CALL="dev.jms.app.${MODULE}.Routes.register(paths, ds, config);"
             fi
             API_JSON=$(python3 -c "
 import json
@@ -1454,10 +1428,6 @@ module_remove() {
     local TRACKER="$WORKSPACE/src/main/resources/modules/$MODULE/module.json"
     [ -f "$TRACKER" ] || error "Modulo '$MODULE' non risulta installato (tracker non trovato: $TRACKER)"
 
-    local APP_PACKAGE APP_PACKAGE_PATH
-    APP_PACKAGE=$(_module_app_package)
-    APP_PACKAGE_PATH="${APP_PACKAGE//.//}"
-
     if ! confirm "Rimuovere il modulo '$MODULE'?"; then
         info "Operazione annullata"
         return 0
@@ -1468,7 +1438,7 @@ module_remove() {
     printf '\n'
 
     # Java sources
-    local JAVA_DIR="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/$MODULE"
+    local JAVA_DIR="$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
     if [ -d "$JAVA_DIR" ]; then
         rm -rf "$JAVA_DIR"
         success "  Sorgenti Java rimossi: $JAVA_DIR"
@@ -1482,7 +1452,7 @@ module_remove() {
     fi
 
     # Remove route from App.java
-    local APP_JAVA="$WORKSPACE/src/main/java/$APP_PACKAGE_PATH/App.java"
+    local APP_JAVA="$WORKSPACE/src/main/java/dev/jms/app/App.java"
     if [ -f "$APP_JAVA" ]; then
         local REGISTER_CALL
         REGISTER_CALL=$(python3 -c "

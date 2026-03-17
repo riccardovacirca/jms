@@ -1,4 +1,4 @@
-package {{APP_PACKAGE}}.varco.dto;
+package dev.jms.app.varco.dto;
 
 /**
  * Rappresenta un varco di accesso.

@@ -1,7 +1,7 @@
-package {{APP_PACKAGE}}.user.helper;
+package dev.jms.app.user.helper;
 
-import {{APP_PACKAGE}}.user.dao.AuthPinDAO;
-import {{APP_PACKAGE}}.user.dto.AccountAuthDTO;
+import dev.jms.app.user.dao.AuthPinDAO;
+import dev.jms.app.user.dto.AccountAuthDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.HttpResponse;

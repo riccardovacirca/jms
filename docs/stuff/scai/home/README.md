@@ -35,14 +35,7 @@ Nessuna dipendenza - modulo standalone
 Copy `java/home/` into your project's Java source tree:
 
 ```sh
-cp -r java/home/  src/main/java/{{APP_PACKAGE_PATH}}/home/
-```
-
-Replace `com.example` in all copied Java files:
-
-```sh
-find src/main/java/{{APP_PACKAGE_PATH}}/home -name '*.java' \
-     -exec sed -i 's|com.example|your.package|g' {} +
+cp -r java/home/  src/main/java/dev/jms/app/home/
 ```
 
 ### 2. App.java — route registration

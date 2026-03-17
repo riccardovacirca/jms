@@ -1,7 +1,7 @@
-package {{APP_PACKAGE}}.user.handler;
+package dev.jms.app.user.handler;
 
-import {{APP_PACKAGE}}.user.dao.AccountDAO;
-import {{APP_PACKAGE}}.user.helper.AccountSearchHelper;
+import dev.jms.app.user.dao.AccountDAO;
+import dev.jms.app.user.helper.AccountSearchHelper;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;

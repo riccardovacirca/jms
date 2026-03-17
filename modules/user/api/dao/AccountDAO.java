@@ -1,7 +1,7 @@
-package {{APP_PACKAGE}}.user.dao;
+package dev.jms.app.user.dao;
 
-import {{APP_PACKAGE}}.user.dto.AccountAuthDTO;
-import {{APP_PACKAGE}}.user.dto.AuthenticatedAccountDTO;
+import dev.jms.app.user.dto.AccountAuthDTO;
+import dev.jms.app.user.dto.AuthenticatedAccountDTO;
 import dev.jms.util.DB;
 
 import java.util.ArrayList;

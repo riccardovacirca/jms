@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.user.adapter;
+package dev.jms.app.user.adapter;
 
-import {{APP_PACKAGE}}.user.dto.TwoFactorCredentialDTO;
+import dev.jms.app.user.dto.TwoFactorCredentialDTO;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.Json;
 import dev.jms.util.Validator;

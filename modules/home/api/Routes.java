@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.home;
+package dev.jms.app.home;
 
-import {{APP_PACKAGE}}.home.handler.HelloHandler;
+import dev.jms.app.home.handler.HelloHandler;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
 

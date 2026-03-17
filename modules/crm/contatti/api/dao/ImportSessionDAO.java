@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.contatti.dao;
+package dev.jms.app.contatti.dao;
 
-import {{APP_PACKAGE}}.contatti.dto.ImportSessionDTO;
+import dev.jms.app.contatti.dto.ImportSessionDTO;
 import dev.jms.util.DB;
 
 import java.time.LocalDateTime;

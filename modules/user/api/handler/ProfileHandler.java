@@ -1,7 +1,7 @@
-package {{APP_PACKAGE}}.user.handler;
+package dev.jms.app.user.handler;
 
-import {{APP_PACKAGE}}.user.dao.ProfileDAO;
-import {{APP_PACKAGE}}.user.helper.ProfileSettingsHelper;
+import dev.jms.app.user.dao.ProfileDAO;
+import dev.jms.app.user.helper.ProfileSettingsHelper;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;

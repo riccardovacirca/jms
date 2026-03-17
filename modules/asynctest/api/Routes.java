@@ -1,6 +1,6 @@
-package {{APP_PACKAGE}}.asynctest;
+package dev.jms.app.asynctest;
 
-import {{APP_PACKAGE}}.asynctest.handler.AsyncTestHandler;
+import dev.jms.app.asynctest.handler.AsyncTestHandler;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
 
