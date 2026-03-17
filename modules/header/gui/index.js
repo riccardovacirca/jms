@@ -1,9 +1,9 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
-import HeaderComponent from './component.js';
+import Header from './Header.js';
 
 export default {
   mount(container) {
-    const component = new HeaderComponent();
+    const component = new Header();
     container.appendChild(component);
   }
 };

@@ -1,10 +1,10 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './home.css';
-import HomeComponent from './component.js';
+import Home from './Home.js';
 
 export default {
   mount(container) {
-    const component = new HomeComponent();
+    const component = new Home();
     container.appendChild(component);
   }
 };

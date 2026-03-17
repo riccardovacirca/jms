@@ -1,5 +1,5 @@
 import { LitElement, html } from 'lit';
-import './importer-component.js';
+import './ImporterWizard.js';
 
 function emptyForm() {
   return {
@@ -7,7 +7,7 @@ function emptyForm() {
   };
 }
 
-class ListeComponent extends LitElement {
+class Liste extends LitElement {
 
   static properties = {
     _view:      { state: true },
@@ -444,6 +444,6 @@ class ListeComponent extends LitElement {
   }
 }
 
-customElements.define('liste-layout', ListeComponent);
+customElements.define('liste-layout', Liste);
 
-export default ListeComponent;
+export default Liste;

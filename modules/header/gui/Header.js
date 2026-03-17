@@ -6,7 +6,7 @@ import { authorized, user } from '../../store.js';
  * Mostra contenuti diversi in base allo stato di autenticazione.
  * Su schermi piccoli collassa in un menu hamburger.
  */
-class HeaderComponent extends LitElement {
+class Header extends LitElement {
 
   static properties = {
     _authorized: { state: true },
@@ -90,6 +90,6 @@ class HeaderComponent extends LitElement {
   }
 }
 
-customElements.define('header-component', HeaderComponent);
+customElements.define('header-component', Header);
 
-export default HeaderComponent;
+export default Header;

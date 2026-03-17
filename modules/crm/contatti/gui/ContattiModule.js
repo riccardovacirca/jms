@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
 
-class ContattiModuleComponent extends LitElement {
+class ContattiModule extends LitElement {
 
   static properties = {
     _tab: { state: true }
@@ -33,6 +33,6 @@ class ContattiModuleComponent extends LitElement {
   }
 }
 
-customElements.define('contatti-module', ContattiModuleComponent);
+customElements.define('contatti-module', ContattiModule);
 
-export default ContattiModuleComponent;
+export default ContattiModule;

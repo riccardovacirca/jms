@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
 
-class HomeComponent extends LitElement {
+class Home extends LitElement {
 
   static properties = {
     _hello: { state: true }
@@ -48,6 +48,6 @@ class HomeComponent extends LitElement {
   }
 }
 
-customElements.define('home-component', HomeComponent);
+customElements.define('home-component', Home);
 
-export default HomeComponent;
+export default Home;

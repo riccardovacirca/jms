@@ -8,7 +8,7 @@ function emptyForm() {
   };
 }
 
-class ContattiComponent extends LitElement {
+class Contatti extends LitElement {
 
   static properties = {
     _view:      { state: true },
@@ -356,6 +356,6 @@ class ContattiComponent extends LitElement {
   }
 }
 
-customElements.define('contatti-layout', ContattiComponent);
+customElements.define('contatti-layout', Contatti);
 
-export default ContattiComponent;
+export default Contatti;
