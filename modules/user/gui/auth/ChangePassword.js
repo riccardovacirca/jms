@@ -1,5 +1,5 @@
 import { LitElement, html } from 'lit';
-import { authorized, user } from '../../store.js';
+import { authorized, user } from '../../../store.js';
 
 class ChangePassword extends LitElement {
 
