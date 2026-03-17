@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
 
-class UserForgotPasswordPage extends LitElement {
+class ForgotPassword extends LitElement {
 
   static properties = {
     _loading: { state: true },
@@ -74,4 +74,4 @@ class UserForgotPasswordPage extends LitElement {
   }
 }
 
-customElements.define('user-forgot-password-page', UserForgotPasswordPage);
+customElements.define("user-forgot-password", ForgotPassword);

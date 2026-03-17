@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
 
-class UserRegisterPage extends LitElement {
+class Register extends LitElement {
 
   static properties = {
     _loading: { state: true },
@@ -102,4 +102,4 @@ class UserRegisterPage extends LitElement {
   }
 }
 
-customElements.define('user-register-page', UserRegisterPage);
+customElements.define("user-register", Register);

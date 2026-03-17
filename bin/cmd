@@ -64,7 +64,13 @@ Usage: cmd COMMAND [OPTIONS]
   module dist <path>                Package module folder (relative to modules/) → dist/<name>-<version>.tar.gz
   module remove --name <nome>       Remove installed module
 
-  bench [options]                  Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
+  bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
+                                     Default: -c 10 -r 100 (10 concurrent users, 100 reps each)
+                                     -u <url>         Target URL
+                                     -c <num>         Concurrent users (default: 10)
+                                     -r <num>         Repetitions per user (default: 100)
+                                     -t <time>        Duration (e.g., 30S, 5M, 1H)
+                                     Other siege options are passed through
 
   -h, --help                       Show this help
 HELPEOF
@@ -1634,13 +1640,65 @@ bench_run() {
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     local LOG_FILE="$BENCH_DIR/siege-${TIMESTAMP}.log"
 
+    # Parse arguments to detect URL and check for -c/-r/-t options
+    local URL=""
+    local HAS_CONCURRENCY=false
+    local HAS_REPS_OR_TIME=false
+    local SIEGE_ARGS=()
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -u|--url)
+                [ -n "$2" ] || error "Option -u requires a URL"
+                URL="$2"
+                shift 2
+                ;;
+            -c|--concurrent)
+                HAS_CONCURRENCY=true
+                SIEGE_ARGS+=("$1" "$2")
+                shift 2
+                ;;
+            -r|--reps|-t|--time)
+                HAS_REPS_OR_TIME=true
+                SIEGE_ARGS+=("$1" "$2")
+                shift 2
+                ;;
+            -*)
+                SIEGE_ARGS+=("$1")
+                shift
+                ;;
+            http://*|https://*)
+                # URL without -u option
+                URL="$1"
+                shift
+                ;;
+            *)
+                SIEGE_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Add default -c 10 -r 100 if not specified
+    if [ "$HAS_CONCURRENCY" = false ]; then
+        SIEGE_ARGS=("-c" "10" "${SIEGE_ARGS[@]}")
+    fi
+    if [ "$HAS_REPS_OR_TIME" = false ]; then
+        SIEGE_ARGS=("-r" "100" "${SIEGE_ARGS[@]}")
+    fi
+
+    # Add URL at the end if specified
+    if [ -n "$URL" ]; then
+        SIEGE_ARGS+=("$URL")
+    fi
+
     info "Running siege benchmark..."
-    info "Options: $*"
+    info "Options: ${SIEGE_ARGS[*]}"
     info "Log file: bench/siege-${TIMESTAMP}.log"
     echo ""
 
-    # Run siege with all passed arguments, output to both stdout and log file
-    siege "$@" 2>&1 | tee "$LOG_FILE"
+    # Run siege with processed arguments, output to both stdout and log file
+    siege "${SIEGE_ARGS[@]}" 2>&1 | tee "$LOG_FILE"
 
     local EXIT_CODE=${PIPESTATUS[0]}
 

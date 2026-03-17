@@ -1,7 +1,7 @@
 import { LitElement, html } from 'lit';
 import { authorized, user } from '../../store.js';
 
-class UserChangePasswordPage extends LitElement {
+class ChangePassword extends LitElement {
 
   static properties = {
     _loading: { state: true },
@@ -80,4 +80,4 @@ class UserChangePasswordPage extends LitElement {
   }
 }
 
-customElements.define('user-change-password-page', UserChangePasswordPage);
+customElements.define("user-change-password", ChangePassword);

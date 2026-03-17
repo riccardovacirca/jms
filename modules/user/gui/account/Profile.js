@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
 
-class UserProfilePage extends LitElement {
+class Profile extends LitElement {
 
   static properties = {
     _loading:         { state: true },
@@ -236,4 +236,4 @@ class UserProfilePage extends LitElement {
   }
 }
 
-customElements.define('user-profile-page', UserProfilePage);
+customElements.define("user-profile", Profile);

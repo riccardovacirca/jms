@@ -17,35 +17,35 @@ function renderRoute(container) {
 
   if (section === 'auth') {
     if (sub === 'register') {
-      import('./Register.js').then(() => {
-        container.innerHTML = '<user-register-page></user-register-page>';
+      import('./auth/Register.js').then(() => {
+        container.innerHTML = '<user-register></user-register>';
       });
     } else if (sub === 'forgot-password') {
-      import('./ForgotPassword.js').then(() => {
-        container.innerHTML = '<user-forgot-password-page></user-forgot-password-page>';
+      import('./auth/ForgotPassword.js').then(() => {
+        container.innerHTML = '<user-forgot-password></user-forgot-password>';
       });
     } else if (sub === 'reset-password') {
-      import('./ResetPassword.js').then(() => {
-        container.innerHTML = '<user-reset-password-page></user-reset-password-page>';
+      import('./auth/ResetPassword.js').then(() => {
+        container.innerHTML = '<user-reset-password></user-reset-password>';
       });
     } else if (sub === 'change-password') {
-      import('./ChangePassword.js').then(() => {
-        container.innerHTML = '<user-change-password-page></user-change-password-page>';
+      import('./auth/ChangePassword.js').then(() => {
+        container.innerHTML = '<user-change-password></user-change-password>';
       });
     } else {
-      import('./Login.js').then(() => {
-        container.innerHTML = '<user-login-page></user-login-page>';
+      import('./auth/Login.js').then(() => {
+        container.innerHTML = '<user-login></user-login>';
       });
     }
   } else if (section === 'account') {
     if (!authorized.get()) { window.location.hash = '/user/auth/login'; return; }
-    import('./Account.js').then(() => {
-      container.innerHTML = '<user-account-page></user-account-page>';
+    import('./account/Settings.js').then(() => {
+      container.innerHTML = '<user-account></user-account>';
     });
   } else if (section === 'profile') {
     if (!authorized.get()) { window.location.hash = '/user/auth/login'; return; }
-    import('./Profile.js').then(() => {
-      container.innerHTML = '<user-profile-page></user-profile-page>';
+    import('./account/Profile.js').then(() => {
+      container.innerHTML = '<user-profile></user-profile>';
     });
   } else {
     if (authorized.get()) {

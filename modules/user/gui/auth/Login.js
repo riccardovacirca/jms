@@ -1,8 +1,8 @@
 import { LitElement, html } from 'lit';
-import { authorized, user } from '../../store.js';
-import { MODULE_CONFIG, DEFAULT_MODULE } from '../../config.js';
+import { authorized, user } from '../../../store.js';
+import { MODULE_CONFIG, DEFAULT_MODULE } from '../../../config.js';
 
-class UserLoginPage extends LitElement {
+class Login extends LitElement {
 
   static properties = {
     _loading:   { state: true },
@@ -133,4 +133,4 @@ class UserLoginPage extends LitElement {
   }
 }
 
-customElements.define('user-login-page', UserLoginPage);
+customElements.define('user-login', Login);

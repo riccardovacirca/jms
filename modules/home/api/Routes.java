@@ -1,8 +1,9 @@
 package {{APP_PACKAGE}}.home;
 
 import {{APP_PACKAGE}}.home.handler.HelloHandler;
-import dev.jms.util.HandlerAdapter;
-import io.undertow.server.handlers.PathTemplateHandler;
+import dev.jms.util.HttpMethod;
+import dev.jms.util.Router;
+
 import javax.sql.DataSource;
 
 /**
@@ -11,13 +12,13 @@ import javax.sql.DataSource;
 public class Routes
 {
   /**
-   * Aggiunge le rotte del modulo al PathTemplateHandler.
+   * Aggiunge le rotte del modulo al router.
    *
-   * @param paths handler delle rotte Undertow
-   * @param ds    datasource per le connessioni al database
+   * @param router router dell'applicazione
    */
-  public static void register(PathTemplateHandler paths, DataSource ds)
+  public static void register(Router router)
   {
-    paths.add("/api/home/hello", new HandlerAdapter(new HelloHandler(), ds));
+    HelloHandler h = new HelloHandler();
+    router.route(HttpMethod.GET, "/api/home/hello", h::hello);
   }
 }

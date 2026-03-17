@@ -201,7 +201,7 @@ gui/src/
 - `#main` — For dynamic page content
 - `#footer` — For persistent modules like footers (optional)
 
-**Module pattern:** Each module is a directory in `gui/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration.
+**Module pattern:** Each module is a directory in `gui/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration. Modules may contain semantic subfolders to organize components by domain (e.g., `user/auth/`, `user/account/`).
 
 **Module configuration** (`config.js`): All modules declare these attributes explicitly:
 ```javascript
@@ -435,6 +435,15 @@ res.status(200)
 - Subscribe to stores in `connectedCallback`, unsubscribe in `disconnectedCallback`; **never call `render()` explicitly** — Lit handles it automatically
 
 **Frontend dependencies:** Bootstrap 5 (CSS/components), Lit 3 (web components), nanostores (reactive state).
+
+**Naming conventions:**
+- **Generality principle**: Absence of suffix indicates broader context or higher generality. `Login` is a full page (broad context); `LoginForm` or `LoginButton` would be specialized components (narrow context).
+- **File = Class**: File name exactly matches class name (Java-like). Component files use PascalCase (`Login.js` → `class Login`); context files use lowercase (`index.js`, `init.js`).
+- **Namespace via path**: Namespace expressed through folder structure, not class name prefixes. Use semantic subfolders like `user/auth/Login.js` (not `user/UserLogin.js`).
+- **Custom elements**: Tag names use kebab-case with module prefix to avoid global conflicts (`customElements.define('user-login', Login)`).
+- **Semantic folders**: Organize by domain semantics (`auth/`, `account/`), not technical categories (`components/`, `pages/`).
+
+Full naming rules documented in `docs/dsl/javascript.md`.
 
 ## Environment Configuration
 

@@ -193,6 +193,131 @@ RULE var.no-global-singles
 
 ---
 
+## NAMING CONVENTIONS
+
+```
+RULE naming.generality-principle
+  applies-to: classi di componenti
+  note: l'assenza di suffisso indica il contesto più ampio o il grado più ampio di generalità;
+        i suffissi indicano specializzazione o riduzione del contesto;
+        una classe Login rappresenta una pagina completa (contesto ampio);
+        LoginForm o LoginButton rappresenterebbero componenti più specifici (contesto ridotto)
+
+  ok: |
+    // Pagina completa (contesto più ampio)
+    class Login extends LitElement { ... }
+
+    // Componente specializzato (contesto ridotto)
+    class LoginForm extends LitElement { ... }
+    class LoginButton extends LitElement { ... }
+
+  ko: |
+    // Ridondante: il suffisso Page non aggiunge valore se tutti i componenti
+    // in quel contesto sono pagine
+    class LoginPage extends LitElement { ... }
+```
+
+```
+RULE naming.file-equals-class
+  applies-to: file che definiscono componenti (classi)
+  note: il nome del file corrisponde esattamente al nome della classe (pattern Java-like);
+        i file componente usano PascalCase;
+        i file di contesto (orchestrazione, routing, inizializzazione) usano lowercase
+
+  ok: |
+    // Componenti (classi)
+    user/auth/Login.js          → class Login
+    user/auth/Register.js       → class Register
+    user/account/Profile.js     → class Profile
+    user/account/Settings.js    → class Settings
+
+    // Contesti (orchestrazione)
+    user/index.js               → mount/unmount + routing
+    user/init.js                → initialization function
+
+  ko: |
+    // Nome file non corrisponde al nome classe
+    user/auth/login.js          → class Login
+    user/auth/LoginPage.js      → class Login
+
+    // Contesto in PascalCase
+    user/Index.js               → mount/unmount function
+```
+
+```
+RULE naming.namespace-via-path
+  applies-to: organizzazione dei moduli
+  note: il namespace è espresso tramite la struttura delle cartelle, non tramite prefissi
+        nel nome della classe; le sottocartelle seguono la semantica del dominio;
+        questo elimina ridondanza e migliora la leggibilità
+
+  ok: |
+    user/
+      auth/
+        Login.js           → class Login (non UserLogin)
+        Register.js        → class Register
+      account/
+        Profile.js         → class Profile
+        Settings.js        → class Settings
+
+  ko: |
+    user/
+      UserLogin.js         → class UserLogin (prefisso ridondante)
+      UserRegister.js      → class UserRegister
+      UserProfile.js       → class UserProfile
+```
+
+```
+RULE naming.custom-elements
+  applies-to: registrazione custom elements
+  note: il tag name del custom element usa kebab-case e include il prefisso del modulo
+        per evitare conflitti globali nel registry dei custom elements;
+        il prefisso rimane anche se il nome della classe non lo include
+
+  ok: |
+    // File: user/auth/Login.js
+    class Login extends LitElement { ... }
+    customElements.define('user-login', Login);
+
+    // File: user/account/Profile.js
+    class Profile extends LitElement { ... }
+    customElements.define('user-profile', Profile);
+
+  ko: |
+    // Manca prefisso modulo (rischio conflitti)
+    class Login extends LitElement { ... }
+    customElements.define('login', Login);
+
+    // Tag non corrisponde al pattern kebab-case
+    class Login extends LitElement { ... }
+    customElements.define('userLogin', Login);
+```
+
+```
+RULE naming.semantic-folders
+  applies-to: organizzazione interna ai moduli
+  note: le sottocartelle seguono criteri semantici legati al dominio, non tecnici;
+        auth/ contiene componenti di autenticazione, account/ contiene gestione account;
+        evita cartelle come components/, pages/, views/ che non esprimono semantica di dominio
+
+  ok: |
+    user/
+      auth/           → autenticazione (login, register, password reset)
+      account/        → gestione account (profile, settings)
+
+    crm/
+      contatti/       → gestione contatti
+      aziende/        → gestione aziende
+
+  ko: |
+    user/
+      components/     → generico, non esprime dominio
+      pages/          → tecnico, non semantico
+      views/          → tecnico, non semantico
+```
+
+---
+
 ## COMMENTI
 
 ```
