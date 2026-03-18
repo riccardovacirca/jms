@@ -83,6 +83,13 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- [MODULE_PROFILES] -->
+        <!-- Module profiles with auto-activation based on module.json presence -->
+        <!-- Injected by: cmd module import -->
+        <!-- Removed by: cmd module remove -->
+    </profiles>
+
     <build>
         <plugins>
             <plugin>

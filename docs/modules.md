@@ -17,12 +17,11 @@ cmd module import modules/auth-1.1.0           # da cartella estratta
 - Copia migration SQL in `src/main/resources/db/migration/`
 - Registra la route in `App.java` (dopo `// [MODULE_ROUTES]`)
 - Aggiunge l'entry in `gui/src/config.js` (dopo `// [MODULE_ENTRIES]`)
+- **Aggiunge Maven profile al `pom.xml` (dopo `<!-- [MODULE_PROFILES] -->`)**
 - Verifica dipendenze dal tracker (`src/main/resources/modules/`)
 - Scrive il tracker: `src/main/resources/modules/<nome>/module.json`
 
-**Unico passo manuale:**
-
-- `pom.xml` — aggiungere dipendenze Java esterne (solo se il modulo le richiede)
+**Nessun passo manuale richiesto:** tutte le dipendenze Maven vengono gestite automaticamente tramite `profile.xml`.
 
 **Build dopo l'installazione:**
 
@@ -41,6 +40,7 @@ Legge il tracker installato (`src/main/resources/modules/auth/module.json`) e ri
 - Sorgenti Java e GUI
 - Route da `App.java`
 - Entry da `gui/src/config.js`
+- **Maven profile da `pom.xml`**
 - Il tracker stesso
 
 **Nota:** le migration Flyway non vengono rimosse automaticamente. Usare `cmd db reset` per ripristinare il database da zero.
@@ -75,10 +75,11 @@ md5sum modules/auth-1.1.0.tar.gz jms/modules/auth-1.1.0.tar.gz   # devono essere
 
 ```
 modules/<nome>-<vers>/             ← Cartella export (non compressa)
-  java/<nome>/                     ← Sorgenti Java (package dev.jms.app)
+  api/<nome>/                      ← Sorgenti Java (package dev.jms.app)
   gui/<nome>/                      ← Sorgenti GUI
   migration/                       ← Migration SQL Flyway
   module.json                      ← Metadati (auto-generati da export)
+  profile.xml                      ← Maven profile con dipendenze (opzionale)
 modules/<nome>-<vers>.tar.gz        ← Archivio distribuibile (generato da dist)
 jms/modules/<nome>-<vers>.tar.gz   ← Copia template (MD5 identico)
 src/main/resources/modules/<nome>/ ← Tracker moduli installati
@@ -115,6 +116,72 @@ src/main/resources/modules/<nome>/ ← Tracker moduli installati
 - `api.config` — proprietà da aggiungere manualmente a `config/application.properties`
 - `gui.config` — entry da inserire in `gui/src/config.js`
 - `install_notice` — messaggio opzionale mostrato al termine dell'installazione
+
+## Maven Dependencies (profile.xml)
+
+I moduli possono includere un file `profile.xml` per dichiarare dipendenze Maven. Questo file viene gestito automaticamente durante import/export/remove.
+
+### Formato profile.xml
+
+```xml
+<!-- [MODULE:auth] -->
+<profile>
+    <id>module-auth</id>
+    <activation>
+        <file>
+            <exists>src/main/resources/modules/auth/module.json</exists>
+        </file>
+    </activation>
+    <dependencies>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</profile>
+<!-- [/MODULE:auth] -->
+```
+
+### Funzionamento automatico
+
+1. **Import**: `cmd module import auth`
+   - Copia `profile.xml` nel `pom.xml` dopo il marker `<!-- [MODULE_PROFILES] -->`
+   - Maven rileva il tracker `module.json` e **attiva automaticamente** il profile
+   - Le dipendenze vengono scaricate al prossimo build
+
+2. **Remove**: `cmd module remove --name auth`
+   - Rimuove il blocco tra `<!-- [MODULE:auth] -->` e `<!-- [/MODULE:auth] -->`
+   - Maven non trova più il tracker e **disattiva automaticamente** il profile
+   - Le dipendenze non vengono più incluse
+
+3. **Export**: `cmd module export --name auth`
+   - Estrae il profile dal `pom.xml` del progetto corrente
+   - Lo salva come `profile.xml` nella cartella modulo
+
+### Marker nel pom.xml
+
+Il file `pom.xml` deve contenere il marker:
+
+```xml
+<profiles>
+    <!-- [MODULE_PROFILES] -->
+    <!-- I profile dei moduli vengono inseriti qui automaticamente -->
+</profiles>
+```
+
+### Note importanti
+
+- I marker `<!-- [MODULE:nome] -->` e `<!-- [/MODULE:nome] -->` sono **obbligatori** per la rimozione automatica
+- L'attivazione tramite `<file><exists>` permette a Maven di attivare/disattivare automaticamente il profile
+- Se un modulo non ha dipendenze esterne, `profile.xml` può essere omesso
+- `cmd module export` estrae automaticamente il profile esistente (se presente)
 
 ## File base vs file modulo
 

@@ -57,8 +57,6 @@ Usage: cmd COMMAND [OPTIONS]
   db setup                         Create user and database from .env file
   db reset                         Reset database (drop and recreate)
 
-  sync                             Sync using .sync config file in project root
-
   module import <path>              Install module from path relative to modules/ (folder or .tar.gz)
   module export --name <n> [-v x]   Export current project module to modules/<name>[-version]/
   module dist <path>                Package module folder (relative to modules/) → dist/<name>-<version>.tar.gz
@@ -1049,6 +1047,29 @@ if api_cfg:
         print(f'    {k}={v}')
 " 2>/dev/null || true
 
+    # Maven profile installation
+    if [ -f "$MODULE_DIR/profile.xml" ]; then
+        info "[module] Aggiungo Maven profile al pom.xml..."
+
+        local POM="$WORKSPACE/pom.xml"
+        local PROFILE_XML
+        PROFILE_XML=$(cat "$MODULE_DIR/profile.xml")
+
+        # Inserisce dopo il marker [MODULE_PROFILES]
+        awk -v profile="$PROFILE_XML" '
+            /<!-- \[MODULE_PROFILES\] -->/ {
+                print
+                print profile
+                next
+            }
+            {print}
+        ' "$POM" > "$POM.tmp" && mv "$POM.tmp" "$POM"
+
+        success "  Maven profile aggiunto al pom.xml"
+    else
+        warn "  Nessun Maven profile (profile.xml non trovato)"
+    fi
+
     # Write tracker: src/main/resources/modules/<nome>/module.json
     local TRACKER_DIR="$WORKSPACE/src/main/resources/modules/$MODULE"
     mkdir -p "$TRACKER_DIR"
@@ -1212,6 +1233,34 @@ module_export() {
     done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" -print0 2>/dev/null)
 
     [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
+
+    # Maven profile extraction
+    local POM="$WORKSPACE/pom.xml"
+    if [ -f "$POM" ]; then
+        info "[module] Estraggo Maven profile dal pom.xml..."
+
+        # Estrai il blocco tra [MODULE:nome] e [/MODULE:nome]
+        awk -v mod="$MODULE" '
+            /<!-- \[MODULE:/ {
+                if ($0 ~ "\\[MODULE:" mod "\\]") {
+                    found=1
+                }
+            }
+            found {print}
+            /<!-- \[\/MODULE:/ {
+                if ($0 ~ "\\[/MODULE:" mod "\\]") {
+                    exit
+                }
+            }
+        ' "$POM" > "$OUTPUT/profile.xml"
+
+        if [ -s "$OUTPUT/profile.xml" ]; then
+            success "  Maven profile esportato"
+        else
+            rm -f "$OUTPUT/profile.xml"
+            warn "  Nessun Maven profile trovato per il modulo '$MODULE'"
+        fi
+    fi
 
     # Generate module.json automatically
     info "[module] Genero module.json..."
@@ -1517,6 +1566,30 @@ print('OK')
 " 2>/dev/null && success "  Modulo rimosso da config.js" || warn "  Impossibile rimuovere da config.js — rimuovi manualmente '$MODULE'"
     fi
 
+    # Remove Maven profile from pom.xml
+    local POM="$WORKSPACE/pom.xml"
+    if [ -f "$POM" ]; then
+        info "[module] Rimuovo Maven profile dal pom.xml..."
+
+        # Rimuove il blocco tra [MODULE:nome] e [/MODULE:nome]
+        awk -v mod="$MODULE" '
+            /<!-- \[MODULE:/ {
+                if ($0 ~ "\\[MODULE:" mod "\\]") {
+                    skip=1
+                }
+            }
+            !skip {print}
+            /<!-- \[\/MODULE:/ {
+                if ($0 ~ "\\[/MODULE:" mod "\\]") {
+                    skip=0
+                    next
+                }
+            }
+        ' "$POM" > "$POM.tmp" && mv "$POM.tmp" "$POM"
+
+        success "  Maven profile rimosso dal pom.xml"
+    fi
+
     # Migration files: warn only (Flyway state cannot be rolled back automatically)
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
     local MIGR_FILES
@@ -1533,61 +1606,6 @@ print('OK')
 
     printf '\n'
     success "Modulo '$MODULE' rimosso"
-}
-
-
-# ============================================================================
-# Sync Operations
-# ============================================================================
-
-sync_run() {
-    local CONFIG_FILE="$WORKSPACE/.sync"
-    [ -f "$CONFIG_FILE" ] || error "File .sync non trovato in $WORKSPACE"
-
-    confirm "Avviare la sincronizzazione da $CONFIG_FILE?" || exit 0
-
-    info "Starting sync from $CONFIG_FILE..."
-
-    while IFS= read -r line || [ -n "$line" ]; do
-        [ -z "$line" ] && continue
-        case "$line" in \#*) continue ;; esac
-
-        local left right orig dest tmp sed_expr
-        left="${line% -> *}"
-        right="${line#* -> }"
-
-        orig="${left%% (*}"
-        dest="${right%% (*}"
-
-        [ -n "$orig" ] && [ -n "$dest" ] || continue
-
-        sed_expr=""
-        case "$right" in
-            *"("*)
-                tmp="${right##*(}"
-                sed_expr="${tmp%)}"
-                ;;
-        esac
-
-        if [ -f "$orig" ]; then
-            rsync -av "$orig" "$dest" || { warn "  Failed: $orig -> $dest"; continue; }
-        else
-            rsync -av --delete "$orig/" "$dest/" || { warn "  Failed: $orig -> $dest"; continue; }
-        fi
-        success "  Synced: $orig -> $dest"
-
-        if [ -n "$sed_expr" ]; then
-            if [ -f "$orig" ]; then
-                sed -i "$sed_expr" "$dest"
-            else
-                find "$dest" -type f -exec sed -i "$sed_expr" {} +
-            fi
-            success "  Applied substitutions to: $dest"
-        fi
-
-    done < "$CONFIG_FILE"
-
-    success "Sync completed"
 }
 
 # ============================================================================
@@ -1753,9 +1771,6 @@ case "$1" in
         else
             error "Unknown db option: $1. Use: db, db -c <sql>, db -f <file>, db status, db reset, db setup"
         fi
-        ;;
-    sync)
-        sync_run
         ;;
     bench)
         shift 1
