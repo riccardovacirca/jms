@@ -9,7 +9,7 @@ import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
-import dev.jms.util.excel.ExcelAnalyzer;
+import dev.jms.util.Excel;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -30,8 +30,8 @@ public class ImportAnalyzeHandler implements Handler
     String token;
     byte[] fileBytes;
     String filename;
-    ExcelAnalyzer analyzer;
-    ExcelAnalyzer.AnalysisResult analysis;
+    
+    Excel.AnalysisResult analysis;
     String analysisError;
     String sessionId;
     Path tmpFile;
@@ -65,8 +65,8 @@ public class ImportAnalyzeHandler implements Handler
           analysisError = null;
           analysis = null;
           try {
-            analyzer = new ExcelAnalyzer(new ByteArrayInputStream(fileBytes));
-            analysis = analyzer.analyze(5);
+            
+            analysis = Excel.analyze(new ByteArrayInputStream(fileBytes), 5);
           } catch (Exception e) {
             log.warn("Errore analisi file: " + e.getMessage());
             analysisError = e.getMessage();

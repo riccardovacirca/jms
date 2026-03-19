@@ -81,6 +81,12 @@
             <artifactId>java-jwt</artifactId>
             <version>4.4.0</version>
         </dependency>
+        <!-- Apache PDFBox (PDF manipulation) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
     </dependencies>
 
     <profiles>

@@ -13,7 +13,7 @@ import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
-import dev.jms.util.excel.ExcelReader;
+import dev.jms.util.Excel;
 
 import java.io.FileInputStream;
 import java.nio.file.Files;
@@ -90,7 +90,7 @@ public class ImportExecuteHandler implements Handler
           listaId = body.get("listaId") != null ? ((Number) body.get("listaId")).intValue() : null;
           consenso = body.get("consenso") instanceof Boolean ? (Boolean) body.get("consenso") : false;
           mapping = Json.decode(session.columnMapping(), HashMap.class);
-          rows = new ExcelReader(new FileInputStream(session.filePath())).read();
+          rows = Excel.read(new FileInputStream(session.filePath()));
           contattoDao = new ContattoDAO(db);
           listaDao = listaId != null ? new ListaDAO(db) : null;
           importedCount = 0;

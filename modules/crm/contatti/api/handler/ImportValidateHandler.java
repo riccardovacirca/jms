@@ -10,7 +10,7 @@ import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
-import dev.jms.util.excel.ExcelReader;
+import dev.jms.util.Excel;
 
 import java.io.FileInputStream;
 import java.nio.file.Files;
@@ -82,7 +82,7 @@ public class ImportValidateHandler implements Handler
              .send();
         } else {
           mapping = Json.decode(session.columnMapping(), HashMap.class);
-          rows = new ExcelReader(new FileInputStream(session.filePath())).read();
+          rows = Excel.read(new FileInputStream(session.filePath()));
           result = new ArrayList<>();
           seenPhones = new HashSet<>();
           validCount = 0;

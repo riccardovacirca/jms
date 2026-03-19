@@ -4,8 +4,6 @@ import dev.jms.app.home.handler.HelloHandler;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
 
-import javax.sql.DataSource;
-
 /**
  * Registra le rotte HTTP del modulo home.
  */
@@ -18,7 +16,8 @@ public class Routes
    */
   public static void register(Router router)
   {
-    HelloHandler h = new HelloHandler();
+    HelloHandler h;
+    h = new HelloHandler();
     router.route(HttpMethod.GET, "/api/home/hello", h::hello);
   }
 }

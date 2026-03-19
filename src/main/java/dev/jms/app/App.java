@@ -16,8 +16,15 @@ import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
 import javax.sql.DataSource;
 
+/**
+ * Entry point dell'applicazione. Inizializza i servizi (DB, Auth, Mail, AsyncExecutor),
+ * esegue le migrazioni Flyway, registra le route e avvia il server Undertow.
+ */
 public class App
 {
+  /**
+   * Avvia il server HTTP sulla porta configurata in application.properties (default: 8080).
+   */
   public static void main(String[] args)
   {
     Config config;
@@ -29,8 +36,8 @@ public class App
     Undertow server;
     DataSource ds;
 
-    config        = new Config();
-    port          = config.getInt("server.port", 8080);
+    config = new Config();
+    port = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
 
     DB.init(config);
@@ -46,7 +53,7 @@ public class App
       new ClassPathResourceManager(App.class.getClassLoader(), "static")
     ).setWelcomeFiles("index.html");
 
-    paths  = new PathTemplateHandler(staticHandler);
+    paths = new PathTemplateHandler(staticHandler);
     router = new Router(paths, ds);
 
     // Status endpoint
