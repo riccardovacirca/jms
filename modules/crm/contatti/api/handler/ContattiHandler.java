@@ -6,24 +6,25 @@ import dev.jms.app.contatti.dao.ContattoDAO;
 import dev.jms.app.contatti.dto.ContattoDTO;
 import dev.jms.util.Auth;
 import dev.jms.util.DB;
-import dev.jms.util.Handler;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Json;
 import dev.jms.util.Log;
 import dev.jms.util.ValidationException;
-
 import java.util.HashMap;
 import java.util.List;
 
-/** GET /api/contatti — lista paginata con filtro opzionale per lista.
- *  POST /api/contatti — crea un nuovo contatto. */
-public class ContattiHandler implements Handler
+/**
+ * Handler per le operazioni sui contatti (tabella contatti).
+ */
+public class ContattiHandler
 {
   private static final Log log = Log.get(ContattiHandler.class);
 
-  /** Restituisce la lista paginata dei contatti, con filtro opzionale per lista (query param listaId). */
-  @Override
-  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /**
+   * GET /api/contatti — lista paginata con filtro opzionale per lista (query param {@code listaId}).
+   */
+  public void list(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
     String token;
     String pageStr;
@@ -39,7 +40,6 @@ public class ContattiHandler implements Handler
 
     token = req.getCookie("access_token");
     if (token == null) {
-      log.warn("GET /api/contatti rifiutato: access_token assente");
       res.status(200)
          .contentType("application/json")
          .err(true)
@@ -63,7 +63,6 @@ public class ContattiHandler implements Handler
         out.put("page", page);
         out.put("size", size);
         out.put("items", items);
-        out.put("hello", "world");
         res.status(200)
            .contentType("application/json")
            .err(false)
@@ -71,7 +70,6 @@ public class ContattiHandler implements Handler
            .out(out)
            .send();
       } catch (JWTVerificationException e) {
-        log.warn("GET /api/contatti rifiutato: token non valido o scaduto");
         res.status(200)
            .contentType("application/json")
            .err(true)
@@ -82,19 +80,85 @@ public class ContattiHandler implements Handler
     }
   }
 
-  /** Crea un nuovo contatto. Restituisce l'id generato. */
-  @Override
-  public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /**
+   * GET /api/contatti/search — ricerca full-text paginata (query param {@code q}).
+   */
+  public void search(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
     String token;
-    ContattoDTO contatto;
+    String query;
+    String pageStr;
+    String sizeStr;
+    int page;
+    int size;
     ContattoDAO dao;
+    List<ContattoDTO> items;
+    int total;
+    HashMap<String, Object> out;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        query = req.getQueryParam("q");
+        if (query == null || query.isBlank()) {
+          res.status(200)
+             .contentType("application/json")
+             .err(true)
+             .log("Parametro q obbligatorio")
+             .out(null)
+             .send();
+        } else {
+          pageStr = req.getQueryParam("page");
+          sizeStr = req.getQueryParam("size");
+          page = pageStr != null ? Integer.parseInt(pageStr) : 1;
+          size = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
+          dao = new ContattoDAO(db);
+          items = dao.search(query, page, size);
+          total = dao.countSearch(query);
+          out = new HashMap<>();
+          out.put("total", total);
+          out.put("page", page);
+          out.put("size", size);
+          out.put("items", items);
+          res.status(200)
+             .contentType("application/json")
+             .err(false)
+             .log(null)
+             .out(out)
+             .send();
+        }
+      } catch (JWTVerificationException e) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * POST /api/contatti — crea un nuovo contatto. Restituisce l'id generato.
+   */
+  public void create(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    ContattoDAO dao;
+    ContattoDTO contatto;
     int newId;
     HashMap<String, Object> out;
 
     token = req.getCookie("access_token");
     if (token == null) {
-      log.warn("POST /api/contatti rifiutato: access_token assente");
       res.status(200)
          .contentType("application/json")
          .err(true)
@@ -134,7 +198,276 @@ public class ContattiHandler implements Handler
              .send();
         }
       } catch (JWTVerificationException e) {
-        log.warn("POST /api/contatti rifiutato: token non valido o scaduto");
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * GET /api/contatti/{id} — recupera un contatto per id.
+   */
+  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO contatto;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        id = Integer.parseInt(req.urlArgs().get("id"));
+        dao = new ContattoDAO(db);
+        contatto = dao.findById(id);
+        if (contatto == null) {
+          res.status(200)
+             .contentType("application/json")
+             .err(true)
+             .log("Contatto non trovato")
+             .out(null)
+             .send();
+        } else {
+          res.status(200)
+             .contentType("application/json")
+             .err(false)
+             .log(null)
+             .out(contatto)
+             .send();
+        }
+      } catch (JWTVerificationException e) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * PUT /api/contatti/{id} — aggiorna tutti i campi del contatto.
+   */
+  public void update(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO existing;
+    ContattoDTO updated;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        id = Integer.parseInt(req.urlArgs().get("id"));
+        dao = new ContattoDAO(db);
+        existing = dao.findById(id);
+        if (existing == null) {
+          res.status(200)
+             .contentType("application/json")
+             .err(true)
+             .log("Contatto non trovato")
+             .out(null)
+             .send();
+        } else {
+          try {
+            updated = ContattoAdapter.from(req);
+            if (dao.existsByTelefono(updated.telefono(), id)) {
+              res.status(200)
+                 .contentType("application/json")
+                 .err(true)
+                 .log("Telefono già esistente")
+                 .out(null)
+                 .send();
+            } else {
+              updated = new ContattoDTO(
+                id,
+                updated.nome(), updated.cognome(), updated.ragioneSociale(),
+                updated.telefono(), updated.email(), updated.indirizzo(),
+                updated.citta(), updated.cap(), updated.provincia(), updated.note(),
+                updated.stato(), updated.consenso(), updated.blacklist(),
+                existing.createdAt(), null, existing.listeCount()
+              );
+              dao.update(updated);
+              res.status(200)
+                 .contentType("application/json")
+                 .err(false)
+                 .log(null)
+                 .out(null)
+                 .send();
+            }
+          } catch (ValidationException e) {
+            res.status(200)
+               .contentType("application/json")
+               .err(true)
+               .log(e.getMessage())
+               .out(null)
+               .send();
+          }
+        }
+      } catch (JWTVerificationException e) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * DELETE /api/contatti/{id} — elimina un contatto.
+   */
+  public void delete(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    ContattoDAO dao;
+    ContattoDTO existing;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        id = Integer.parseInt(req.urlArgs().get("id"));
+        dao = new ContattoDAO(db);
+        existing = dao.findById(id);
+        if (existing == null) {
+          res.status(200)
+             .contentType("application/json")
+             .err(true)
+             .log("Contatto non trovato")
+             .out(null)
+             .send();
+        } else {
+          dao.delete(id);
+          res.status(200)
+             .contentType("application/json")
+             .err(false)
+             .log(null)
+             .out(null)
+             .send();
+        }
+      } catch (JWTVerificationException e) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * PUT /api/contatti/{id}/stato — aggiorna solo il campo stato. Body: {@code {"stato": 1}}.
+   */
+  @SuppressWarnings("unchecked")
+  public void updateStato(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    HashMap<String, Object> body;
+    int stato;
+    ContattoDAO dao;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        id = Integer.parseInt(req.urlArgs().get("id"));
+        body = Json.decode(req.getBody(), HashMap.class);
+        stato = DB.toInteger(body.get("stato"));
+        dao = new ContattoDAO(db);
+        dao.updateStato(id, stato);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(null)
+           .send();
+      } catch (JWTVerificationException e) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Token non valido o scaduto")
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * PUT /api/contatti/{id}/blacklist — aggiorna solo il flag blacklist. Body: {@code {"blacklist": true}}.
+   */
+  @SuppressWarnings("unchecked")
+  public void updateBlacklist(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String token;
+    int id;
+    HashMap<String, Object> body;
+    boolean blacklist;
+    ContattoDAO dao;
+
+    token = req.getCookie("access_token");
+    if (token == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Non autenticato")
+         .out(null)
+         .send();
+    } else {
+      try {
+        Auth.get().verifyAccessToken(token);
+        id = Integer.parseInt(req.urlArgs().get("id"));
+        body = Json.decode(req.getBody(), HashMap.class);
+        blacklist = DB.toBoolean(body.get("blacklist"));
+        dao = new ContattoDAO(db);
+        dao.setBlacklist(id, blacklist);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(null)
+           .send();
+      } catch (JWTVerificationException e) {
         res.status(200)
            .contentType("application/json")
            .err(true)
