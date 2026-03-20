@@ -102,6 +102,25 @@ public class HttpResponse
     return this;
   }
 
+  /**
+   * Invia una risposta con body grezzo, bypassando l'envelope JSON standard.
+   * Utile per webhook che richiedono un formato di risposta specifico (es. Vonage NCCO).
+   * Non richiede la chiamata a err(), log(), out().
+   * Richiede che status() e contentType() siano stati chiamati.
+   */
+  public void raw(String body)
+  {
+    if (!_statusSet) {
+      throw new IllegalStateException("status() non chiamato");
+    }
+    if (!_ctSet) {
+      throw new IllegalStateException("contentType() non chiamato");
+    }
+    exchange.setStatusCode(_status);
+    exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, _contentType);
+    exchange.getResponseSender().send(body);
+  }
+
   /** Valida che status(), contentType(), err(), log() e out() siano stati tutti chiamati, poi invia. */
   public void send()
   {
