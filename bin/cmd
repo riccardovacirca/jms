@@ -94,6 +94,79 @@ app_is_running() {
     return 1
 }
 
+app_token() {
+    local CMD="$1"
+    shift
+
+    local API_URL="http://localhost:${API_PORT:-8080}/api/authn/token"
+    local HASH="" IP="" EXP_DATE="" ENABLED=""
+
+    case "$CMD" in
+        create)
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --ip)      IP="$2";      shift 2 ;;
+                    --exp)     EXP_DATE="$2"; shift 2 ;;
+                    --enabled) ENABLED="$2"; shift 2 ;;
+                    *) error "Unknown option: $1" ;;
+                esac
+            done
+
+            local EXP_MS=0
+            if [ -n "$EXP_DATE" ]; then
+                EXP_MS=$(( $(date -d "$EXP_DATE" +%s) * 1000 )) || error "Data non valida: $EXP_DATE (formato atteso: yyyy-mm-dd)"
+            fi
+
+            local ENABLED_BOOL="true"
+            [ "$ENABLED" = "0" ] && ENABLED_BOOL="false"
+
+            local BODY="{\"ip\":\"${IP}\",\"expiresAt\":${EXP_MS},\"enabled\":${ENABLED_BOOL}}"
+            local RESP
+            RESP=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$BODY")
+            echo "$RESP"
+            ;;
+
+        status)
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --hash) HASH="$2"; shift 2 ;;
+                    *) error "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
+            curl -s "${API_URL}?hash=${HASH}"
+            echo
+            ;;
+
+        remove)
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --hash) HASH="$2"; shift 2 ;;
+                    *) error "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
+            curl -s -X DELETE "${API_URL}?hash=${HASH}"
+            echo
+            ;;
+
+        disable)
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --hash) HASH="$2"; shift 2 ;;
+                    *) error "Unknown option: $1" ;;
+                esac
+            done
+            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
+            local BODY="{\"hash\":\"${HASH}\",\"enabled\":false}"
+            curl -s -X PUT "$API_URL" -H "Content-Type: application/json" -d "$BODY"
+            echo
+            ;;
+
+        *) error "Unknown token command: $CMD. Use: create, status, remove, disable" ;;
+    esac
+}
+
 app_build() {
     load_env
     info "Compiling Java backend (Maven)..."
@@ -1714,7 +1787,8 @@ case "$1" in
             restart) app_restart ;;
             status)  app_status ;;
             clean)   app_clean ;;
-            *) error "Unknown app command: $2. Use: build, clean, run, debug, start, stop, restart, status" ;;
+            token)   shift 2; app_token "$@" ;;
+            *) error "Unknown app command: $2. Use: build, clean, run, debug, start, stop, restart, status, token" ;;
         esac
         ;;
     gui)
