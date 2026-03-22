@@ -4,7 +4,8 @@
  * Ogni modulo dichiara tutti gli attributi seguenti:
  *
  * route         → stringa (es. '/home') o null (modulo non navigabile via URL)
- * path          → nome della cartella sotto gui/src/modules/ (es. 'home')
+ * path          → cartella del modulo: nome semplice (es. 'home') per moduli top-level sotto gui/src/module/,
+ *                  oppure 'namespace/nome' (es. 'cti/vonage') per moduli con namespace sotto gui/src/module/
  * container     → ID dell'elemento DOM in cui montare il modulo (es. 'main', 'header', 'footer')
  * authorization → null (pubblico) o { redirectTo: '/route' } (protetto, reindirizza se non autorizzato)
  * persistent    → true (sempre montato, non smontato) o false (montato/smontato durante la navigazione)

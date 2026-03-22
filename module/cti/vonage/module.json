@@ -1,0 +1,21 @@
+{
+  "name": "vonage",
+  "version": "1.0.0",
+  "dependencies": {},
+  "api": {
+    "routes": "dev.jms.app.module.cti.vonage.Routes.register(router, config);",
+    "config": {}
+  },
+  "gui": {
+    "config": {
+      "route": "/vonage",
+      "path": "cti/vonage",
+      "container": "main",
+      "authorization": { "redirectTo": "/user" },
+      "persistent": false,
+      "priority": 999,
+      "init": null
+    }
+  },
+  "install_notice": "1. Configura le proprietà vonage.* in config/application.properties (application-name, application-id, api-key, api-secret, base-url, private-key, voice-answer-url, voice-event-url, rtc-event-url, from-number).\n2. Installa la dipendenza frontend: npm install @vonage/client-sdk (nella cartella gui/).\n3. Configura le webhook URL nel Vonage Dashboard: https://your-domain.com/api/vonage/answer e https://your-domain.com/api/vonage/event.\n4. Copia la chiave privata Vonage in /app/config/private.key.\n5. Installa ngrok nel container per esporre gli endpoint locali durante lo sviluppo:\n   curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' | tee /etc/apt/sources.list.d/ngrok.list && apt-get update -qq && apt-get install -y ngrok\n6. Aggiungi NGROK_TOKEN=<il-tuo-token> nel file .env (token disponibile su https://dashboard.ngrok.com), poi registra il token e avvia il tunnel:\n   ngrok config add-authtoken $NGROK_TOKEN\n   ngrok http 8080\n   Usa l'URL pubblico generato come base per voice-answer-url, voice-event-url e rtc-event-url."
+}

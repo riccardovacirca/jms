@@ -7,8 +7,8 @@
 !docker/**
 !docs/
 !docs/**
-!modules/
-!modules/**
+!module/
+!module/**
 !src/
 !src/**
 !gui/

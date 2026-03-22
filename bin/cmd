@@ -57,9 +57,9 @@ Usage: cmd COMMAND [OPTIONS]
   db setup                         Create user and database from .env file
   db reset                         Reset database (drop and recreate)
 
-  module import <path>              Install module from path relative to modules/ (folder or .tar.gz)
-  module export --name <n> [-v x]   Export current project module to modules/<name>[-version]/
-  module dist <path>                Package module folder (relative to modules/) → dist/<name>-<version>.tar.gz
+  module import <path>              Install module from path relative to module/ (folder or .tar.gz)
+  module export --name <n> [-v x]   Export current project module to module/<name>[-version]/
+  module dist <path>                Package module folder (relative to module/) → dist/<name>-<version>.tar.gz
   module remove --name <nome>       Remove installed module
 
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
@@ -94,78 +94,6 @@ app_is_running() {
     return 1
 }
 
-app_token() {
-    local CMD="$1"
-    shift
-
-    local API_URL="http://localhost:${API_PORT:-8080}/api/authn/token"
-    local HASH="" IP="" EXP_DATE="" ENABLED=""
-
-    case "$CMD" in
-        create)
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --ip)      IP="$2";      shift 2 ;;
-                    --exp)     EXP_DATE="$2"; shift 2 ;;
-                    --enabled) ENABLED="$2"; shift 2 ;;
-                    *) error "Unknown option: $1" ;;
-                esac
-            done
-
-            local EXP_MS=0
-            if [ -n "$EXP_DATE" ]; then
-                EXP_MS=$(( $(date -d "$EXP_DATE" +%s) * 1000 )) || error "Data non valida: $EXP_DATE (formato atteso: yyyy-mm-dd)"
-            fi
-
-            local ENABLED_BOOL="true"
-            [ "$ENABLED" = "0" ] && ENABLED_BOOL="false"
-
-            local BODY="{\"ip\":\"${IP}\",\"expiresAt\":${EXP_MS},\"enabled\":${ENABLED_BOOL}}"
-            local RESP
-            RESP=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$BODY")
-            echo "$RESP"
-            ;;
-
-        status)
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --hash) HASH="$2"; shift 2 ;;
-                    *) error "Unknown option: $1" ;;
-                esac
-            done
-            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
-            curl -s "${API_URL}?hash=${HASH}"
-            echo
-            ;;
-
-        remove)
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --hash) HASH="$2"; shift 2 ;;
-                    *) error "Unknown option: $1" ;;
-                esac
-            done
-            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
-            curl -s -X DELETE "${API_URL}?hash=${HASH}"
-            echo
-            ;;
-
-        disable)
-            while [ $# -gt 0 ]; do
-                case "$1" in
-                    --hash) HASH="$2"; shift 2 ;;
-                    *) error "Unknown option: $1" ;;
-                esac
-            done
-            [ -n "$HASH" ] || error "Opzione --hash obbligatoria"
-            local BODY="{\"hash\":\"${HASH}\",\"enabled\":false}"
-            curl -s -X PUT "$API_URL" -H "Content-Type: application/json" -d "$BODY"
-            echo
-            ;;
-
-        *) error "Unknown token command: $CMD. Use: create, status, remove, disable" ;;
-    esac
-}
 
 app_build() {
     load_env
@@ -980,36 +908,138 @@ db_status() {
 
 
 # ============================================================================
-# Module install (internal) — accepts MODULE_DIR, reads name from module.json
+# _module_paths — deriva i path di installazione dal MODULE_KEY
+#
+# Argomento: MODULE_KEY (es. "user" oppure "cti/vonage")
+#
+# Tutti i moduli installati (top-level e con namespace) usano app/module/:
+#
+# Moduli top-level (nessun namespace, es. "user"):
+#   Java  → src/main/java/dev/jms/app/module/<name>/
+#   GUI   → gui/src/module/<name>/
+#   pkg   → dev.jms.app.module.<name>
+#
+# Moduli con namespace (es. "cti/vonage"):
+#   Java  → src/main/java/dev/jms/app/module/<ns>/<name>/
+#   GUI   → gui/src/module/<ns>/<name>/
+#   pkg   → dev.jms.app.module.<ns_dotted>.<name>
+#
+# Imposta le variabili: MODULE_NAME, MODULE_NS,
+#   JAVA_DIR, GUI_DIR, JAVA_PKG, GUI_PATH, TRACKER_DIR
+# ============================================================================
+
+_module_paths() {
+    local KEY="${1%/}"
+
+    if echo "$KEY" | grep -q '/'; then
+        MODULE_NAME="${KEY##*/}"
+        MODULE_NS="${KEY%/*}"
+        local NS_DOTTED="${MODULE_NS//\//.}"
+        JAVA_DIR="$WORKSPACE/src/main/java/dev/jms/app/module/$MODULE_NS/$MODULE_NAME"
+        GUI_DIR="$WORKSPACE/gui/src/module/$MODULE_NS/$MODULE_NAME"
+        JAVA_PKG="dev.jms.app.module.${NS_DOTTED}.${MODULE_NAME}"
+        GUI_PATH="$KEY"
+    else
+        MODULE_NAME="$KEY"
+        MODULE_NS=""
+        JAVA_DIR="$WORKSPACE/src/main/java/dev/jms/app/module/$MODULE_NAME"
+        GUI_DIR="$WORKSPACE/gui/src/module/$MODULE_NAME"
+        JAVA_PKG="dev.jms.app.module.$MODULE_NAME"
+        GUI_PATH="$MODULE_NAME"
+    fi
+    TRACKER_DIR="$WORKSPACE/src/main/resources/module/$KEY"
+}
+
+# ============================================================================
+# _rewrite_java_packages — aggiorna package e import nei .java copiati
+#
+# Legge il package corrente da Routes.java nella cartella indicata;
+# se diverso dal target, aggiorna tutti i .java (package + import).
+# ============================================================================
+
+_rewrite_java_packages() {
+    local JAVA_INSTALL_DIR="$1"
+    local NEW_PKG="$2"
+
+    local ROUTES_FILE="$JAVA_INSTALL_DIR/Routes.java"
+    [ -f "$ROUTES_FILE" ] || return 0
+
+    local OLD_PKG
+    OLD_PKG=$(python3 -c "
+import re, sys
+with open('$ROUTES_FILE') as f:
+    for line in f:
+        m = re.match(r'^package (dev\.jms\.app\.\S+?);', line.strip())
+        if m:
+            print(m.group(1))
+            sys.exit(0)
+" 2>/dev/null || true)
+
+    [ -z "$OLD_PKG" ] && return 0
+    [ "$OLD_PKG" = "$NEW_PKG" ] && return 0
+
+    python3 -c "
+import os, re
+java_dir = '$JAVA_INSTALL_DIR'
+old_pkg  = '$OLD_PKG'
+new_pkg  = '$NEW_PKG'
+for root, dirs, files in os.walk(java_dir):
+    for name in files:
+        if not name.endswith('.java'):
+            continue
+        path = os.path.join(root, name)
+        with open(path) as f:
+            content = f.read()
+        content = re.sub(
+            r'^package ' + re.escape(old_pkg) + r'((?:\.\w+)*);',
+            lambda m: 'package ' + new_pkg + m.group(1) + ';',
+            content, count=1, flags=re.MULTILINE)
+        content = content.replace('import ' + old_pkg + '.', 'import ' + new_pkg + '.')
+        with open(path, 'w') as f:
+            f.write(content)
+" 2>/dev/null
+}
+
+# ============================================================================
+# module_install — installa un modulo dalla sua cartella sorgente
+#
+# Argomenti: MODULE_DIR  (path assoluto della cartella modulo)
+#            MODULE_KEY  (path relativo a module/, es. "user" o "cti/vonage")
 # ============================================================================
 
 module_install() {
     local MODULE_DIR="$1"
-    [ -d "$MODULE_DIR" ] || error "Cartella modulo non trovata: $MODULE_DIR"
+    local MODULE_KEY="$2"
+    [ -d "$MODULE_DIR" ]        || error "Cartella modulo non trovata: $MODULE_DIR"
     [ -f "$MODULE_DIR/module.json" ] || error "module.json non trovato in: $MODULE_DIR"
+    [ -n "$MODULE_KEY" ]        || error "MODULE_KEY mancante (bug interno)"
 
     local MODULE
     MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
     [ -n "$MODULE" ] || error "Impossibile leggere 'name' da $MODULE_DIR/module.json"
 
+    local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
+    _module_paths "$MODULE_KEY"
+
     printf '\n'
-    info "[module] Installazione modulo: $MODULE"
+    info "[module] Installazione modulo: $MODULE (key: $MODULE_KEY)"
     printf '\n'
 
     # Java sources
     if [ -d "$MODULE_DIR/api" ]; then
         info "[module] Copia file Java..."
-        mkdir -p "$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
-        cp -r "$MODULE_DIR/api/." "$WORKSPACE/src/main/java/dev/jms/app/$MODULE/"
-        success "  File Java installati: src/main/java/dev/jms/app/$MODULE/"
+        mkdir -p "$JAVA_DIR"
+        cp -r "$MODULE_DIR/api/." "$JAVA_DIR/"
+        _rewrite_java_packages "$JAVA_DIR" "$JAVA_PKG"
+        success "  File Java installati: ${JAVA_DIR#$WORKSPACE/}"
     fi
 
     # GUI sources
     if [ -d "$MODULE_DIR/gui" ]; then
         info "[module] Copia file GUI..."
-        mkdir -p "$WORKSPACE/gui/src/modules/$MODULE"
-        cp -r "$MODULE_DIR/gui/." "$WORKSPACE/gui/src/modules/$MODULE/"
-        success "  File GUI installati: gui/src/modules/$MODULE/"
+        mkdir -p "$GUI_DIR"
+        cp -r "$MODULE_DIR/gui/." "$GUI_DIR/"
+        success "  File GUI installati: ${GUI_DIR#$WORKSPACE/}"
     fi
 
     # Migration SQL (copy as-is, no timestamp rename)
@@ -1024,15 +1054,14 @@ module_install() {
     # Auto-insert route registration into App.java (after // [MODULE_ROUTES] marker)
     local APP_JAVA="$WORKSPACE/src/main/java/dev/jms/app/App.java"
     if [ -f "$APP_JAVA" ]; then
-        local REGISTER_CALL
-        REGISTER_CALL=$(python3 -c "
-import json, sys
-with open('$MODULE_DIR/module.json') as f:
-    m = json.load(f)
-api = m.get('api')
-if api:
-    print(api.get('routes', ''))
-" 2>/dev/null || true)
+        local REGISTER_CALL=""
+        local ROUTES_FILE="$JAVA_DIR/Routes.java"
+        if [ -f "$ROUTES_FILE" ]; then
+            REGISTER_CALL="${JAVA_PKG}.Routes.register(router);"
+            if grep -q 'Config config' "$ROUTES_FILE" 2>/dev/null; then
+                REGISTER_CALL="${JAVA_PKG}.Routes.register(router, config);"
+            fi
+        fi
         if [ -n "$REGISTER_CALL" ]; then
             if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
                 if ! grep -qF "$REGISTER_CALL" "$APP_JAVA"; then
@@ -1048,6 +1077,7 @@ if api:
     fi
 
     # Auto-insert config.js entry (after // [MODULE_ENTRIES] marker)
+    # GUI_PATH è già corretto (es. "cti/vonage" per moduli con namespace)
     local CONFIG_JS="$WORKSPACE/gui/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         local CONFIG_ENTRY_KEY
@@ -1065,6 +1095,8 @@ with open('$MODULE_DIR/module.json') as f:
 cfg = m.get('gui', {}).get('config')
 if not cfg:
     sys.exit(0)
+cfg = dict(cfg)
+cfg['path'] = '$GUI_PATH'
 name = m.get('name', '')
 lines = ['  ' + name + ': {']
 for k, v in cfg.items():
@@ -1128,7 +1160,6 @@ if api_cfg:
         local PROFILE_XML
         PROFILE_XML=$(cat "$MODULE_DIR/profile.xml")
 
-        # Inserisce dopo il marker [MODULE_PROFILES]
         awk -v profile="$PROFILE_XML" '
             /<!-- \[MODULE_PROFILES\] -->/ {
                 print
@@ -1143,11 +1174,25 @@ if api_cfg:
         warn "  Nessun Maven profile (profile.xml non trovato)"
     fi
 
-    # Write tracker: src/main/resources/modules/<nome>/module.json
-    local TRACKER_DIR="$WORKSPACE/src/main/resources/modules/$MODULE"
+    # Write tracker: src/main/resources/module/<key>/module.json
+    # api.routes is updated to reflect the actual installed package (REGISTER_CALL)
     mkdir -p "$TRACKER_DIR"
     cp "$MODULE_DIR/module.json" "$TRACKER_DIR/module.json"
-    success "  Tracker scritto: src/main/resources/modules/$MODULE/module.json"
+    if [ -n "$REGISTER_CALL" ]; then
+        python3 -c "
+import json
+path = '$TRACKER_DIR/module.json'
+with open(path) as f:
+    m = json.load(f)
+if 'api' not in m or m['api'] is None:
+    m['api'] = {}
+m['api']['routes'] = '$REGISTER_CALL'
+with open(path, 'w') as f:
+    json.dump(m, f, indent=2)
+    f.write('\n')
+" 2>/dev/null || true
+    fi
+    success "  Tracker scritto: ${TRACKER_DIR#$WORKSPACE/}/module.json"
 
     printf '\n'
     success "Installazione modulo '$MODULE' completata"
@@ -1170,28 +1215,45 @@ if notice:
 
 # ============================================================================
 # module_import — accetta archivio .tar.gz oppure cartella già estratta
+#
+# Il path è relativo a module/ e può includere namespace (es. cti/vonage).
 # ============================================================================
 
 module_import() {
     local INPUT="$1"
     [ -n "$INPUT" ] || error "Usage: cmd module import <path>"
 
-    # Path sempre relativo a modules/
-    INPUT="$WORKSPACE/modules/$INPUT"
+    # Normalizza: rimuovi slash iniziale/finale
+    local REL_PATH="${INPUT#/}"
+    REL_PATH="${REL_PATH%/}"
+
+    local ABS_INPUT="$WORKSPACE/module/$REL_PATH"
 
     local MODULE_DIR
     local TMP_DIR=""
+    local MODULE_KEY
 
-    if [ -f "$INPUT" ]; then
+    if [ -f "$ABS_INPUT" ]; then
         # Archivio .tar.gz: estrai in cartella temporanea
         TMP_DIR=$(mktemp -d)
-        tar -xzf "$INPUT" -C "$TMP_DIR" --warning=no-unknown-keyword 2>/dev/null || \
-            tar -xzf "$INPUT" -C "$TMP_DIR"
+        tar -xzf "$ABS_INPUT" -C "$TMP_DIR" --warning=no-unknown-keyword 2>/dev/null || \
+            tar -xzf "$ABS_INPUT" -C "$TMP_DIR"
         MODULE_DIR="$TMP_DIR"
-    elif [ -d "$INPUT" ]; then
-        MODULE_DIR="$INPUT"
+        # Ricava MODULE_KEY: directory del path + nome dal module.json
+        local DIR_PART
+        DIR_PART=$(dirname "$REL_PATH")
+        local MOD_NAME
+        MOD_NAME=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null || true)
+        if [ "$DIR_PART" = "." ]; then
+            MODULE_KEY="$MOD_NAME"
+        else
+            MODULE_KEY="$DIR_PART/$MOD_NAME"
+        fi
+    elif [ -d "$ABS_INPUT" ]; then
+        MODULE_DIR="$ABS_INPUT"
+        MODULE_KEY="$REL_PATH"
     else
-        error "Non trovato (né archivio né cartella): $INPUT"
+        error "Non trovato (né archivio né cartella): $ABS_INPUT"
     fi
 
     [ -f "$MODULE_DIR/module.json" ] || error "module.json non trovato in: $MODULE_DIR"
@@ -1200,12 +1262,21 @@ module_import() {
     MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
     [ -n "$MODULE" ] || error "Impossibile leggere 'name' da module.json"
 
-    # Verifica dipendenze
+    # Verifica dipendenze (cerca tracker per nome, indipendentemente dal key)
     local MISSING_DEPS="" DEP_COUNT=0
     while IFS= read -r DEP_NAME; do
         [ -z "$DEP_NAME" ] && continue
         DEP_COUNT=$((DEP_COUNT + 1))
-        if [ ! -f "$WORKSPACE/src/main/resources/modules/$DEP_NAME/module.json" ]; then
+        local DEP_FOUND
+        DEP_FOUND=$(find "$WORKSPACE/src/main/resources/modules" -name "module.json" \
+            -exec python3 -c "
+import json, sys
+try:
+    m = json.load(open(sys.argv[1]))
+    if m.get('name') == '$DEP_NAME': print('yes')
+except: pass
+" {} \; 2>/dev/null | head -1)
+        if [ -z "$DEP_FOUND" ]; then
             MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
         fi
     done < <(python3 -c "
@@ -1230,47 +1301,58 @@ for dep in m.get('dependencies', {}).keys():
         success "Tutte le dipendenze sono soddisfatte"
     fi
 
-    module_install "$MODULE_DIR"
+    module_install "$MODULE_DIR" "$MODULE_KEY"
 
     if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
 }
 
 # ============================================================================
-# module_export — esporta in cartella modules/<name>[-version]/
+# module_export — esporta in cartella module/<key>[-version]/
+#
+# --name accetta sia nomi semplici ("user") sia key con namespace ("cti/vonage").
 # ============================================================================
 
 module_export() {
-    local MODULE=""
+    local MODULE_KEY=""
     local VERSION=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)
                 [ -n "$2" ] || error "--name richiede un valore"
-                MODULE="$2"; shift 2 ;;
+                MODULE_KEY="$2"; shift 2 ;;
             --vers|--version|-v)
                 [ -n "$2" ] || error "--vers richiede un valore (es. 1.2.3)"
                 VERSION="$2"; shift 2 ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module export --name <nome> [--vers 1.2.3]" ;;
-            *) error "Usage: cmd module export --name <nome> [--vers 1.2.3]" ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module export --name <key> [--vers 1.2.3]" ;;
+            *) error "Usage: cmd module export --name <key> [--vers 1.2.3]" ;;
         esac
     done
 
-    [ -n "$MODULE" ] || error "Usage: cmd module export --name <nome> [--vers 1.2.3]"
+    [ -n "$MODULE_KEY" ] || error "Usage: cmd module export --name <key> [--vers 1.2.3]"
+    MODULE_KEY="${MODULE_KEY%/}"
 
-    local JAVA_SRC="$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
-    local GUI_SRC="$WORKSPACE/gui/src/modules/$MODULE"
+    local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
+    _module_paths "$MODULE_KEY"
+
+    [ -d "$JAVA_DIR" ] || [ -d "$GUI_DIR" ] || \
+        error "Nessuna sorgente Java o GUI trovata per il modulo '$MODULE_KEY'"
+
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
 
-    [ -d "$JAVA_SRC" ] || [ -d "$GUI_SRC" ] || error "Nessuna sorgente Java o GUI trovata per il modulo '$MODULE'"
-
+    # Output: module/<ns>/name[-version]/ oppure module/name[-version]/
     local FOLDER_NAME
     if [ -n "$VERSION" ]; then
-        FOLDER_NAME="${MODULE}-${VERSION}"
+        FOLDER_NAME="${MODULE_NAME}-${VERSION}"
     else
-        FOLDER_NAME="$MODULE"
+        FOLDER_NAME="$MODULE_NAME"
     fi
-    local OUTPUT="$WORKSPACE/modules/$FOLDER_NAME"
+    local OUTPUT
+    if [ -n "$MODULE_NS" ]; then
+        OUTPUT="$WORKSPACE/module/$MODULE_NS/$FOLDER_NAME"
+    else
+        OUTPUT="$WORKSPACE/module/$FOLDER_NAME"
+    fi
 
     if [ -d "$OUTPUT" ]; then
         warn "La cartella '$OUTPUT' esiste già — verrà sovrascritta"
@@ -1278,23 +1360,23 @@ module_export() {
     fi
     mkdir -p "$OUTPUT"
 
-    # Java sources — templatize package placeholder
-    if [ -d "$JAVA_SRC" ]; then
-        info "[module] Copio sorgenti Java ($JAVA_SRC)..."
+    # Java sources
+    if [ -d "$JAVA_DIR" ]; then
+        info "[module] Copio sorgenti Java ($JAVA_DIR)..."
         mkdir -p "$OUTPUT/api"
-        cp -r "$JAVA_SRC/." "$OUTPUT/api/"
+        cp -r "$JAVA_DIR/." "$OUTPUT/api/"
     fi
 
     # GUI sources
-    if [ -d "$GUI_SRC" ]; then
-        info "[module] Copio sorgenti GUI ($GUI_SRC)..."
+    if [ -d "$GUI_DIR" ]; then
+        info "[module] Copio sorgenti GUI ($GUI_DIR)..."
         mkdir -p "$OUTPUT/gui"
-        cp -r "$GUI_SRC/." "$OUTPUT/gui/"
+        cp -r "$GUI_DIR/." "$OUTPUT/gui/"
     else
-        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE'"
+        warn "[module] Nessuna sorgente GUI trovata per il modulo '$MODULE_KEY'"
     fi
 
-    # Migration files (matched by module name in filename)
+    # Migration files (matched by MODULE_NAME in filename)
     local HAS_MIGRATIONS=false
     while IFS= read -r -d '' f; do
         if [ "$HAS_MIGRATIONS" = false ]; then
@@ -1303,17 +1385,17 @@ module_export() {
         fi
         cp "$f" "$OUTPUT/migration/"
         HAS_MIGRATIONS=true
-    done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" -print0 2>/dev/null)
+    done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE_NAME}*.sql" -print0 2>/dev/null)
 
-    [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE'"
+    [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE_NAME'"
 
-    # Maven profile extraction
+    # Maven profile extraction (il marker usa key con / sostituito da -)
+    local PROFILE_MARKER="${MODULE_KEY//\//-}"
     local POM="$WORKSPACE/pom.xml"
     if [ -f "$POM" ]; then
         info "[module] Estraggo Maven profile dal pom.xml..."
 
-        # Estrai il blocco tra [MODULE:nome] e [/MODULE:nome]
-        awk -v mod="$MODULE" '
+        awk -v mod="$PROFILE_MARKER" '
             /<!-- \[MODULE:/ {
                 if ($0 ~ "\\[MODULE:" mod "\\]") {
                     found=1
@@ -1331,48 +1413,40 @@ module_export() {
             success "  Maven profile esportato"
         else
             rm -f "$OUTPUT/profile.xml"
-            warn "  Nessun Maven profile trovato per il modulo '$MODULE'"
+            warn "  Nessun Maven profile trovato per il modulo '$MODULE_KEY'"
         fi
     fi
 
     # Generate module.json automatically
     info "[module] Genero module.json..."
 
-    # Preserve existing dependencies and install_notice from tracker or existing export folder
+    # Preserve existing dependencies and install_notice from tracker
     local EXISTING_DEPS="{}"
     local EXISTING_NOTICE=""
-    local TRACKER="$WORKSPACE/src/main/resources/modules/$MODULE/module.json"
-    local PREV_EXPORT="$WORKSPACE/modules/$MODULE/module.json"
-    local META_SOURCE=""
-    if [ -f "$TRACKER" ]; then
-        META_SOURCE="$TRACKER"
-    elif [ -f "$PREV_EXPORT" ]; then
-        META_SOURCE="$PREV_EXPORT"
-    fi
-    if [ -n "$META_SOURCE" ]; then
+    if [ -f "$TRACKER_DIR/module.json" ]; then
         EXISTING_DEPS=$(python3 -c "
 import json
-with open('$META_SOURCE') as f:
+with open('$TRACKER_DIR/module.json') as f:
     m = json.load(f)
 print(json.dumps(m.get('dependencies', {}), indent=4))
 " 2>/dev/null || echo "{}")
         EXISTING_NOTICE=$(python3 -c "
 import json
-with open('$META_SOURCE') as f:
+with open('$TRACKER_DIR/module.json') as f:
     m = json.load(f)
 v = m.get('install_notice')
 print(v if v else '')
 " 2>/dev/null || true)
     fi
 
-    # Extract api.routes from Routes.java + api.config from application.properties
+    # Build api.routes from JAVA_PKG + Routes.java signature
     local API_JSON="null"
-    if [ -d "$JAVA_SRC" ]; then
-        local ROUTES_FILE="$JAVA_SRC/Routes.java"
+    if [ -d "$JAVA_DIR" ]; then
+        local ROUTES_FILE="$JAVA_DIR/Routes.java"
         if [ -f "$ROUTES_FILE" ]; then
-            local REGISTER_CALL="dev.jms.app.${MODULE}.Routes.register(paths, ds);"
+            local REGISTER_CALL="${JAVA_PKG}.Routes.register(router);"
             if grep -q 'Config config' "$ROUTES_FILE" 2>/dev/null; then
-                REGISTER_CALL="dev.jms.app.${MODULE}.Routes.register(paths, ds, config);"
+                REGISTER_CALL="${JAVA_PKG}.Routes.register(router, config);"
             fi
             API_JSON=$(python3 -c "
 import json
@@ -1387,7 +1461,7 @@ try:
                 continue
             key, _, val = line.partition('=')
             key = key.strip()
-            if key.startswith('${MODULE}.'):
+            if key.startswith('${MODULE_NAME}.'):
                 api_cfg[key] = val.strip()
 except Exception:
     pass
@@ -1407,7 +1481,7 @@ import re, json, sys
 with open('$CONFIG_JS') as f:
     content = f.read()
 
-pattern = r'\b${MODULE}\s*:\s*\{'
+pattern = r'\b${MODULE_NAME}\s*:\s*\{'
 m = re.search(pattern, content)
 if not m:
     print('null')
@@ -1466,10 +1540,10 @@ print(json.dumps(result, indent=4))
     python3 -c "
 import json, sys
 
-deps_str = '''$EXISTING_DEPS'''
-api_str = '''$API_JSON'''
-config_str = '''$CONFIG_JS_ENTRY'''
-notice = '''$EXISTING_NOTICE'''
+deps_str    = '''$EXISTING_DEPS'''
+api_str     = '''$API_JSON'''
+config_str  = '''$CONFIG_JS_ENTRY'''
+notice      = '''$EXISTING_NOTICE'''
 
 try:
     deps = json.loads(deps_str)
@@ -1485,7 +1559,7 @@ except Exception:
     cfg = None
 
 module_data = {
-    'name': '$MODULE',
+    'name': '$MODULE_NAME',
     'version': '${VERSION:-dev}',
     'dependencies': deps,
     'api': api,
@@ -1499,7 +1573,7 @@ print('OK')
 " 2>/dev/null && success "[module] module.json generato" \
     || warn "[module] Impossibile generare module.json automaticamente"
 
-    success "Modulo '$MODULE' esportato → $OUTPUT"
+    success "Modulo '$MODULE_KEY' esportato → $OUTPUT"
 }
 
 # ============================================================================
@@ -1510,14 +1584,14 @@ module_dist() {
     local REL_PATH="$1"
     [ -n "$REL_PATH" ] || error "Usage: cmd module dist <path>"
 
-    local SRC="$WORKSPACE/modules/$REL_PATH"
+    local SRC="$WORKSPACE/module/$REL_PATH"
     [ -d "$SRC" ] || error "Cartella non trovata: $SRC"
     [ -f "$SRC/module.json" ] || error "module.json non trovato in: $SRC"
 
     local NAME VERSION
     NAME=$(python3 -c "import json; print(json.load(open('$SRC/module.json'))['name'])" 2>/dev/null)
     VERSION=$(python3 -c "import json; print(json.load(open('$SRC/module.json'))['version'])" 2>/dev/null)
-    [ -n "$NAME" ] || error "Impossibile leggere 'name' da module.json"
+    [ -n "$NAME" ]    || error "Impossibile leggere 'name' da module.json"
     [ -n "$VERSION" ] || error "Impossibile leggere 'version' da module.json"
 
     local DIST_DIR="$WORKSPACE/dist"
@@ -1530,47 +1604,70 @@ module_dist() {
 
 # ============================================================================
 # module_remove — rimuove un modulo installato leggendo il tracker
+#
+# --name accetta sia nomi semplici ("user") sia key con namespace ("cti/vonage").
 # ============================================================================
 
 module_remove() {
-    local MODULE=""
+    local MODULE_KEY=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)
                 [ -n "$2" ] || error "--name richiede un valore"
-                MODULE="$2"; shift 2 ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <nome>" ;;
-            *) error "Usage: cmd module remove --name <nome>" ;;
+                MODULE_KEY="$2"; shift 2 ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <key>" ;;
+            *) error "Usage: cmd module remove --name <key>" ;;
         esac
     done
 
-    [ -n "$MODULE" ] || error "Usage: cmd module remove --name <nome>"
+    [ -n "$MODULE_KEY" ] || error "Usage: cmd module remove --name <key>"
+    MODULE_KEY="${MODULE_KEY%/}"
 
-    local TRACKER="$WORKSPACE/src/main/resources/modules/$MODULE/module.json"
-    [ -f "$TRACKER" ] || error "Modulo '$MODULE' non risulta installato (tracker non trovato: $TRACKER)"
+    local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
+    _module_paths "$MODULE_KEY"
 
-    if ! confirm "Rimuovere il modulo '$MODULE'?"; then
+    [ -f "$TRACKER_DIR/module.json" ] || \
+        error "Modulo '$MODULE_KEY' non risulta installato (tracker non trovato: $TRACKER_DIR/module.json)"
+
+    local MODULE
+    MODULE=$(python3 -c "import json; print(json.load(open('$TRACKER_DIR/module.json'))['name'])" 2>/dev/null || echo "$MODULE_NAME")
+
+    if ! confirm "Rimuovere il modulo '$MODULE_KEY'?"; then
         info "Operazione annullata"
         return 0
     fi
 
     printf '\n'
-    info "[module] Rimozione modulo: $MODULE"
+    info "[module] Rimozione modulo: $MODULE_KEY"
     printf '\n'
 
     # Java sources
-    local JAVA_DIR="$WORKSPACE/src/main/java/dev/jms/app/$MODULE"
+    local JAVA_MODULE_DIR="$WORKSPACE/src/main/java/dev/jms/app/module"
     if [ -d "$JAVA_DIR" ]; then
         rm -rf "$JAVA_DIR"
-        success "  Sorgenti Java rimossi: $JAVA_DIR"
+        success "  Sorgenti Java rimossi: ${JAVA_DIR#$WORKSPACE/}"
+        if [ -n "$MODULE_NS" ]; then
+            local JAVA_NS_DIR="$JAVA_MODULE_DIR/$MODULE_NS"
+            if [ -d "$JAVA_NS_DIR" ] && [ -z "$(ls -A "$JAVA_NS_DIR")" ]; then
+                rm -rf "$JAVA_NS_DIR"
+            fi
+        fi
+        if [ -d "$JAVA_MODULE_DIR" ] && [ -z "$(ls -A "$JAVA_MODULE_DIR")" ]; then
+            rm -rf "$JAVA_MODULE_DIR"
+        fi
     fi
 
     # GUI sources
-    local GUI_DIR="$WORKSPACE/gui/src/modules/$MODULE"
     if [ -d "$GUI_DIR" ]; then
         rm -rf "$GUI_DIR"
-        success "  Sorgenti GUI rimossi: $GUI_DIR"
+        success "  Sorgenti GUI rimossi: ${GUI_DIR#$WORKSPACE/}"
+        if [ -n "$MODULE_NS" ]; then
+            local GUI_NS_DIR="$WORKSPACE/gui/src/module/$MODULE_NS"
+            if [ -d "$GUI_NS_DIR" ] && [ -z "$(ls -A "$GUI_NS_DIR")" ]; then
+                rm -rf "$GUI_NS_DIR"
+            fi
+        fi
     fi
 
     # Remove route from App.java
@@ -1579,7 +1676,7 @@ module_remove() {
         local REGISTER_CALL
         REGISTER_CALL=$(python3 -c "
 import json
-with open('$TRACKER') as f:
+with open('$TRACKER_DIR/module.json') as f:
     m = json.load(f)
 api = m.get('api')
 if api:
@@ -1599,7 +1696,7 @@ with open('$APP_JAVA', 'w') as f:
         fi
     fi
 
-    # Remove entry from config.js
+    # Remove entry from config.js (by module name)
     local CONFIG_JS="$WORKSPACE/gui/src/config.js"
     if [ -f "$CONFIG_JS" ]; then
         python3 -c "
@@ -1613,7 +1710,6 @@ m = re.search(pattern, content)
 if not m:
     sys.exit(0)
 
-# Find full block with brace counting
 start = m.start(1)
 brace_start = content.index('{', m.start(1))
 depth = 0
@@ -1627,7 +1723,6 @@ while i < len(content):
             break
     i += 1
 
-# Include trailing comma and newline if present
 end = i + 1
 if end < len(content) and content[end] == ',':
     end += 1
@@ -1639,13 +1734,13 @@ print('OK')
 " 2>/dev/null && success "  Modulo rimosso da config.js" || warn "  Impossibile rimuovere da config.js — rimuovi manualmente '$MODULE'"
     fi
 
-    # Remove Maven profile from pom.xml
+    # Remove Maven profile from pom.xml (usa marker con / → -)
     local POM="$WORKSPACE/pom.xml"
+    local PROFILE_MARKER="${MODULE_KEY//\//-}"
     if [ -f "$POM" ]; then
         info "[module] Rimuovo Maven profile dal pom.xml..."
 
-        # Rimuove il blocco tra [MODULE:nome] e [/MODULE:nome]
-        awk -v mod="$MODULE" '
+        awk -v mod="$PROFILE_MARKER" '
             /<!-- \[MODULE:/ {
                 if ($0 ~ "\\[MODULE:" mod "\\]") {
                     skip=1
@@ -1666,7 +1761,7 @@ print('OK')
     # Migration files: warn only (Flyway state cannot be rolled back automatically)
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
     local MIGR_FILES
-    MIGR_FILES=$(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE}*.sql" 2>/dev/null | sort)
+    MIGR_FILES=$(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE_NAME}*.sql" 2>/dev/null | sort)
     if [ -n "$MIGR_FILES" ]; then
         warn "  Le seguenti migration NON vengono rimosse automaticamente (Flyway):"
         echo "$MIGR_FILES" | while IFS= read -r f; do warn "    $(basename "$f")"; done
@@ -1674,14 +1769,19 @@ print('OK')
     fi
 
     # Remove tracker
-    rm -rf "$WORKSPACE/src/main/resources/modules/$MODULE"
+    rm -rf "$TRACKER_DIR"
     success "  Tracker rimosso"
+    if [ -n "$MODULE_NS" ]; then
+        local TRACKER_NS_DIR="$WORKSPACE/src/main/resources/module/$MODULE_NS"
+        if [ -d "$TRACKER_NS_DIR" ] && [ -z "$(ls -A "$TRACKER_NS_DIR")" ]; then
+            rm -rf "$TRACKER_NS_DIR"
+        fi
+    fi
 
     printf '\n'
-    success "Modulo '$MODULE' rimosso"
+    success "Modulo '$MODULE_KEY' rimosso"
 }
 
-# ============================================================================
 # Benchmark Operations
 # ============================================================================
 
@@ -1787,8 +1887,7 @@ case "$1" in
             restart) app_restart ;;
             status)  app_status ;;
             clean)   app_clean ;;
-            token)   shift 2; app_token "$@" ;;
-            *) error "Unknown app command: $2. Use: build, clean, run, debug, start, stop, restart, status, token" ;;
+            *) error "Unknown app command: $2. Use: build, clean, run, debug, start, stop, restart, status" ;;
         esac
         ;;
     gui)

@@ -7,6 +7,22 @@
       "request": "attach",
       "hostName": "localhost",
       "port": 5005
+    },
+    {
+      "type": "firefox",
+      "name": "Debug Frontend (Vite)",
+      "request": "launch",
+      "url": "http://localhost:2350",
+      "webRoot": "${workspaceFolder}/gui/src"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Fullstack",
+      "configurations": [
+        "Attach to Docker",
+        "Debug Frontend (Vite)"
+      ]
     }
   ]
 }

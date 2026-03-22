@@ -27,9 +27,9 @@ cmd db -f <file>         # Execute SQL file or load CSV
 cmd db status            # Show app DB config, connection health and migrations
 cmd db setup             # Create user and database from .env file
 cmd db reset             # Drop + recreate database (destructive!)
-cmd module export --name <nome> [--vers 1.2.3]  # Esporta modulo in cartella modules/<nome>[-version]/
-cmd module import <path>                         # Installa modulo da path relativo a modules/ (cartella o .tar.gz)
-cmd module dist <path>                           # Pacchettizza modulo (path relativo a modules/) → dist/<nome>-<vers>.tar.gz
+cmd module export --name <nome> [--vers 1.2.3]  # Esporta modulo in cartella module/<nome>[-version]/
+cmd module import <path>                         # Installa modulo da path relativo a module/ (cartella o .tar.gz)
+cmd module dist <path>                           # Pacchettizza modulo (path relativo a module/) → dist/<nome>-<vers>.tar.gz
 cmd module remove --name <nome>                  # Disinstalla modulo usando il tracker installato
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
@@ -80,59 +80,49 @@ cmd db                 # Interactive psql
 # - API: http://localhost:<API_PORT_HOST> (API_PORT_HOST from .env)
 ```
 
-### Debugging (VSCode + Java Extension Pack)
+### Debugging (VSCode)
 
-**Prerequisites:** Install the [Java Extension Pack](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) in VSCode.
+**Prerequisites:**
+- [Java Extension Pack](https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack) — backend debugging
+- [Debugger for Firefox](https://marketplace.visualstudio.com/items?itemName=firefox-devtools.vscode-firefox-debug) — frontend debugging
 
-**Step-by-step workflow:**
+Both are listed in `.vscode/extensions.json` (VSCode prompts to install on first open).
 
-1. **Start the backend in debug mode** (inside the container):
-   ```bash
-   cmd app debug   # Starts with JDWP on port 5005
-   ```
-   Output shows:
-   ```
-   [debug] Remote debug enabled on port 5005
-   [debug] Attach your debugger to localhost:5005
-   [dev] App started (PID: ...)
-   ```
+**Three debug configurations** in `.vscode/launch.json`:
+- **`Attach to Docker`** — attaches Java debugger to JDWP on port 5005
+- **`Debug Frontend (Vite)`** — launches Firefox pointed at Vite dev server (port 5173)
+- **`Fullstack`** (compound) — activates both simultaneously
 
-2. **Set breakpoints** in VSCode:
-   - Open a handler (e.g., `src/main/java/dev/jms/app/home/handler/HelloHandler.java`)
-   - Click left of the line number to add a red breakpoint dot
+#### Backend only
 
-3. **Attach the debugger**:
-   - Open **Run and Debug** panel (`Cmd+Shift+D` or `Ctrl+Shift+D`)
-   - Select **"Attach to Docker"** from the dropdown
-   - Press **F5** or click the green play button
-   - The orange debug toolbar appears when connected
+```bash
+cmd app debug   # starts JVM with JDWP on port 5005
+```
 
-4. **Trigger the breakpoint from the browser**:
-   - Navigate to `http://localhost:2350/#/home`
-   - The frontend makes a fetch to `/api/home/hello`
-   - **Execution stops at your breakpoint** in the Java handler
-   - Inspect variables, call stack, step through code (F10, F11)
-   - Press F5 to continue execution
+Then in VSCode Run & Debug panel: select **"Attach to Docker"** → F5.
+
+#### Full-stack (backend + frontend)
+
+```bash
+# Terminal 1
+cmd app debug
+
+# Terminal 2
+cmd gui run
+```
+
+Then in VSCode Run & Debug panel: select **"Fullstack"** → F5.
+
+VSCode attaches to Java on port 5005 and opens Firefox under debugger on `http://localhost:5173`. Set breakpoints in both `.java` handler files and `gui/src/` JS files — both will trigger in the same VSCode session.
 
 **How it works:**
 - `cmd app debug` starts the JVM with JDWP agent: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005`
 - The container exposes port 5005 → host's 5005
-- VSCode connects to `localhost:5005` via configuration in `.vscode/launch.json`
-- HTTP requests from the browser → Undertow → handlers → **breakpoints trigger**
+- Vite dev server (`cmd gui run`) generates source maps for `gui/src/` — breakpoints in JS files resolve correctly with `webRoot: ${workspaceFolder}/gui`
+- Source map breakpoints work in JS logic (event handlers, lifecycle methods); breakpoints inside Lit `html\`...\`` template literals are not reliable (Vite limitation with tagged templates)
 
 **Hot reload behavior:**
-After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM**. This terminates the JDWP connection. You must **re-attach the debugger** by pressing `F5` in VSCode's Run & Debug panel. Breakpoints remain configured and will work immediately after reconnecting.
-
-**VSCode configuration** (`.vscode/launch.json`):
-```json
-{
-  "type": "java",
-  "name": "Attach to Docker",
-  "request": "attach",
-  "hostName": "localhost",
-  "port": 5005
-}
-```
+After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM** — the JDWP connection drops. Re-attach by pressing F5 in the Run & Debug panel. The Firefox session remains open and does not need to be restarted.
 
 ## Architecture
 
@@ -141,7 +131,7 @@ After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM
 Two packages:
 
 - **`<groupId>/`** — App-specific code: `App.java` (entry point + server setup), plus any installed module subpackages (e.g. `auth/` with `handler/`, `dao/`, `dto/`, `adapter/`).
-- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `Async`, `AsyncExecutor`, and an `excel/` subpackage.
+- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `RouteHandler`, `HttpMethod`.
 
 **Handler pattern:** Routes use the `RouteHandler` functional interface `(HttpRequest, HttpResponse, DB) throws Exception`. Handlers are plain classes with methods matching this signature, registered as method references. `HandlerAdapter` wires the handler to Undertow, dispatches to a worker thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` (or a module's `Routes.java`) via a `Router` instance.
 
@@ -178,7 +168,11 @@ Key configuration parameters:
 
 **Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `permissions` (List<String>, e.g. `["can_admin","can_write","can_delete"]`), `must_change_password`.
 
-**Excel utilities** (`dev.jms.util.excel`): `ExcelReader` parses `.xlsx` files; `ExcelImporter` handles full import with pluggable `MappingStrategy` (column mapping) and `NormalizationStrategy` (data normalization). `ExcelAnalyzer` provides preview/validation without loading the full file.
+**Scheduler:** JobRunr-based cron scheduler backed by PostgreSQL (`Scheduler.java`). Initialized in `App.main()` after `DB.init()`. Jobs are registered with `Scheduler.register("job-id", "0 2 * * *", Handler::staticMethod)` — the target method must be static and parameterless. Jobs persist across restarts (stored in `jobrunr_*` tables, auto-created). Config: `scheduler.enabled` (default: `true`), `scheduler.poll.interval.seconds` (default: `15`). Graceful shutdown via `Scheduler.shutdown()` in the JVM shutdown hook.
+
+**Excel utilities** (`Excel.java`): Static methods `Excel.read(InputStream)` (returns all rows as `List<Map<String,Object>>`) and `Excel.analyze(InputStream, int)` (preview/validation without loading full file). Inner class `Excel.Importer` handles full import with pluggable `MappingStrategy` (column mapping) and `NormalizationStrategy` (data normalization).
+
+**PDF utilities** (`PDF.java`): Instantiated via `PDF.load(InputStream)`; supports text extraction, annotation/signature field inspection, and page manipulation. Persist changes with `pdf.save(OutputStream)`, which also closes the document.
 
 ### Frontend (`gui/`)
 
@@ -191,7 +185,7 @@ gui/src/
 ├── config.js            → Module configuration template (no project-specific entries)
 ├── init.js              → Global app initialization (fetch interceptor)
 ├── store.js             → Nanostores-based state management (authorized, user stores)
-└── modules/             → Empty placeholder — modules added via cmd module import
+└── module/              → Empty placeholder — modules added via cmd module import
     └── .gitkeep
 ```
 
@@ -200,19 +194,19 @@ gui/src/
 - `#main` — For dynamic page content
 - `#footer` — For persistent modules like footers (optional)
 
-**Module pattern:** Each module is a directory in `gui/src/modules/` with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration. Modules may contain semantic subfolders to organize components by domain (e.g., `user/auth/`, `user/account/`).
+**Module pattern:** Each module is a directory in `gui/src/module/` (top-level modules) or `gui/src/module/<namespace>/` (namespaced modules) with an `index.js` that exports a `mount(container)` function. The router mounts each module in its designated container based on configuration. Modules may contain semantic subfolders to organize components by domain (e.g., `user/auth/`, `user/account/`).
 
 **Module configuration** (`config.js`): All modules declare these attributes explicitly:
 ```javascript
 export const MODULE_CONFIG = {
   moduleName: {
     route: '/path' | null,             // URL hash route or null (not navigable, e.g. header)
-    path: 'dirname' | null,            // Folder under gui/src/modules/ or null (no frontend module)
+    path: 'dirname' | 'ns/name' | null, // Folder under gui/src/module/ (top-level) or gui/src/module/<ns>/ (namespaced), or null
     container: 'main' | 'header' | 'footer',  // DOM container ID
     authorization: null | { redirectTo: '/route' },  // Access control
     persistent: true | false,          // persistent requires path !== null
     priority: 999,                     // Load order (lower = first, only for persistent)
-    init: null | true | async function  // Initialization function; true = auto-import ./modules/<path>/init.js
+    init: null | true | async function  // Initialization function; true = auto-import ./module/<path>/init.js
   }
 };
 
@@ -222,10 +216,10 @@ export const DEFAULT_MODULE = 'status';
 
 `path: null` is reserved for routes handled entirely by the backend with no frontend module to mount. `persistent: true` with `path: null` is a configuration error — the router throws explicitly.
 
-A new installation includes `status` as the only pre-installed frontend module (`gui/src/modules/status/`), which calls `/api/status` and displays the result. It is the `DEFAULT_MODULE`.
+A new installation includes `status` as the only pre-installed frontend module (`gui/src/module/status/`), which calls `/api/status` and displays the result. It is the `DEFAULT_MODULE`.
 
 **Adding a new module:**
-1. Create `gui/src/modules/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
+1. Create `gui/src/module/newmodule/index.js` exporting `{ default: { mount(container) {...} } }`
 2. Add complete entry to `config.js` with `route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`
 3. Access via `http://localhost:5173/#/newmodule`
 
@@ -283,13 +277,13 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 - Any code that references project-specific names, credentials, routes, or domain logic — these belong only in the project root and must be abstracted before touching `jms/`.
 
 Clone it with the project name to start a new project — the Java source structure is already in its final position. It contains:
-- `src/main/java/dev/jms/util/` — Complete utility library source (25 files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `Async`, `AsyncExecutor`, plus `excel/` subpackage)
+- `src/main/java/dev/jms/util/` — Complete utility library source (23+ files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `RouteHandler`, `HttpMethod`)
 - `src/main/java/dev/jms/app/App.java` — Entry point with AsyncExecutor initialization
 - `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)
 - `config/application.properties` — Config template with placeholders substituted by `install.sh`
-- `gui/` — Frontend base template (router, stores, init, empty modules/), copied to `gui/` by `install.sh` when creating a new project
-- `modules/` — Module sources in expanded folder format (each module is a top-level subdirectory)
+- `gui/` — Frontend base template (router, stores, init, empty module/), copied to `gui/` by `install.sh` when creating a new project
+- `module/` — Module sources in expanded folder format (each module is a top-level subdirectory)
 - `bin/cmd`, `install.sh`, `release.sh` — Scripts with bench support
 - `docs/` — Documentation including architecture details
 
@@ -297,17 +291,20 @@ Clone it with the project name to start a new project — the Java source struct
 
 The Java base package is always `dev.jms.app` — it never changes across projects and is not a substitutable placeholder. All module sources use `dev.jms.app` directly in `package` and `import` statements.
 
-### Modules (`modules/`)
+### Modules (`module/`)
 
-Self-contained optional features. In `jms/modules/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
+Self-contained optional features. In `jms/module/` they are stored as expanded folders (not compressed); they can be packaged as `.tar.gz` for distribution via `cmd module dist`. Each module folder contains:
 - `api/` — Java sources copied into `src/main/java/.../<module>/`. Internal layout: `handler/` (route handlers), `dao/`, `dto/`, `helper/` (shared logic, at the same level as `handler/`, not inside it), `Routes.java`
-- `gui/` — Frontend module sources (content copied directly into `gui/src/modules/<module>/`)
+- `gui/` — Frontend module sources (copied into `gui/src/module/<name>/` for top-level, or `gui/src/module/<ns>/<name>/` for namespaced)
 - `migration/` — Flyway SQL migrations
 - `config/` — Application properties
 - `module.json` — Module metadata (auto-generated by `cmd module export`)
-- `profile.xml` — Maven profile with dependencies (optional, auto-managed)
+- `profile.xml` — Maven profile with external dependencies (optional — only needed if the module requires a library not already in the base `pom.xml`)
+
+**Util library is atomic:** All classes in `dev.jms.util` are always compiled as a unit. Their dependencies (Undertow, HikariCP, PostgreSQL, Flyway, Jackson, Logback, angus-mail, java-jwt, jobrunr, poi-ooxml, pdfbox) are all declared in the base `pom.xml`. A module's `profile.xml` is only needed for external libraries that are not backing any util class — e.g. a third-party SDK specific to that module.
 
 **`module.json` schema:**
+Top-level (`module/mymodule/`):
 ```json
 {
   "name": "mymodule",
@@ -327,40 +324,47 @@ Self-contained optional features. In `jms/modules/` they are stored as expanded 
 }
 ```
 
-**Export** un modulo dal progetto corrente in cartella non compressa:
+Con namespace (`module/ns/mymodule/`): `api.routes` usa il package completo `dev.jms.app.module.ns.mymodule.Routes.register(router);` e `gui.config.path` vale `"ns/mymodule"`. Il router usa automaticamente `gui/src/module/ns/mymodule/` per i path contenenti `/`.
+
+**Export** un modulo dal progetto corrente in cartella non compressa. `--name` accetta sia nomi semplici che key con namespace:
 ```bash
-cmd module export --name auth --vers 1.0.0   # → modules/auth-1.0.0/
-cmd module export --name auth                # → modules/auth/
+cmd module export --name auth --vers 1.0.0      # → module/auth-1.0.0/
+cmd module export --name auth                   # → module/auth/
+cmd module export --name cti/vonage --vers 1.0.0 # → module/cti/vonage-1.0.0/
 ```
 Export legge automaticamente `*Routes.java` (per i metadati API), `gui/src/config.js` (per l'entry GUI), e estrae il Maven profile dal `pom.xml` (se presente).
 
-**Dist** pacchettizza una cartella di modulo in archivio distribuibile. Il path è relativo a `modules/`; nome e versione vengono letti da `module.json`; l'archivio viene scritto in `dist/`:
+**Dist** pacchettizza una cartella di modulo in archivio distribuibile. Il path è relativo a `module/`; nome e versione vengono letti da `module.json`; l'archivio viene scritto in `dist/`:
 ```bash
 cmd module dist auth   # → dist/auth-1.0.0.tar.gz
 ```
 
-**Import** installa un modulo da cartella o archivio `.tar.gz`. Il path è sempre relativo a `modules/`:
+**Import** installa un modulo da cartella o archivio `.tar.gz`. Il path è sempre relativo a `module/` e può includere namespace:
 ```bash
-cmd module import auth              # da cartella
-cmd module import auth-1.0.0.tar.gz  # da archivio
+cmd module import auth                   # da cartella top-level
+cmd module import auth-1.0.0.tar.gz     # da archivio
+cmd module import cti/vonage             # da cartella con namespace
 ```
 Import automaticamente:
 1. Verifica dipendenze da `module.json` (avvisa se mancanti, controlla tracker installati)
-2. Copia sorgenti Java, GUI, migration SQL
-3. Inserisce la chiamata `api.routes` in `App.java` dopo `// [MODULE_ROUTES]`
-4. Inserisce l'entry `gui.config` in `gui/src/config.js` dopo `// [MODULE_ENTRIES]`
-5. Inserisce il Maven profile da `profile.xml` in `pom.xml` dopo `<!-- [MODULE_PROFILES] -->` (se presente)
-6. Scrive il tracker in `src/main/resources/modules/<nome>/module.json`
+2. Copia sorgenti Java in `app/module/<name>/` (top-level) o `app/module/<ns>/<name>/` (namespace), aggiornando i package declaration
+3. Copia sorgenti GUI in `gui/src/module/<name>/` (top-level) o `gui/src/module/<ns>/<name>/` (namespace)
+4. Copia migration SQL
+5. Inserisce la chiamata `api.routes` in `App.java` dopo `// [MODULE_ROUTES]`
+6. Inserisce l'entry `gui.config` in `gui/src/config.js` dopo `// [MODULE_ENTRIES]` (con `path` corretto per namespace)
+7. Inserisce il Maven profile da `profile.xml` in `pom.xml` dopo `<!-- [MODULE_PROFILES] -->` (se presente)
+8. Scrive il tracker in `src/main/resources/module/<key>/module.json`
 
 **Maven auto-activation:** Il profile si attiva automaticamente quando il tracker `module.json` esiste, scaricando le dipendenze al prossimo build.
 
 **Remove** disinstalla un modulo leggendo il tracker:
 ```bash
 cmd module remove --name auth
+cmd module remove --name cti/vonage
 ```
 Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, Maven profile da `pom.xml`, tracker. Le migration Flyway non vengono rimosse automaticamente (avviso esplicito).
 
-**Tracker installati:** dopo ogni import riuscito viene scritto `src/main/resources/modules/<nome>/module.json`. Le dipendenze vengono verificate contro questi tracker. `module remove` richiede il tracker per operare.
+**Tracker installati:** dopo ogni import riuscito viene scritto `src/main/resources/module/<key>/module.json` (es. `module/user/module.json` o `module/cti/vonage/module.json`). Le dipendenze vengono verificate cercando per `name` in tutti i tracker. `module remove` richiede il tracker per operare.
 
 **Markers required in host project:**
 - `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni di route dei moduli
@@ -368,12 +372,23 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, Maven pro
 
 **Each Java module must have a `*Routes.java` class** at the module root (e.g. `mymodule/Routes.java`) with a static `register(Router router)` method. Modules that also need `Config` add it as a second parameter: `register(Router router, Config config)`.
 
-**Available modules** (in `modules/`):
+**Install paths:** All modules are installed under `app/module/` and `gui/src/module/` regardless of whether they have a namespace:
+- Top-level (`module/home/`): Java → `app/module/home/`, pkg `dev.jms.app.module.home`, GUI → `gui/src/module/home/`
+- Namespace (`module/cti/vonage/`): Java → `app/module/cti/vonage/`, pkg `dev.jms.app.module.cti.vonage`, GUI → `gui/src/module/cti/vonage/`
+- API routes convention for namespaced modules: `/api/<ns>/<name>/...` (e.g. `/api/cti/vonage/...`)
+- `gui.config.path`: `"<ns>/<name>"` for namespaced modules — the router always resolves from `gui/src/module/`
+
+The install script (`_rewrite_java_packages`) automatically updates package declarations and imports when copying to the target location.
+
+**Available modules** (in `module/`):
 - `user/` — Authentication + account management (login, logout, 2FA, reset/change password, CRUD admin, self-edit); route `/user`, no dependencies
 - `header/` — Persistent navigation header (no dependencies)
 - `home/` — Simple home page with API hello endpoint (no dependencies)
 - `crm/contatti/` — Contact management module (requires: `user`)
+- `aes/` — AES encryption/decryption API endpoints; no frontend (`path: null`); requires `aes.api.key` in config; no dependencies
+- `cti/vonage/` — Vonage Voice API integration; route `/cti`, namespace `cti`; protected (requires `user`); requires Vonage config + private key + `npm install @vonage/client-sdk` in `gui/`; routes under `/api/cti/vonage/`; no dependencies
 - `asynctest/` — Test module for async vs blocking behavior comparison; no frontend, not for production
+- `schedulertest/` — Test module for Scheduler functionality; no frontend, not for production
 
 All modules follow the complete configuration schema with all 7 attributes (`route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 

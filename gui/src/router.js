@@ -56,7 +56,7 @@ class Router
         .filter(([_, c]) => c.init)
         .map(([_, c]) => {
           if (typeof c.init === 'function') return c.init();
-          return import(`./modules/${c.path}/init.js`).then(m => m.default());
+          return import(`./module/${c.path}/init.js`).then(m => m.default());
         })
     );
 
@@ -86,7 +86,7 @@ class Router
         throw new Error(`[Router] Module "${moduleName}" is persistent but has path: null — persistent modules require a path`);
       }
       try {
-        const module = await import(`./modules/${config.path}/index.js`);
+        const module = await import(`./module/${config.path}/index.js`);
         const container = this._getContainer(config.container);
         if (container) {
           container.innerHTML = '';
@@ -196,7 +196,7 @@ class Router
 
     const navId = ++this._navId;
     try {
-      const module = await import(`./modules/${config.path}/index.js`);
+      const module = await import(`./module/${config.path}/index.js`);
       if (navId !== this._navId) return;
 
       const container = this._getContainer(config.container);
