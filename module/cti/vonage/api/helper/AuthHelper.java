@@ -7,7 +7,7 @@ import java.util.ArrayList;
 
 /**
  * Logica di autenticazione locale del modulo cti tramite API key.
- * Verifica la chiave contro la proprietà {@code cti.api.key} e,
+ * Verifica la chiave contro la proprietà {@code cti.vonage.api_key} e,
  * se valida, emette un JWT di accesso HS256.
  */
 public class AuthHelper
@@ -17,7 +17,7 @@ public class AuthHelper
   private final Config config;
 
   /**
-   * @param config configurazione applicazione (usata per leggere {@code cti.api.key})
+   * @param config configurazione applicazione (usata per leggere {@code cti.vonage.api_key})
    */
   public AuthHelper(Config config)
   {
@@ -35,7 +35,7 @@ public class AuthHelper
     String expected;
     String token;
 
-    expected = config.get("cti.api.key", "");
+    expected = config.get("cti.vonage.api_key", "");
     token = null;
     if (apiKey != null && !apiKey.isBlank() && apiKey.equals(expected)) {
       token = Auth.get().createAccessToken(0, "cti-api", "cti", new ArrayList<>(), false);

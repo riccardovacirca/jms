@@ -25,10 +25,11 @@ public class Routes
     auth  = new AuthHandler(config);
     calls = new CallHandler(config);
 
-    router.route(HttpMethod.POST, "/api/cti/vonage/auth",                     auth::post);
-    router.route(HttpMethod.GET,  "/api/cti/vonage/chiamate",                 calls::list);
-    router.async(HttpMethod.POST, "/api/cti/vonage/answer",                   calls::answer);
-    router.async(HttpMethod.PUT,  "/api/cti/vonage/call/{uuid}/hangup",       calls::hangup);
-    router.async(HttpMethod.GET,  "/api/cti/vonage/sdk/auth",                 calls::sdkToken);
+    router.route(HttpMethod.POST,   "/api/cti/vonage/auth",                 auth::post);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/chiamate",             calls::list);
+    router.async(HttpMethod.POST,   "/api/cti/vonage/answer",               calls::answer);
+    router.async(HttpMethod.PUT,    "/api/cti/vonage/call/{uuid}/hangup",   calls::hangup);
+    router.async(HttpMethod.POST,   "/api/cti/vonage/sdk/auth",             calls::sdkToken);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/sdk/auth",             calls::releaseSession);
   }
 }

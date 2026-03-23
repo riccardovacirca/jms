@@ -1,8 +1,11 @@
 package dev.jms.app.module.cti.vonage.handler;
 
 import com.auth0.jwt.exceptions.JWTVerificationException;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import dev.jms.app.module.cti.vonage.dao.CallDAO;
+import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
 import dev.jms.app.module.cti.vonage.dto.CallDTO;
+import dev.jms.app.module.cti.vonage.dto.OperatorDTO;
 import dev.jms.app.module.cti.vonage.helper.VoiceHelper;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
@@ -26,7 +29,7 @@ public class CallHandler
   private final VoiceHelper voiceHelper;
 
   /**
-   * @param config configurazione applicazione (credenziali Vonage, cti.api.key)
+   * @param config configurazione applicazione (credenziali Vonage, cti.vonage.api_key)
    */
   public CallHandler(Config config)
   {
@@ -35,16 +38,29 @@ public class CallHandler
   }
 
   /**
-   * GET /api/cti/sdk-token — genera il JWT SDK per il Vonage Client SDK.
-   * <p>Query param: {@code userId} — identificatore dell'operatore nel sistema Vonage.</p>
-   * <p>Risposta: {@code {"token": "<JWT>"}}.</p>
+   * POST /api/cti/vonage/sdk/auth — assegna un operatore e genera il JWT SDK.
+   *
+   * <p>Due modalità operative:</p>
+   * <ul>
+   *   <li><b>Con modulo user</b> (accountId &gt; 0): assegna dinamicamente un operatore
+   *       libero dalla tabella {@code cti_operators} via claim atomico. Se l'account ha
+   *       già un operatore assegnato lo restituisce direttamente (idempotente).</li>
+   *   <li><b>Standalone</b> (accountId = 0, autenticazione via API key): richiede il
+   *       parametro query {@code userId} passato esplicitamente.</li>
+   * </ul>
+   *
+   * <p>Risposta: {@code {"token": "<JWT RS256>"}}.</p>
    */
   public void sdkToken(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    String token;
-    String userId;
-    String sdkToken;
+    String      token;
+    DecodedJWT  decoded;
+    int         accountId;
+    String      userId;
+    String      sdkToken;
     HashMap<String, Object> out;
+    OperatorDAO dao;
+    OperatorDTO operator;
 
     token = req.getCookie("access_token");
     if (token == null) {
@@ -56,15 +72,38 @@ public class CallHandler
          .send();
     } else {
       try {
-        Auth.get().verifyAccessToken(token);
-        userId = req.getQueryParam("userId");
+        decoded   = Auth.get().verifyAccessToken(token);
+        accountId = Integer.parseInt(decoded.getSubject());
+        userId    = null;
+        operator  = null;
+        dao       = null;
+
+        if (accountId > 0) {
+          dao      = new OperatorDAO(db);
+          operator = dao.claimOrRenew(accountId);
+          if (operator != null) {
+            userId = operator.vonageUserId();
+          }
+        } else {
+          userId = req.getQueryParam("userId");
+        }
+
         if (userId == null || userId.isBlank()) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Parametro userId obbligatorio")
-             .out(null)
-             .send();
+          if (accountId > 0) {
+            res.status(200)
+               .contentType("application/json")
+               .err(true)
+               .log("Nessun operatore CTI disponibile")
+               .out(null)
+               .send();
+          } else {
+            res.status(200)
+               .contentType("application/json")
+               .err(true)
+               .log("Parametro userId obbligatorio")
+               .out(null)
+               .send();
+          }
         } else {
           sdkToken = voiceHelper.generateSdkJwt(userId);
           out      = new HashMap<>();
@@ -88,7 +127,42 @@ public class CallHandler
   }
 
   /**
-   * POST /api/cti/answer — webhook Vonage (answer URL).
+   * DELETE /api/cti/vonage/sdk/auth — rilascia l'operatore assegnato alla sessione corrente.
+   *
+   * <p>Chiamato dal frontend al disconnect del componente. Operazione idempotente:
+   * non restituisce errore se l'account non ha operatori assegnati o il token non è valido.</p>
+   */
+  public void releaseSession(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    String      token;
+    DecodedJWT  decoded;
+    int         accountId;
+    OperatorDAO dao;
+
+    token = req.getCookie("access_token");
+    if (token != null) {
+      try {
+        decoded   = Auth.get().verifyAccessToken(token);
+        accountId = Integer.parseInt(decoded.getSubject());
+        if (accountId > 0) {
+          dao = new OperatorDAO(db);
+          dao.releaseSession(accountId);
+          log.info("[CTI] releaseSession: accountId={}", accountId);
+        }
+      } catch (JWTVerificationException e) {
+        log.warn("[CTI] releaseSession: token non valido, nessun rilascio eseguito");
+      }
+    }
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(null)
+       .send();
+  }
+
+  /**
+   * POST /api/cti/vonage/answer — webhook Vonage (answer URL).
    * <p>
    * Vonage chiama questo endpoint quando l'operatore esegue {@code serverCall()} via SDK.
    * Il campo {@code from_user} del body contiene il claim {@code sub} del JWT SDK dell'operatore.
@@ -119,7 +193,7 @@ public class CallHandler
     operatorUuid   = DB.toString(body.get("uuid"));
 
     conversationName = "call-" + UUID.randomUUID().toString();
-    musicOnHoldUrl   = config.get("cti.vonage.music-on-hold-url", "");
+    musicOnHoldUrl   = config.get("cti.vonage.music_on_hold_url", "");
     nccoJson         = voiceHelper.buildOperatorNccoJson(conversationName, musicOnHoldUrl);
 
     log.info("[CTI] answer: fromUser={}, operatorUuid={}, customerNumber={}", fromUser, operatorUuid, customerNumber);
@@ -145,7 +219,7 @@ public class CallHandler
   }
 
   /**
-   * PUT /api/cti/chiamate/{uuid}/hangup — riagancia la chiamata dell'operatore e del cliente.
+   * PUT /api/cti/vonage/call/{uuid}/hangup — riagancia la chiamata dell'operatore e del cliente.
    */
   public void hangup(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
@@ -183,7 +257,7 @@ public class CallHandler
   }
 
   /**
-   * GET /api/cti/chiamate — lista paginata delle chiamate.
+   * GET /api/cti/vonage/chiamate — lista paginata delle chiamate.
    * <p>Query params: {@code page} (default 1), {@code size} (default 20).</p>
    */
   public void list(HttpRequest req, HttpResponse res, DB db) throws Exception

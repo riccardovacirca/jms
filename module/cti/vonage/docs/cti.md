@@ -6,11 +6,11 @@ Integrazione telefonica (Computer Telephony Integration) basata su Vonage Voice 
 
 ## Autenticazione
 
-L'accesso al modulo non richiede un account nel sistema `user`. Il client si autentica presentando un'API key condivisa (`cti.api.key`) configurata lato server: se valida, riceve un JWT con cui operare su tutte le route CTI.
+L'accesso al modulo non richiede un account nel sistema `user`. Il client si autentica presentando un'API key condivisa (`cti.vonage.api_key`) configurata lato server: se valida, riceve un JWT con cui operare su tutte le route CTI.
 
 ```
 Frontend → POST /api/cti/auth  { "apiKey": "..." }
-Backend  → verifica cti.api.key in config
+Backend  → verifica cti.vonage.api_key in config
          → emette JWT HS256 (cookie access_token)
 ```
 
@@ -109,5 +109,5 @@ gui/
   store.js                         callState atom (nanostores)
   index.js                         mount(container)
 migration/  V20260319_100000__cti.sql   tabella chiamate
-config/     application.properties     cti.api.key, cti.vonage.*
+config/     application.properties     cti.vonage.api_key, cti.vonage.*
 ```

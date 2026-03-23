@@ -135,9 +135,9 @@ public class VoiceHelper
 
     log.info("[CTI] callCustomer: to={}, conversation={}", customerNumber, conversationName);
 
-    fromNumber = config.get("cti.vonage.from-number", "");
-    baseUrl    = config.get("cti.vonage.base-url", "");
-    eventUrl   = config.get("cti.vonage.event-url", "");
+    fromNumber = config.get("cti.vonage.from_number", "");
+    baseUrl    = config.get("cti.vonage.base_url", "");
+    eventUrl   = config.get("cti.vonage.event_url", "");
 
     // NCCO cliente: entra nella conversazione (startOnEnter: true per default)
     nccoAction = new HashMap<>();
@@ -205,7 +205,7 @@ public class VoiceHelper
 
     log.info("[CTI] hangupCall: operatorUuid={}", operatorUuid);
 
-    baseUrl      = config.get("cti.vonage.base-url", "");
+    baseUrl      = config.get("cti.vonage.base_url", "");
     vonageToken  = generateVonageJwt();
     payload      = new HashMap<>();
     payload.put("action", "hangup");
@@ -262,7 +262,7 @@ public class VoiceHelper
     acl.put("paths", aclPaths);
 
     claims = new HashMap<>();
-    claims.put("application_id", config.get("cti.vonage.application-id", ""));
+    claims.put("application_id", config.get("cti.vonage.application_id", ""));
     claims.put("iat", now);
     claims.put("exp", now + 3600);
     claims.put("jti", UUID.randomUUID().toString());
@@ -300,7 +300,7 @@ public class VoiceHelper
     algorithm  = Algorithm.RSA256(null, privateKey);
 
     jwt = JWT.create()
-        .withClaim("application_id", config.get("cti.vonage.application-id", ""))
+        .withClaim("application_id", config.get("cti.vonage.application_id", ""))
         .withIssuedAt(Instant.now())
         .withExpiresAt(Instant.now().plusSeconds(300))
         .withJWTId(UUID.randomUUID().toString())
@@ -326,7 +326,7 @@ public class VoiceHelper
     KeyFactory keyFactory;
     PrivateKey privateKey;
 
-    configValue = config.get("cti.vonage.private-key", "");
+    configValue = config.get("cti.vonage.private_key", "");
 
     if (!configValue.contains("BEGIN PRIVATE KEY")) {
       pemContent = Files.readString(Paths.get(configValue));

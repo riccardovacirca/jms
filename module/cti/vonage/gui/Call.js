@@ -4,22 +4,28 @@
  * Implementa il flusso operator-first progressive dialer:
  *
  *   FASE 1 — Connessione operatore:
- *     Recupera il JWT SDK dal backend (/api/cti/sdk/auth),
- *     crea la sessione WebRTC tramite VonageClient.createSession(),
- *     pianifica il refresh automatico del token ogni 13 minuti.
+ *     POST /api/cti/vonage/sdk/auth: il backend assegna un operatore libero (claim atomico)
+ *     e genera il JWT RS256 per il Vonage Client SDK.
+ *     Crea la sessione WebRTC tramite VonageClient.createSession().
+ *     Pianifica il refresh automatico del token ogni 13 minuti (idempotente: restituisce
+ *     lo stesso operatore già assegnato).
  *
  *   FASE 2 — Avvio chiamata:
- *     Esegue client.serverCall({ customerNumber }) che triggera il webhook /api/cti/answer.
+ *     client.serverCall({ customerNumber }) triggera il webhook /api/cti/vonage/answer.
  *     Vonage inoltra il customerNumber come query param all'answer URL.
  *     Il backend risponde con NCCO operatore (musica di attesa),
  *     in background (delay 1s) il backend chiama il cliente.
  *
  *   FASE 3 — Chiamata attiva:
- *     Il cliente risponde → conversazione si connette.
- *     L'operatore può riagganciare tramite /api/cti/chiamate/{uuid}/hangup.
+ *     Il cliente risponde → conversazione si connette (evento callAnswered).
+ *     L'operatore può riagganciare tramite /api/cti/vonage/call/{uuid}/hangup.
  *
  *   FASE 4 — Fine chiamata:
  *     callHangup event → stato torna a idle.
+ *
+ *   FASE 5 — Disconnect:
+ *     DELETE /api/cti/vonage/sdk/auth: rilascia l'operatore (torna disponibile).
+ *     VonageClient.deleteSession() chiude la sessione WebRTC.
  *
  * Dipendenza npm: @vonage/client-sdk
  */
@@ -75,7 +81,7 @@ class Call extends LitElement
 
   /**
    * Crea la sessione WebRTC con Vonage.
-   * Recupera il JWT SDK, crea la sessione, registra i listener e pianifica il refresh.
+   * Richiede l'assegnazione di un operatore al backend, poi crea la sessione.
    */
   async _connect()
   {
@@ -98,28 +104,33 @@ class Call extends LitElement
   }
 
   /**
-   * Recupera il JWT SDK dal backend.
-   * Il token è firmato RS256 con la private key Vonage.
+   * Richiede al backend il JWT SDK per il Vonage Client SDK.
+   * Il backend assegna dinamicamente un operatore libero (o rinnova quello già assegnato)
+   * leggendo l'accountId dal cookie access_token.
    *
-   * @returns {Promise<string>} token JWT da passare a VonageClient.createSession()
+   * @returns {Promise<string>} token JWT RS256 da passare a VonageClient.createSession()
    */
   async _fetchToken()
   {
     let response;
     let data;
 
-    response = await fetch('/api/cti/sdk/auth');
+    response = await fetch('/api/cti/vonage/sdk/auth', { method: 'POST' });
     if (!response.ok) {
       throw new Error('Token fetch fallito: ' + response.status);
     }
     data = await response.json();
+    if (data.err) {
+      throw new Error(data.log || 'Errore recupero token SDK');
+    }
     return data.out.token;
   }
 
   /** Registra i listener sugli eventi del Vonage Client SDK. */
   _registerListeners()
   {
-    this._client.on('callHangup', this._onCallHangup.bind(this));
+    this._client.on('callHangup',   this._onCallHangup.bind(this));
+    this._client.on('callAnswered', this._onCallAnswered.bind(this));
     this._client.on('sessionError', this._onSessionError.bind(this));
   }
 
@@ -139,6 +150,21 @@ class Call extends LitElement
   }
 
   /**
+   * Handler callAnswered: il cliente ha risposto, conversazione attiva.
+   *
+   * @param {string} callId id della chiamata
+   */
+  _onCallAnswered(callId)
+  {
+    callState.set({
+      active: true,
+      callId: callId,
+      customerNumber: this._callState.customerNumber,
+      status: 'connected'
+    });
+  }
+
+  /**
    * Handler sessionError: la sessione WebRTC si è chiusa inaspettatamente.
    *
    * @param {*} reason motivo dell'errore
@@ -151,7 +177,7 @@ class Call extends LitElement
 
   /**
    * Avvia il flusso operator-first:
-   *   client.serverCall({ customerNumber }) triggera il webhook /api/cti/answer.
+   *   client.serverCall({ customerNumber }) triggera il webhook /api/cti/vonage/answer.
    *   Vonage inoltra customerNumber come query param all'answer URL.
    *   Il backend risponde con NCCO operatore e in background chiama il cliente.
    */
@@ -168,7 +194,6 @@ class Call extends LitElement
 
     try {
       callId = await this._client.serverCall({ customerNumber: this._customerNumber.trim() });
-
       callState.set({
         active: true,
         callId: callId,
@@ -188,7 +213,7 @@ class Call extends LitElement
 
   /**
    * Riagancia la chiamata corrente.
-   * Chiama PUT /api/cti/chiamate/{uuid}/hangup che termina entrambi i leg.
+   * Chiama PUT /api/cti/vonage/call/{uuid}/hangup che termina entrambi i leg.
    */
   async _hangup()
   {
@@ -199,7 +224,7 @@ class Call extends LitElement
     currentCallId = this._callState.callId;
 
     try {
-      response = await fetch('/api/cti/call/' + currentCallId + '/hangup', {
+      response = await fetch('/api/cti/vonage/call/' + currentCallId + '/hangup', {
         method: 'PUT'
       });
       data = await response.json();
@@ -220,6 +245,7 @@ class Call extends LitElement
   /**
    * Pianifica il refresh automatico del token JWT SDK.
    * Il token scade dopo 1 ora; il refresh avviene ogni 13 minuti.
+   * Il backend restituisce lo stesso operatore già assegnato (idempotente).
    */
   _scheduleRefresh()
   {
@@ -239,7 +265,8 @@ class Call extends LitElement
   }
 
   /**
-   * Pulizia: cancella il timer di refresh e chiude la sessione WebRTC.
+   * Pulizia: rilascia l'operatore assegnato, cancella il timer di refresh
+   * e chiude la sessione WebRTC.
    * Chiamato in disconnectedCallback o su disconnessione manuale.
    */
   async _teardown()
@@ -248,11 +275,18 @@ class Call extends LitElement
       clearTimeout(this._refreshTimer);
       this._refreshTimer = null;
     }
-    if (this._sessionActive && this._lastToken) {
+    if (this._sessionActive) {
       try {
-        await this._client.deleteSession(this._lastToken);
+        await fetch('/api/cti/vonage/sdk/auth', { method: 'DELETE' });
       } catch (e) {
-        console.error('[CTI] Errore deleteSession:', e);
+        console.error('[CTI] Errore release operatore:', e);
+      }
+      if (this._lastToken) {
+        try {
+          await this._client.deleteSession(this._lastToken);
+        } catch (e) {
+          console.error('[CTI] Errore deleteSession:', e);
+        }
       }
     }
     this._sessionActive = false;

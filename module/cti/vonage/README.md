@@ -1,143 +1,121 @@
-# Modulo CTI
+Modulo CTI - Integrazione Vonage Voice API
 
-Integrazione telefonica (Computer Telephony Integration) basata su
-**Vonage Voice API** e **Vonage Client SDK**.
-Implementa il pattern **operator-first progressive dialer**: l'operatore è già
-in linea prima che il cliente risponda.
+Implementa il pattern operator-first progressive dialer tramite Vonage Voice API e Vonage Client SDK.
+L'operatore e gia in linea prima che il cliente risponda.
 
----
 
-## Configurazione
+CONFIGURAZIONE
 
-`config/application.properties`
+Aggiungere in config/application.properties:
 
-```properties
-cti.api.key=change-me-in-production
-cti.vonage.application-id=<APPLICATION_ID>
-cti.vonage.private-key=/app/config/private.key
-cti.vonage.from-number=<VONAGE_NUMBER>
-cti.vonage.event-url=https://your-domain.com/api/cti
-cti.vonage.music-on-hold-url=https://nexmo-community.github.io/ncco-examples/assets/voice_api_audio_streaming.mp3
-```
+    cti.vonage.api_key=change-me-in-production
+    cti.vonage.application_id=<APPLICATION_ID>
+    cti.vonage.private_key=/app/config/private.key
+    cti.vonage.base_url=https://api.nexmo.com/v1/calls
+    cti.vonage.from_number=+39XXXXXXXXXX
+    cti.vonage.event_url=https://your-domain.com/api/cti/vonage/answer
+    cti.vonage.music_on_hold_url=https://nexmo-community.github.io/ncco-examples/assets/voice_api_audio_streaming.mp3
 
----
+Copiare la chiave privata Vonage in /app/config/private.key.
 
-## Webhook da configurare nel Vonage Dashboard
+cti.vonage.api_key e la chiave API Vonage usata dal frontend per autenticarsi al modulo CTI.
 
-| Tipo | URL |
-|------|-----|
-| **Answer URL** | `https://your-domain.com/api/cti/answer` |
-| **Event URL** (Voice) | `https://your-domain.com/api/cti` |
-| **Event URL** (RTC) | `https://your-domain.com/api/cti` |
 
-L'Answer URL è obbligatoria: Vonage la chiama quando l'operatore avvia `serverCall()` dal browser.
+DIPENDENZA FRONTEND
 
----
+Dalla cartella gui/ eseguire:
 
-## Come ottenere le credenziali Vonage
+    npm install @vonage/client-sdk
 
-### Prerequisiti
 
-```bash
-npm install -g @vonage/cli
-```
+WEBHOOK NEL VONAGE DASHBOARD
 
-Credenziali API Key / API Secret disponibili su [dashboard.nexmo.com](https://dashboard.nexmo.com) → **API Settings**.
+Answer URL:  https://your-domain.com/api/cti/vonage/answer
+Event URL:   https://your-domain.com/api/cti/vonage/answer
 
-### Step 1 — Configura la CLI
+L'Answer URL e obbligatoria: Vonage la chiama quando l'operatore avvia serverCall() dal browser.
 
-```bash
-vonage auth set --apiKey='<API_KEY>' --apiSecret='<API_SECRET>'
-```
 
-### Step 2 — Verifica
+CREDENZIALI VONAGE - PROCEDURA DI SETUP
 
-```bash
-vonage auth check
-```
+Prerequisito: installare la Vonage CLI.
 
-### Step 3 — Crea l'applicazione Vonage
+    npm install -g @vonage/cli
 
-```bash
-vonage apps create 'Hello CTI'
-```
+Le credenziali API Key e API Secret sono disponibili su dashboard.nexmo.com alla sezione API Settings.
 
-Salva l'**Application ID** dall'output. Il file `private.key` viene creato nella directory corrente —
-copiarlo in `./config/private.key` del progetto.
+Passo 1 - Configura la CLI:
 
-### Step 4 — Aggiorna la CLI con app ID e private key
+    vonage auth set --apiKey='<API_KEY>' --apiSecret='<API_SECRET>'
 
-```bash
-vonage auth set \
-  --apiKey='<API_KEY>' \
-  --apiSecret='<API_SECRET>' \
-  --appId='<APPLICATION_ID>' \
-  --privateKey=./private.key
-```
+Passo 2 - Verifica:
 
-### Step 5 — Abilita capability Voice (obbligatoria)
+    vonage auth check
 
-```bash
-vonage apps capabilities update <APPLICATION_ID> voice \
-  --voice-answer-url='https://your-domain.com/api/cti/answer' \
-  --voice-event-url='https://your-domain.com/api/cti'
-```
+Passo 3 - Crea l'applicazione Vonage:
 
-### Step 6 — Abilita capability RTC (per operatori WebRTC nel browser)
+    vonage apps create 'NomeApplicazione'
 
-```bash
-vonage apps capabilities update <APPLICATION_ID> rtc \
-  --rtc-event-url='https://your-domain.com/api/cti'
-```
+Salvare l'Application ID dall'output. Il file private.key viene creato nella directory corrente,
+copiarlo in ./config/private.key del progetto.
 
-### Step 7 — (Opzionale) Acquista un numero Vonage
+Passo 4 - Aggiorna la CLI con app ID e private key:
 
-Necessario solo se si usano operatori PSTN (`operatorType: "phone"`).
+    vonage auth set \
+      --apiKey='<API_KEY>' \
+      --apiSecret='<API_SECRET>' \
+      --appId='<APPLICATION_ID>' \
+      --privateKey=./private.key
 
-```bash
-vonage numbers search IT
-vonage numbers buy IT +39XXXXXXXXXX
-```
+Passo 5 - Abilita la capability Voice (obbligatoria):
 
-Il collegamento numero ↔ applicazione va fatto dal Dashboard: **Numbers → Your numbers → Edit → Forward to Application**.
+    vonage apps capabilities update <APPLICATION_ID> voice \
+      --voice-answer-url='https://your-domain.com/api/cti/vonage/answer' \
+      --voice-event-url='https://your-domain.com/api/cti/vonage/answer'
 
-### Step 8 — Crea utenti per operatori WebRTC
+Passo 6 - Abilita la capability RTC (per operatori WebRTC nel browser):
 
-Necessario solo per `operatorType: "app"`. Il `name` deve corrispondere all'`userId` passato al frontend.
+    vonage apps capabilities update <APPLICATION_ID> rtc \
+      --rtc-event-url='https://your-domain.com/api/cti/vonage/answer'
 
-```bash
-vonage users create --name='operatore_01'
-vonage users create --name='operatore_02'
-```
+Passo 7 - (Opzionale) Acquista un numero Vonage, necessario solo per operatori PSTN:
 
----
+    vonage numbers search IT
+    vonage numbers buy IT +39XXXXXXXXXX
 
-## Sviluppo locale
+Il collegamento numero-applicazione si fa dal Dashboard: Numbers > Your numbers > Edit > Forward to Application.
 
-In sviluppo Vonage deve raggiungere il backend tramite URL pubblico. Usare [ngrok](https://ngrok.com):
+Passo 8 - Crea utenti Vonage per operatori WebRTC, necessario solo per operatorType "app":
 
-```bash
-ngrok http 8080
-# → copia l'URL https://xxxx.ngrok-free.app
-```
+    vonage users create --name='operatore_01'
 
-Aggiornare `cti.vonage.event-url` e riconfigurare i webhook nel Dashboard con il nuovo URL ngrok.
+Il name deve corrispondere all'userId passato al frontend.
 
----
 
-## Dipendenza frontend
+SVILUPPO LOCALE
 
-```bash
-cd gui/
-npm install @vonage/client-sdk
-```
+Vonage deve raggiungere il backend tramite URL pubblico. Usare ngrok.
 
----
+Installazione ngrok nel container:
 
-## Riferimenti
+    curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+      | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+      && echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' \
+      | tee /etc/apt/sources.list.d/ngrok.list \
+      && apt-get update -qq && apt-get install -y ngrok
 
-- Architettura e flusso chiamata: `docs/cti.md`
-- Setup Vonage dettagliato: `docs/vonage/setup_procedura.md`
-- Pattern operator-first: `docs/vonage/voice2_operator_first_pattern.md`
-- Voice API reference: `docs/vonage/voice/api/`
-- Client SDK reference: `docs/vonage/voice/client_sdk/`
+Registrare il token (disponibile su dashboard.ngrok.com) e avviare il tunnel:
+
+    ngrok config add-authtoken <NGROK_TOKEN>
+    ngrok http 8080
+
+Usare l'URL https generato come base per cti.vonage.event_url e per i webhook nel Dashboard.
+
+
+RIFERIMENTI
+
+Architettura e flusso chiamata: docs/cti.md
+Setup Vonage dettagliato: docs/vonage/setup_procedura.md
+Pattern operator-first: docs/vonage/voice2_operator_first_pattern.md
+Voice API reference: docs/vonage/voice/api/
+Client SDK reference: docs/vonage/voice/client_sdk/

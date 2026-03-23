@@ -23,3 +23,17 @@ CREATE TABLE chiamate (
   created_at        TIMESTAMP DEFAULT NOW(),
   updated_at        TIMESTAMP
 );
+
+CREATE TABLE cti_operators (
+  id                 SERIAL       PRIMARY KEY,
+  vonage_user_id     VARCHAR(100) NOT NULL UNIQUE,
+  account_id         INTEGER,
+  session_account_id INTEGER,
+  display_name       VARCHAR(100),
+  active             BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at         TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_cti_operators_session
+    ON cti_operators(session_account_id)
+    WHERE session_account_id IS NOT NULL;
