@@ -4,7 +4,12 @@
     "dependencies": {},
     "api": {
         "routes": "dev.jms.app.module.user.Routes.register(router, config);",
-        "config": {}
+        "config": {
+            "user.cookie.secure": "false",
+            "user.cookie.samesite": "Lax",
+            "user.ratelimit.max.attempts": "5",
+            "user.ratelimit.window.seconds": "300"
+        }
     },
     "gui": {
         "config": {

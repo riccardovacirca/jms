@@ -5,6 +5,8 @@ import dev.jms.app.user.handler.AuthHandler;
 import dev.jms.app.user.handler.ProfileHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
+import dev.jms.util.HttpResponse;
+import dev.jms.util.RateLimiter;
 import dev.jms.util.Router;
 
 /** Registra le rotte del modulo user. */
@@ -13,9 +15,27 @@ public class Routes
   /** Registra le rotte /api/user/*. */
   public static void register(Router router, Config config)
   {
-    AccountHandler account = new AccountHandler();
-    AuthHandler    auth    = new AuthHandler(config);
-    ProfileHandler profile = new ProfileHandler();
+    AccountHandler account;
+    AuthHandler    auth;
+    ProfileHandler profile;
+    boolean        cookieSecure;
+    String         cookieSameSite;
+    int            rateLimitMax;
+    long           rateLimitWindow;
+
+    // Configura i cookie di autenticazione con i parametri di sicurezza
+    cookieSecure   = Boolean.parseBoolean(config.get("user.cookie.secure", "false"));
+    cookieSameSite = config.get("user.cookie.samesite", "Lax");
+    HttpResponse.configureCookies(cookieSecure, cookieSameSite);
+
+    // Configura rate limiting globale per protezione brute-force
+    rateLimitMax    = config.getInt("user.ratelimit.max.attempts", 5);
+    rateLimitWindow = config.getInt("user.ratelimit.window.seconds", 300);
+    RateLimiter.configure(rateLimitMax, rateLimitWindow);
+
+    account = new AccountHandler();
+    auth    = new AuthHandler(config);
+    profile = new ProfileHandler();
 
     // Account — /sid prima di /{id} (match esatto ha precedenza nel PathTemplateMatcher)
     router.route(HttpMethod.GET,    "/api/user/accounts/sid",  account::sid);

@@ -90,6 +90,26 @@ public class HttpRequest
     return result;
   }
 
+  /**
+   * Restituisce l'indirizzo IP del client.
+   * Controlla prima X-Forwarded-For (per proxy/load balancer), poi getSourceAddress().
+   *
+   * @return indirizzo IP del client
+   */
+  public String getClientIP()
+  {
+    String forwarded;
+    String[] ips;
+
+    forwarded = getHeader("X-Forwarded-For");
+    if (forwarded != null && !forwarded.isBlank()) {
+      ips = forwarded.split(",");
+      return ips[0].trim();
+    }
+
+    return exchange.getSourceAddress().getAddress().getHostAddress();
+  }
+
   /** Restituisce i parametri estratti dal template URL (es. /api/users/{id} → {"id": "42"}).
    *  Richiede che la rotta sia registrata con PathTemplateHandler. */
   public Map<String, String> urlArgs()
@@ -215,13 +235,20 @@ public class HttpRequest
     String token;
     com.auth0.jwt.interfaces.DecodedJWT jwt;
     java.util.Map<String, Object> claims;
+    String jti;
 
     token = getCookie("access_token");
     if (token == null || token.isBlank()) {
       throw new UnauthorizedException("Non autenticato");
     }
     try {
-      jwt    = Auth.get().verifyAccessToken(token);
+      jwt = Auth.get().verifyAccessToken(token);
+      jti = jwt.getId();
+
+      if (jti != null && JWTBlacklist.isRevoked(jti)) {
+        throw new UnauthorizedException("Token revocato");
+      }
+
       claims = new java.util.HashMap<>();
       claims.put("sub",                 jwt.getSubject());
       claims.put("username",            jwt.getClaim("username").asString());

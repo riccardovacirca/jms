@@ -65,7 +65,11 @@ public class Auth
                                   List<String> permissions, boolean mustChangePassword)
   {
     String result;
+    String jti;
+
+    jti = UUID.randomUUID().toString();
     result = JWT.create()
+      .withJWTId(jti)
       .withSubject(String.valueOf(userId))
       .withClaim("username", username)
       .withClaim("ruolo", ruolo)
@@ -83,6 +87,46 @@ public class Auth
   public DecodedJWT verifyAccessToken(String token) throws JWTVerificationException
   {
     return verifier.verify(token);
+  }
+
+  /**
+   * Estrae il JWT ID (jti) da un token senza validarlo.
+   * Usato per aggiungere il token alla blacklist al logout.
+   *
+   * @param token JWT come stringa
+   * @return JWT ID (jti) o null se non presente
+   */
+  public String extractJTI(String token)
+  {
+    DecodedJWT jwt;
+
+    try {
+      jwt = JWT.decode(token);
+      return jwt.getId();
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /**
+   * Estrae il timestamp di scadenza (exp) da un token senza validarlo.
+   * Usato per determinare quando rimuovere il token dalla blacklist.
+   *
+   * @param token JWT come stringa
+   * @return timestamp in millisecondi o 0 se non presente
+   */
+  public long extractExpiration(String token)
+  {
+    DecodedJWT jwt;
+    Date exp;
+
+    try {
+      jwt = JWT.decode(token);
+      exp = jwt.getExpiresAt();
+      return exp != null ? exp.getTime() : 0;
+    } catch (Exception e) {
+      return 0;
+    }
   }
 
   // -------------------------

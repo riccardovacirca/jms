@@ -2,6 +2,8 @@ package dev.jms.app;
 
 import dev.jms.util.AsyncExecutor;
 import dev.jms.util.Auth;
+import dev.jms.util.JWTBlacklist;
+import dev.jms.util.RateLimiter;
 import dev.jms.util.Scheduler;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
@@ -77,10 +79,12 @@ public class App
       .setHandler(paths)
       .build();
 
-    // Shutdown hook per terminare gracefully AsyncExecutor e Scheduler
+    // Shutdown hook per terminare gracefully le utility (AsyncExecutor, Scheduler, RateLimiter, JWTBlacklist)
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       AsyncExecutor.shutdown();
       Scheduler.shutdown();
+      RateLimiter.shutdown();
+      JWTBlacklist.shutdown();
     }));
 
     server.start();

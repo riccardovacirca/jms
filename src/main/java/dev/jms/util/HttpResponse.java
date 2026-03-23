@@ -32,6 +32,22 @@ public class HttpResponse
   private boolean _logSet;
   private boolean _outSet;
 
+  private static boolean cookieSecure = false;
+  private static String cookieSameSite = "Lax";
+
+  /**
+   * Configura i flag di sicurezza per i cookie a livello globale.
+   * Deve essere chiamato una volta all'avvio dell'applicazione.
+   *
+   * @param secure   se true, aggiunge il flag Secure (richiede HTTPS)
+   * @param sameSite Strict (massima protezione CSRF) | Lax (bilanciato) | None (richiede Secure=true)
+   */
+  public static void configureCookies(boolean secure, String sameSite)
+  {
+    cookieSecure = secure;
+    cookieSameSite = sameSite;
+  }
+
   public HttpResponse(HttpServerExchange exchange)
   {
     this.exchange = exchange;
@@ -83,22 +99,38 @@ public class HttpResponse
   /** Può essere chiamato zero o più volte. */
   public HttpResponse cookie(String name, String value, int maxAge)
   {
-    exchange.setResponseCookie(new CookieImpl(name, value)
+    CookieImpl cookie;
+
+    cookie = new CookieImpl(name, value)
       .setHttpOnly(true)
       .setPath("/")
       .setMaxAge(maxAge)
-      .setSameSiteMode("Strict"));
+      .setSameSiteMode(cookieSameSite);
+
+    if (cookieSecure) {
+      cookie.setSecure(true);
+    }
+
+    exchange.setResponseCookie(cookie);
     return this;
   }
 
   /** Cancella un cookie impostando maxAge=0 e value vuoto. Può essere chiamato zero o più volte. */
   public HttpResponse clearCookie(String name)
   {
-    exchange.setResponseCookie(new CookieImpl(name, "")
+    CookieImpl cookie;
+
+    cookie = new CookieImpl(name, "")
       .setHttpOnly(true)
       .setPath("/")
       .setMaxAge(0)
-      .setSameSiteMode("Strict"));
+      .setSameSiteMode(cookieSameSite);
+
+    if (cookieSecure) {
+      cookie.setSecure(true);
+    }
+
+    exchange.setResponseCookie(cookie);
     return this;
   }
 

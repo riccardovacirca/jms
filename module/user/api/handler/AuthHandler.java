@@ -81,13 +81,30 @@ public class AuthHandler
   {
     LoginCredentialDTO creds   = LoginCredentialAdapter.from(req);
     AccountDAO         dao     = new AccountDAO(db);
-    AccountAuthDTO     account = dao.findForLogin(creds.username());
+    AccountAuthDTO     account;
+    String             clientIP;
+    String             rateLimitKey;
+
+    clientIP      = req.getClientIP();
+    rateLimitKey  = "user.login:" + clientIP;
+
+    if (dev.jms.util.RateLimiter.isBlocked(rateLimitKey)) {
+      res.status(429).contentType("application/json")
+         .err(true).log("Troppi tentativi. Riprova tra qualche minuto.").out(null).send();
+      return;
+    }
+
+    account = dao.findForLogin(creds.username());
 
     if (account == null || !Auth.checkPassword(creds.password(), account.passwordHash())) {
+      dev.jms.util.RateLimiter.recordFailure(rateLimitKey);
       res.status(200).contentType("application/json")
          .err(true).log("Credenziali non valide").out(null).send();
       return;
     }
+
+    dev.jms.util.RateLimiter.reset(rateLimitKey);
+
     if (account.twoFactorEnabled()) {
       TwoFactorHelper.issuePin(res, db, account);
       return;
@@ -101,10 +118,25 @@ public class AuthHandler
   /** POST /api/user/auth/logout — revoca refresh token e cancella cookie. */
   public void logout(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    String refreshToken = req.cookie("refresh_token");
+    String refreshToken;
+    String accessToken;
+    String jti;
+    long expiresAt;
+
+    refreshToken = req.cookie("refresh_token");
     if (refreshToken != null && !refreshToken.isBlank()) {
       new RefreshTokenDAO(db).delete(refreshToken);
     }
+
+    accessToken = req.cookie("access_token");
+    if (accessToken != null && !accessToken.isBlank()) {
+      jti       = Auth.get().extractJTI(accessToken);
+      expiresAt = Auth.get().extractExpiration(accessToken);
+      if (jti != null && expiresAt > 0) {
+        dev.jms.util.JWTBlacklist.revoke(jti, expiresAt);
+      }
+    }
+
     res.status(200).contentType("application/json")
        .clearCookie("access_token")
        .clearCookie("refresh_token")
@@ -122,18 +154,35 @@ public class AuthHandler
   {
     TwoFactorCredentialDTO creds  = TwoFactorCredentialAdapter.from(req);
     AuthPinDAO             pinDao = new AuthPinDAO(db);
-    AuthPinDTO             pin    = pinDao.findByToken(creds.challengeToken());
+    AuthPinDTO             pin;
+    String                 clientIP;
+    String                 rateLimitKey;
+    AuthenticatedAccountDTO account;
+
+    clientIP     = req.getClientIP();
+    rateLimitKey = "user.2fa:" + clientIP;
+
+    if (dev.jms.util.RateLimiter.isBlocked(rateLimitKey)) {
+      res.status(429).contentType("application/json")
+         .err(true).log("Troppi tentativi. Riprova tra qualche minuto.").out(null).send();
+      return;
+    }
+
+    pin = pinDao.findByToken(creds.challengeToken());
 
     if (pin == null
         || LocalDateTime.now().isAfter(pin.expiresAt())
         || !Auth.checkPassword(creds.pin(), pin.pinHash())) {
+      dev.jms.util.RateLimiter.recordFailure(rateLimitKey);
       res.status(200).contentType("application/json")
          .err(true).log("PIN non valido o scaduto").out(null).send();
       return;
     }
+
+    dev.jms.util.RateLimiter.reset(rateLimitKey);
     pinDao.deleteByToken(creds.challengeToken());
 
-    AuthenticatedAccountDTO account = new AccountDAO(db).findById(pin.accountId());
+    account = new AccountDAO(db).findById(pin.accountId());
     if (account == null) {
       res.status(200).contentType("application/json")
          .err(true).log("Account non trovato").out(null).send();
@@ -145,7 +194,21 @@ public class AuthHandler
   /** POST /api/user/auth/forgot-password — invia link di reset password via email. */
   public void forgotPassword(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    ForgotPasswordDTO dto = ForgotPasswordAdapter.from(req);
+    ForgotPasswordDTO dto;
+    String            clientIP;
+    String            rateLimitKey;
+
+    clientIP     = req.getClientIP();
+    rateLimitKey = "user.forgot:" + clientIP;
+
+    if (dev.jms.util.RateLimiter.isBlocked(rateLimitKey)) {
+      res.status(429).contentType("application/json")
+         .err(true).log("Troppi tentativi. Riprova tra qualche minuto.").out(null).send();
+      return;
+    }
+
+    dto = ForgotPasswordAdapter.from(req);
+    dev.jms.util.RateLimiter.recordFailure(rateLimitKey);
     PasswordResetHelper.sendResetLink(db, dto.username(), dto.resetLink());
     res.status(200).contentType("application/json")
        .err(false).log("Se l'account esiste, riceverai un'email con il link di reset").out(null).send();
@@ -154,15 +217,33 @@ public class AuthHandler
   /** POST /api/user/auth/reset-password — reset password con token one-time. */
   public void resetPassword(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    ResetPasswordDTO  dto      = ResetPasswordAdapter.from(req);
-    PasswordResetDAO  resetDao = new PasswordResetDAO(db);
-    Integer           accountId = resetDao.findValidAccountId(dto.token());
+    ResetPasswordDTO  dto;
+    PasswordResetDAO  resetDao;
+    Integer           accountId;
+    String            clientIP;
+    String            rateLimitKey;
+
+    clientIP     = req.getClientIP();
+    rateLimitKey = "user.reset:" + clientIP;
+
+    if (dev.jms.util.RateLimiter.isBlocked(rateLimitKey)) {
+      res.status(429).contentType("application/json")
+         .err(true).log("Troppi tentativi. Riprova tra qualche minuto.").out(null).send();
+      return;
+    }
+
+    dto      = ResetPasswordAdapter.from(req);
+    resetDao = new PasswordResetDAO(db);
+    accountId = resetDao.findValidAccountId(dto.token());
 
     if (accountId == null) {
+      dev.jms.util.RateLimiter.recordFailure(rateLimitKey);
       res.status(200).contentType("application/json")
          .err(true).log("Token non valido o scaduto").out(null).send();
       return;
     }
+
+    dev.jms.util.RateLimiter.reset(rateLimitKey);
     new AccountDAO(db).updatePassword(accountId, Auth.hashPassword(dto.password()), false);
     resetDao.markUsed(dto.token());
     res.status(200).contentType("application/json")
