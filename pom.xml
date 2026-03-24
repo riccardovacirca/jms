@@ -94,6 +94,17 @@
             <artifactId>pdfbox</artifactId>
             <version>3.0.3</version>
         </dependency>
+        <!-- Flying Saucer + OpenPDF (HTML to PDF conversion) -->
+        <dependency>
+            <groupId>org.xhtmlrenderer</groupId>
+            <artifactId>flying-saucer-pdf-openpdf</artifactId>
+            <version>9.1.22</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.30</version>
+        </dependency>
     </dependencies>
 
     <profiles>

@@ -157,4 +157,26 @@ public final class Validator
     }
     return value;
   }
+
+  /**
+   * Valida che un placeholder per campi firma contenga solo caratteri alfanumerici.
+   * <p>
+   * Regole: no spazi, no underscore, no caratteri speciali.
+   * </p>
+   *
+   * @param value     valore da validare
+   * @param fieldName nome del campo per il messaggio di errore
+   * @throws ValidationException se la validazione fallisce
+   */
+  public static void signPlaceholder(String value, String fieldName)
+  {
+    if (value == null || value.isBlank()) {
+      throw new ValidationException(fieldName + " è obbligatorio");
+    }
+    if (!value.matches("^[a-zA-Z0-9]+$")) {
+      throw new ValidationException(
+        fieldName + " può contenere solo caratteri alfanumerici (no spazi, no underscore, no caratteri speciali)"
+      );
+    }
+  }
 }

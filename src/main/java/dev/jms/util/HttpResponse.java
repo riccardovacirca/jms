@@ -154,6 +154,41 @@ public class HttpResponse
     exchange.getResponseSender().send(body);
   }
 
+  /**
+   * Invia un file binario come download (Content-Disposition: attachment).
+   * Imposta automaticamente Content-Type e Content-Disposition header.
+   * Non richiede la chiamata a contentType(), err(), log(), out().
+   * Richiede che status() sia stato chiamato.
+   *
+   * @param data        contenuto binario del file
+   * @param filename    nome del file per il download (es. "document.pdf")
+   * @param contentType MIME type del file (es. "application/pdf", "application/octet-stream")
+   */
+  public void download(byte[] data, String filename, String contentType)
+  {
+    String disposition;
+
+    if (!_statusSet) {
+      throw new IllegalStateException("status() non chiamato");
+    }
+    if (data == null) {
+      throw new IllegalArgumentException("data cannot be null");
+    }
+    if (filename == null || filename.isBlank()) {
+      throw new IllegalArgumentException("filename cannot be null or empty");
+    }
+    if (contentType == null || contentType.isBlank()) {
+      throw new IllegalArgumentException("contentType cannot be null or empty");
+    }
+
+    disposition = "attachment; filename=\"" + filename + "\"";
+
+    exchange.setStatusCode(_status);
+    exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, contentType);
+    exchange.getResponseHeaders().put(new HttpString("Content-Disposition"), disposition);
+    exchange.getResponseSender().send(java.nio.ByteBuffer.wrap(data));
+  }
+
   /** Valida che status(), contentType(), err(), log() e out() siano stati tutti chiamati, poi invia. */
   public void send()
   {

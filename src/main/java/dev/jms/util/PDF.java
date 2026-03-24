@@ -125,6 +125,63 @@ public class PDF
   }
 
   /**
+   * Sostituisce placeholder con sequenza automatica (TAG, TAG0, TAG1, ..., TAGn).
+   * <p>
+   * Cerca prima il placeholder base (es. TAG), poi TAG0, TAG1, fino a TAGmaxSequence.
+   * Ogni occorrenza viene sostituita con un campo firma univoco.
+   * </p>
+   *
+   * @param placeholder     testo base del placeholder (es. "TAG")
+   * @param fieldNamePrefix prefisso per i nomi dei campi firma generati
+   * @param width           larghezza del campo in punti PDF
+   * @param height          altezza del campo in punti PDF
+   * @param maxSequence     numero massimo di sequenze da cercare (0-maxSequence)
+   * @return numero totale di occorrenze sostituite
+   * @throws IOException se l'elaborazione fallisce
+   */
+  public int replaceAllPlaceholdersWithSignatureFieldSequence(
+    String placeholder,
+    String fieldNamePrefix,
+    float width,
+    float height,
+    int maxSequence) throws IOException
+  {
+    int totalReplaced;
+    int replaced;
+
+    totalReplaced = 0;
+
+    replaced = replaceAllPlaceholdersWithSignatureField(placeholder, fieldNamePrefix, width, height);
+    totalReplaced += replaced;
+
+    for (int i = 0; i <= maxSequence; i++) {
+      String seqPlaceholder;
+      String seqFieldPrefix;
+
+      seqPlaceholder = placeholder + i;
+      seqFieldPrefix = fieldNamePrefix + "_" + i;
+      replaced = replaceAllPlaceholdersWithSignatureField(seqPlaceholder, seqFieldPrefix, width, height);
+      totalReplaced += replaced;
+    }
+
+    return totalReplaced;
+  }
+
+  /**
+   * Valida che un placeholder contenga solo caratteri alfanumerici.
+   *
+   * @param placeholder testo da validare
+   * @return true se valido (solo a-zA-Z0-9), false altrimenti
+   */
+  public static boolean validatePlaceholder(String placeholder)
+  {
+    if (placeholder == null || placeholder.isBlank()) {
+      return false;
+    }
+    return placeholder.matches("^[a-zA-Z0-9]+$");
+  }
+
+  /**
    * Salva il documento nello stream di output e rilascia le risorse.
    *
    * @param out stream di destinazione
