@@ -35,11 +35,14 @@ Usage: cmd COMMAND [OPTIONS]
   app debug                        Watch src/, compile on change, hot-restart WITH remote debug on :5005
   app start                        Start in background
   app stop                         Stop background process
+  app stop --force                 Force kill: termina per nome e per porta API (cleanup zombie/porta occupata)
   app restart                      Restart background process
   app status                       Show status
+  app clean                        Remove compiled files (mvn clean → target/)
 
   gui build                        Build for production → src/main/resources/static/
   gui run                          Run Vite dev server (foreground, with API proxy)
+  gui clean                        Clear build output (src/main/resources/static/)
 
   git push [-r <path>]             Stage, commit and push
   git pull [-r <path>]             Pull from remote
@@ -58,9 +61,11 @@ Usage: cmd COMMAND [OPTIONS]
   db reset                         Reset database (drop and recreate)
 
   module import <path>              Install module from path relative to module/ (folder or .tar.gz)
+  module import <path> --force      Bypass missing dependency check
   module export --name <n> [-v x]   Export current project module to module/<name>[-version]/
   module dist <path>                Package module folder (relative to module/) → dist/<name>-<version>.tar.gz
-  module remove --name <nome>       Remove installed module
+  module remove --name <name>       Remove installed module (blocked if other modules depend on it)
+  module remove --name <name> --force  Bypass reverse dependency check
 
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
                                      Default: -c 10 -r 100 (10 concurrent users, 100 reps each)

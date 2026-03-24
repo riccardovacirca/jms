@@ -131,7 +131,7 @@ After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM
 Two packages:
 
 - **`<groupId>/`** — App-specific code: `App.java` (entry point + server setup), plus any installed module subpackages (e.g. `auth/` with `handler/`, `dao/`, `dto/`, `adapter/`).
-- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `RouteHandler`, `HttpMethod`.
+- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `RouteHandler`, `HttpMethod`, `Router`, `AuditLog`, `JWTBlacklist`, `RateLimiter`.
 
 **Handler pattern:** Routes use the `RouteHandler` functional interface `(HttpRequest, HttpResponse, DB) throws Exception`. Handlers are plain classes with methods matching this signature, registered as method references. `HandlerAdapter` wires the handler to Undertow, dispatches to a worker thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` (or a module's `Routes.java`) via a `Router` instance.
 
@@ -167,6 +167,12 @@ Key configuration parameters:
 - `mail.*` — SMTP configuration (disabled by default, set `mail.enabled=true` to enable)
 
 **Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `permissions` (List<String>, e.g. `["can_admin","can_write","can_delete"]`), `must_change_password`.
+
+**JWT blacklist** (`JWTBlacklist.java`): In-memory blacklist for revoked JWTs (logout, password change). Tracks JWT ID (`jti`) until natural expiry to prevent session replay attacks. Singleton, lazy-init, thread-safe. Auto-cleanup every minute.
+
+**Rate limiter** (`RateLimiter.java`): In-memory brute-force protection. Tracks failed attempts per key (e.g. `"user.login:IP"`) with a sliding time window. Singleton, configurable via `RateLimiter.configure(maxAttempts, windowMs)`. Auto-cleanup every minute.
+
+**Audit log** (`AuditLog.java`): Structured event logging to `audit_log` table. Static methods, no initialization required. Errors on write are logged but not propagated (same pattern as `Log`).
 
 **Scheduler:** JobRunr-based cron scheduler backed by PostgreSQL (`Scheduler.java`). Initialized in `App.main()` after `DB.init()`. Jobs are registered with `Scheduler.register("job-id", "0 2 * * *", Handler::staticMethod)` — the target method must be static and parameterless. Jobs persist across restarts (stored in `jobrunr_*` tables, auto-created). Config: `scheduler.enabled` (default: `true`), `scheduler.poll.interval.seconds` (default: `15`). Graceful shutdown via `Scheduler.shutdown()` in the JVM shutdown hook.
 
@@ -344,9 +350,10 @@ cmd module dist auth   # → dist/auth-1.0.0.tar.gz
 cmd module import auth                   # da cartella top-level
 cmd module import auth-1.0.0.tar.gz     # da archivio
 cmd module import cti/vonage             # da cartella con namespace
+cmd module import cti/vonage --force     # bypassa verifica dipendenze
 ```
 Import automaticamente:
-1. Verifica dipendenze da `module.json` (avvisa se mancanti, controlla tracker installati)
+1. Verifica dipendenze **transitive e bloccanti** — se una dipendenza (diretta o transitiva) non è installata, l'import viene bloccato con errore; `--force` bypassa il blocco
 2. Copia sorgenti Java in `app/module/<name>/` (top-level) o `app/module/<ns>/<name>/` (namespace), aggiornando i package declaration
 3. Copia sorgenti GUI in `gui/src/module/<name>/` (top-level) o `gui/src/module/<ns>/<name>/` (namespace)
 4. Copia migration SQL
@@ -354,6 +361,7 @@ Import automaticamente:
 6. Inserisce l'entry `gui.config` in `gui/src/config.js` dopo `// [MODULE_ENTRIES]` (con `path` corretto per namespace)
 7. Inserisce il Maven profile da `profile.xml` in `pom.xml` dopo `<!-- [MODULE_PROFILES] -->` (se presente)
 8. Scrive il tracker in `src/main/resources/module/<key>/module.json`
+9. Rigenera `src/main/resources/module/installed.json` con la mappa di tutti i moduli installati
 
 **Maven auto-activation:** Il profile si attiva automaticamente quando il tracker `module.json` esiste, scaricando le dipendenze al prossimo build.
 
@@ -361,10 +369,18 @@ Import automaticamente:
 ```bash
 cmd module remove --name auth
 cmd module remove --name cti/vonage
+cmd module remove --name auth --force   # bypassa controllo dipendenze inverse
 ```
-Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, Maven profile da `pom.xml`, tracker. Le migration Flyway non vengono rimosse automaticamente (avviso esplicito).
+Prima di rimuovere verifica che nessun modulo installato dipenda dal modulo target — **bloccante** se trovati dipendenti; `--force` bypassa il blocco.
+Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, Maven profile da `pom.xml`, tracker, e rigenera `installed.json`. Le migration Flyway non vengono rimosse automaticamente (avviso esplicito).
 
 **Tracker installati:** dopo ogni import riuscito viene scritto `src/main/resources/module/<key>/module.json` (es. `module/user/module.json` o `module/cti/vonage/module.json`). Le dipendenze vengono verificate cercando per `name` in tutti i tracker. `module remove` richiede il tracker per operare.
+
+**Manifest:** `src/main/resources/module/installed.json` — auto-generato da ogni `import` e `remove`, contiene la mappa `key → {name, version, dependencies}` di tutti i moduli installati. Letto da `App.java` all'avvio per verificare le dipendenze e loggare `[warn]` se non soddisfatte.
+
+**Dipendenze transitive:** la verifica all'import è ricorsiva — se A dipende da B e B dipende da C, installare A richiede che B e C siano entrambi installati. La verifica alla rimozione è inversa — se A dipende da B, rimuovere B è bloccato finché A è installato.
+
+**Moduli migration-only:** moduli senza Java né GUI (es. `audit`). Struttura: solo `migration/` e `module.json` con `api: null` e `gui.config: null`. Supportati nativamente da `module_install`.
 
 **Markers required in host project:**
 - `App.java`: `// [MODULE_ROUTES]` prima delle registrazioni di route dei moduli
@@ -381,14 +397,16 @@ Rimuove sorgenti Java, GUI, route da `App.java`, entry da `config.js`, Maven pro
 The install script (`_rewrite_java_packages`) automatically updates package declarations and imports when copying to the target location.
 
 **Available modules** (in `module/`):
-- `user/` — Authentication + account management (login, logout, 2FA, reset/change password, CRUD admin, self-edit); route `/user`, no dependencies
+- `audit/` — Creates `audit_log` table; migration-only (no Java, no GUI); required by `user`
+- `user/` — Authentication + account management (login, logout, 2FA, reset/change password, CRUD admin, self-edit); route `/user`; requires: `audit`
 - `header/` — Persistent navigation header (no dependencies)
 - `home/` — Simple home page with API hello endpoint (no dependencies)
 - `crm/contatti/` — Contact management module (requires: `user`)
 - `aes/` — AES encryption/decryption API endpoints; no frontend (`path: null`); requires `aes.api.key` in config; no dependencies
-- `cti/vonage/` — Vonage Voice API integration; route `/cti`, namespace `cti`; protected (requires `user`); requires Vonage config + private key + `npm install @vonage/client-sdk` in `gui/`; routes under `/api/cti/vonage/`; no dependencies
+- `cti/vonage/` — Vonage Voice API integration; route `/cti`, namespace `cti`; protected; requires Vonage config + private key + `npm install @vonage/client-sdk` in `gui/`; routes under `/api/cti/vonage/`; requires: `user`
 - `asynctest/` — Test module for async vs blocking behavior comparison; no frontend, not for production
 - `schedulertest/` — Test module for Scheduler functionality; no frontend, not for production
+- `iacs/` — Integrated Access Control System (stub/placeholder — no implementation yet)
 
 All modules follow the complete configuration schema with all 7 attributes (`route`, `path`, `container`, `authorization`, `persistent`, `priority`, `init`).
 

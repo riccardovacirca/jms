@@ -8,10 +8,11 @@ Module management: installation, export, distribution, removal.
 cmd module import auth               # top-level module
 cmd module import cti/vonage         # namespaced module
 cmd module import auth-1.0.0.tar.gz  # from archive
+cmd module import auth --force       # bypassa verifica dipendenze
 ```
 
 **Automatic operations:**
-- Verifica dipendenze dichiarate in `module.json`
+- Verifica dipendenze transitive (ricorsiva) dichiarate in `module.json` — **bloccante** se mancanti
 - Copia sorgenti Java in `app/module/<name>/` (top-level) o `app/module/<ns>/<name>/` (namespace)
 - Riscrive i package Java al path di installazione
 - Copia sorgenti GUI in `gui/src/module/<name>/` (top-level) o `gui/src/module/<ns>/<name>/` (namespace)
@@ -19,6 +20,7 @@ cmd module import auth-1.0.0.tar.gz  # from archive
 - Inserisce la chiamata route in `App.java` dopo `// [MODULE_ROUTES]`
 - Aggiunge l'entry in `gui/src/config.js` dopo `// [MODULE_ENTRIES]`
 - Scrive il tracker: `src/main/resources/module/<key>/module.json`
+- Rigenera il manifest `src/main/resources/module/installed.json`
 
 **Build dopo l'installazione:**
 
@@ -32,9 +34,11 @@ cmd app restart
 ```bash
 cmd module remove --name auth
 cmd module remove --name cti/vonage
+cmd module remove --name auth --force   # bypassa controllo dipendenze inverse
 ```
 
 Legge il tracker e rimuove: sorgenti Java e GUI, route da `App.java`, entry da `config.js`, tracker.
+Prima di rimuovere verifica che nessun altro modulo installato dichiari questo come dipendenza — **bloccante** se trovati dipendenti.
 
 **Nota:** le migration Flyway non vengono rimosse automaticamente.
 
@@ -79,6 +83,13 @@ module/auth/
   module.json    ← Metadati (auto-generato da export)
 ```
 
+**Migration-only** (`module/audit/`):
+```
+module/audit/
+  migration/     ← Solo migration SQL, nessun Java né GUI
+  module.json    ← api: null, gui.config: null
+```
+
 **Con namespace** (`module/cti/vonage/`):
 ```
 module/cti/vonage/
@@ -92,6 +103,11 @@ module/cti/vonage/
 ```
 src/main/resources/module/auth/module.json
 src/main/resources/module/cti/vonage/module.json
+```
+
+**Manifest installati** (auto-generato):
+```
+src/main/resources/module/installed.json
 ```
 
 ## Schema module.json
@@ -121,6 +137,18 @@ src/main/resources/module/cti/vonage/module.json
 }
 ```
 
+**Migration-only** (nessun Java, nessuna GUI):
+```json
+{
+  "name": "audit",
+  "version": "1.0.0",
+  "dependencies": {},
+  "api": null,
+  "gui": { "config": null },
+  "install_notice": null
+}
+```
+
 **Con namespace** (`cti/vonage`):
 - `api.routes` → `dev.jms.app.module.cti.vonage.Routes.register(router, config);`
 - `gui.config.path` → `"cti/vonage"` (il router risolve in `gui/src/module/cti/vonage/`)
@@ -139,19 +167,41 @@ Tutti i moduli installati usano `app/module/` e `gui/src/module/` come base:
 
 Il package Java nei sorgenti del modulo viene riscritto automaticamente all'installazione.
 
-## Dipendenze tra moduli
+## Gestione dipendenze
 
-Dichiarate in `module.json`:
+### Dichiarazione
+
+Dichiarate in `module.json` come mappa `name → version`:
 
 ```json
 {
   "dependencies": {
-    "user": "^1.0.0"
+    "user": "*",
+    "audit": "^1.0.0"
   }
 }
 ```
 
-`cmd module import` verifica la presenza del tracker per ciascuna dipendenza e avvisa se mancante.
+### Verifica all'import
+
+`cmd module import` esegue una verifica **transitiva e bloccante**:
+- Raccoglie le dipendenze del modulo da installare
+- Per ogni dipendenza installata, raccoglie ricorsivamente le sue dipendenze (via tracker)
+- Se una qualsiasi dipendenza è mancante → **errore**, installazione bloccata
+- Bypass con `--force`
+
+### Controllo inverso alla rimozione
+
+`cmd module remove` verifica che nessun modulo installato dipenda da quello da rimuovere:
+- Scansiona tutti i tracker installati
+- Se un tracker dichiara il modulo target come dipendenza → **errore**, rimozione bloccata
+- Bypass con `--force`
+
+### Manifest e verifica all'avvio
+
+Ogni `import` e `remove` rigenera `src/main/resources/module/installed.json` con la mappa `key → {name, version, dependencies}` di tutti i moduli installati.
+
+All'avvio, `App.java` legge il manifest e logga `[warn]` per ogni dipendenza non soddisfatta, senza bloccare l'avvio.
 
 ## Marker obbligatori nel progetto host
 
@@ -162,7 +212,8 @@ Dichiarate in `module.json`:
 
 | Modulo | Descrizione | Dipendenze |
 |--------|-------------|------------|
-| `user` | Autenticazione, account, 2FA, reset password | — |
+| `audit` | Tabella `audit_log` (migration-only, nessun Java né GUI) | — |
+| `user` | Autenticazione, account, 2FA, reset password | `audit` |
 | `header` | Header di navigazione persistente | — |
 | `home` | Home page con endpoint `/api/home/hello` | — |
 | `crm/contatti` | Gestione contatti con import Excel | `user` |
@@ -176,3 +227,5 @@ Dichiarate in `module.json`:
 - `jms/gui/src/config.js` non deve contenere entry specifiche del progetto
 - Ogni modulo Java deve avere una classe `*Routes.java` con metodo statico `register(Router router[, Config config])`
 - Il tracker `src/main/resources/module/<key>/module.json` è scritto da `import` e letto da `remove`
+- Il manifest `src/main/resources/module/installed.json` è sempre rigenerato da `import` e `remove`
+- Moduli migration-only: `api: null`, `gui.config: null`, nessuna cartella `api/` o `gui/`
