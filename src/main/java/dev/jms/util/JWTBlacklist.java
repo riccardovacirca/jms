@@ -31,8 +31,8 @@ public class JWTBlacklist
   }
 
   /**
-   * Verifica se un JWT è revocato.
-   * Se il token è scaduto naturalmente, lo rimuove dalla blacklist e restituisce false.
+   * Verifica se un JWT e' revocato.
+   * Se il token e' scaduto naturalmente, lo rimuove dalla blacklist e restituisce false.
    *
    * @param jti JWT ID (claim jti)
    * @return true se revocato, false altrimenti
@@ -54,7 +54,7 @@ public class JWTBlacklist
     return true;
   }
 
-  /** Avvia il cleanup automatico se non già attivo. */
+  /** Avvia il cleanup automatico se non gia' attivo. */
   private static synchronized void ensureCleanupStarted()
   {
     if (cleanupExecutor == null) {

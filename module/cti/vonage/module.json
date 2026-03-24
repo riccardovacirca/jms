@@ -1,7 +1,9 @@
 {
   "name": "vonage",
   "version": "1.0.0",
-  "dependencies": {},
+  "dependencies": {
+    "user": "*"
+  },
   "api": {
     "routes": "dev.jms.app.module.cti.vonage.Routes.register(router, config);",
     "config": {}

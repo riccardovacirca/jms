@@ -1,6 +1,7 @@
 package dev.jms.util;
 
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.Cookie;
 import io.undertow.server.handlers.CookieImpl;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
@@ -99,7 +100,7 @@ public class HttpResponse
   /** Può essere chiamato zero o più volte. */
   public HttpResponse cookie(String name, String value, int maxAge)
   {
-    CookieImpl cookie;
+    Cookie cookie;
 
     cookie = new CookieImpl(name, value)
       .setHttpOnly(true)
@@ -118,7 +119,7 @@ public class HttpResponse
   /** Cancella un cookie impostando maxAge=0 e value vuoto. Può essere chiamato zero o più volte. */
   public HttpResponse clearCookie(String name)
   {
-    CookieImpl cookie;
+    Cookie cookie;
 
     cookie = new CookieImpl(name, "")
       .setHttpOnly(true)

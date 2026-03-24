@@ -22,7 +22,7 @@ public class RateLimiter
 
   /**
    * Configura rate limiting globale.
-   * Avvia il cleanup automatico se non già attivo.
+   * Avvia il cleanup automatico se non gia' attivo.
    *
    * @param max     massimo numero di tentativi falliti consentiti
    * @param window  finestra temporale in secondi
@@ -35,8 +35,8 @@ public class RateLimiter
   }
 
   /**
-   * Verifica se la chiave è bloccata (troppi tentativi falliti nella finestra).
-   * Se la finestra è scaduta, rimuove il record e restituisce false.
+   * Verifica se la chiave e' bloccata (troppi tentativi falliti nella finestra).
+   * Se la finestra e' scaduta, rimuove il record e restituisce false.
    *
    * @param key chiave univoca (es. "user.login:192.168.1.100")
    * @return true se bloccato, false altrimenti
@@ -60,8 +60,8 @@ public class RateLimiter
 
   /**
    * Registra un tentativo fallito.
-   * Se è il primo tentativo nella finestra, crea un nuovo record.
-   * Se la finestra è scaduta, resetta il contatore.
+   * Se e' il primo tentativo nella finestra, crea un nuovo record.
+   * Se la finestra e' scaduta, resetta il contatore.
    *
    * @param key chiave univoca
    */
@@ -93,7 +93,7 @@ public class RateLimiter
     attempts.remove(key);
   }
 
-  /** Avvia il cleanup automatico se non già attivo. */
+  /** Avvia il cleanup automatico se non gia' attivo. */
   private static synchronized void ensureCleanupStarted()
   {
     if (cleanupExecutor == null) {

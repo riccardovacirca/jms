@@ -1,5 +1,5 @@
--- Migration core per la tabella audit_log
--- Questa tabella è utilizzabile da tutti i moduli per il logging strutturato degli eventi
+-- Migration audit: crea la tabella audit_log
+-- Utilizzabile da tutti i moduli per il logging strutturato degli eventi
 
 CREATE TABLE audit_log
 (

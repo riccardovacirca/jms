@@ -1007,6 +1007,45 @@ for root, dirs, files in os.walk(java_dir):
 #            MODULE_KEY  (path relativo a module/, es. "user" o "cti/vonage")
 # ============================================================================
 
+# ============================================================================
+# _module_manifest_update — rigenera src/main/resources/module/installed.json
+# con la mappa key→{name,version,dependencies} di tutti i moduli installati.
+# Chiamato automaticamente da module_install e module_remove.
+# ============================================================================
+
+_module_manifest_update() {
+    local TRACKER_BASE="$WORKSPACE/src/main/resources/module"
+    local MANIFEST="$TRACKER_BASE/installed.json"
+    python3 -c "
+import json, os
+
+tracker_base = '$TRACKER_BASE'
+installed = {}
+
+for root, dirs, files in os.walk(tracker_base):
+    for f in files:
+        if f != 'module.json':
+            continue
+        path = os.path.join(root, f)
+        try:
+            m = json.load(open(path))
+            name = m.get('name', '')
+            key = os.path.relpath(os.path.dirname(path), tracker_base)
+            if name:
+                installed[key] = {
+                    'name': name,
+                    'version': m.get('version', ''),
+                    'dependencies': m.get('dependencies', {})
+                }
+        except Exception:
+            pass
+
+with open('$MANIFEST', 'w') as f:
+    json.dump(installed, f, indent=2)
+    f.write('\n')
+" 2>/dev/null || true
+}
+
 module_install() {
     local MODULE_DIR="$1"
     local MODULE_KEY="$2"
@@ -1193,6 +1232,7 @@ with open(path, 'w') as f:
 " 2>/dev/null || true
     fi
     success "  Tracker scritto: ${TRACKER_DIR#$WORKSPACE/}/module.json"
+    _module_manifest_update
 
     printf '\n'
     success "Installazione modulo '$MODULE' completata"
@@ -1220,8 +1260,17 @@ if notice:
 # ============================================================================
 
 module_import() {
-    local INPUT="$1"
-    [ -n "$INPUT" ] || error "Usage: cmd module import <path>"
+    local INPUT=""
+    local FORCE=false
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force) FORCE=true; shift ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module import <path> [--force]" ;;
+            *) INPUT="$1"; shift ;;
+        esac
+    done
+    [ -n "$INPUT" ] || error "Usage: cmd module import <path> [--force]"
 
     # Normalizza: rimuovi slash iniziale/finale
     local REL_PATH="${INPUT#/}"
@@ -1262,40 +1311,70 @@ module_import() {
     MODULE=$(python3 -c "import json; print(json.load(open('$MODULE_DIR/module.json'))['name'])" 2>/dev/null)
     [ -n "$MODULE" ] || error "Impossibile leggere 'name' da module.json"
 
-    # Verifica dipendenze (cerca tracker per nome, indipendentemente dal key)
-    local MISSING_DEPS="" DEP_COUNT=0
-    while IFS= read -r DEP_NAME; do
-        [ -z "$DEP_NAME" ] && continue
-        DEP_COUNT=$((DEP_COUNT + 1))
-        local DEP_FOUND
-        DEP_FOUND=$(find "$WORKSPACE/src/main/resources/modules" -name "module.json" \
-            -exec python3 -c "
-import json, sys
-try:
-    m = json.load(open(sys.argv[1]))
-    if m.get('name') == '$DEP_NAME': print('yes')
-except: pass
-" {} \; 2>/dev/null | head -1)
-        if [ -z "$DEP_FOUND" ]; then
-            MISSING_DEPS="$MISSING_DEPS  - $DEP_NAME\n"
-        fi
-    done < <(python3 -c "
-import json
-with open('$MODULE_DIR/module.json') as f:
-    m = json.load(f)
-for dep in m.get('dependencies', {}).keys():
+    # Verifica dipendenze transitive (risoluzione ricorsiva via tracker installati)
+    local MISSING_DEPS
+    MISSING_DEPS=$(python3 -c "
+import json, os, sys
+
+tracker_base = os.path.join('$WORKSPACE', 'src', 'main', 'resources', 'module')
+
+def find_tracker(name):
+    for root, dirs, files in os.walk(tracker_base):
+        for f in files:
+            if f == 'module.json':
+                path = os.path.join(root, f)
+                try:
+                    m = json.load(open(path))
+                    if m.get('name') == name:
+                        return path
+                except Exception:
+                    pass
+    return None
+
+def collect_missing(json_path, visited=None, missing=None):
+    if visited is None:
+        visited = set()
+    if missing is None:
+        missing = []
+    try:
+        m = json.load(open(json_path))
+    except Exception:
+        return missing
+    for dep_name in m.get('dependencies', {}).keys():
+        if dep_name in visited:
+            continue
+        visited.add(dep_name)
+        tracker_path = find_tracker(dep_name)
+        if tracker_path is None:
+            missing.append(dep_name)
+        else:
+            collect_missing(tracker_path, visited, missing)
+    return missing
+
+for dep in collect_missing('$MODULE_DIR/module.json'):
     print(dep)
 " 2>/dev/null)
 
+    local DEP_COUNT
+    DEP_COUNT=$(python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+print(len(m.get('dependencies', {})))
+" 2>/dev/null || echo "0")
+
     if [ -n "$MISSING_DEPS" ]; then
         printf '\n'
-        warn "ATTENZIONE: Il modulo '$MODULE' richiede le seguenti dipendenze:"
-        printf "$MISSING_DEPS"
-        warn "Installa prima i moduli mancanti con: cmd module import <modulo>"
+        warn "Il modulo '$MODULE' richiede le seguenti dipendenze non installate:"
+        while IFS= read -r dep; do
+            printf "    - %s\n" "$dep"
+        done <<< "$MISSING_DEPS"
         printf '\n'
-        if ! confirm "Vuoi continuare comunque con l'installazione?"; then
+        if [ "$FORCE" = true ]; then
+            warn "  Installazione forzata con --force"
+        else
             if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
-            error "Installazione annullata"
+            error "Installa prima i moduli mancanti con: cmd module import <modulo>"
         fi
     elif [ "$DEP_COUNT" -gt 0 ]; then
         success "Tutte le dipendenze sono soddisfatte"
@@ -1610,18 +1689,20 @@ module_dist() {
 
 module_remove() {
     local MODULE_KEY=""
+    local FORCE=false
 
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)
                 [ -n "$2" ] || error "--name richiede un valore"
                 MODULE_KEY="$2"; shift 2 ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <key>" ;;
-            *) error "Usage: cmd module remove --name <key>" ;;
+            --force) FORCE=true; shift ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <key> [--force]" ;;
+            *) error "Usage: cmd module remove --name <key> [--force]" ;;
         esac
     done
 
-    [ -n "$MODULE_KEY" ] || error "Usage: cmd module remove --name <key>"
+    [ -n "$MODULE_KEY" ] || error "Usage: cmd module remove --name <key> [--force]"
     MODULE_KEY="${MODULE_KEY%/}"
 
     local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
@@ -1632,6 +1713,44 @@ module_remove() {
 
     local MODULE
     MODULE=$(python3 -c "import json; print(json.load(open('$TRACKER_DIR/module.json'))['name'])" 2>/dev/null || echo "$MODULE_NAME")
+
+    # Verifica dipendenze inverse: blocca se altri moduli installati dipendono da questo
+    local DEPENDENTS
+    DEPENDENTS=$(python3 -c "
+import json, os
+
+tracker_base = os.path.join('$WORKSPACE', 'src', 'main', 'resources', 'module')
+target = '$MODULE_NAME'
+
+for root, dirs, files in os.walk(tracker_base):
+    for f in files:
+        if f != 'module.json':
+            continue
+        path = os.path.join(root, f)
+        # Salta il tracker del modulo che stiamo rimuovendo
+        if os.path.normpath(os.path.dirname(path)) == os.path.normpath('$TRACKER_DIR'):
+            continue
+        try:
+            m = json.load(open(path))
+            if target in m.get('dependencies', {}):
+                print(m.get('name', os.path.dirname(path)))
+        except Exception:
+            pass
+" 2>/dev/null)
+
+    if [ -n "$DEPENDENTS" ]; then
+        printf '\n'
+        warn "I seguenti moduli installati dipendono da '$MODULE_NAME':"
+        while IFS= read -r dep; do
+            printf "    - %s\n" "$dep"
+        done <<< "$DEPENDENTS"
+        printf '\n'
+        if [ "$FORCE" = true ]; then
+            warn "  Rimozione forzata con --force"
+        else
+            error "Rimozione bloccata. Rimuovi prima i moduli dipendenti o usa --force per forzare."
+        fi
+    fi
 
     if ! confirm "Rimuovere il modulo '$MODULE_KEY'?"; then
         info "Operazione annullata"
@@ -1777,6 +1896,8 @@ print('OK')
             rm -rf "$TRACKER_NS_DIR"
         fi
     fi
+
+    _module_manifest_update
 
     printf '\n'
     success "Modulo '$MODULE_KEY' rimosso"

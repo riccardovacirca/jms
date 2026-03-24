@@ -9,6 +9,8 @@ import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Mail;
 import dev.jms.util.Router;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -17,6 +19,8 @@ import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
 import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
+import java.io.InputStream;
+import java.util.Map;
 import javax.sql.DataSource;
 
 /**
@@ -50,6 +54,7 @@ public class App
     AsyncExecutor.init(asyncPoolSize);
     runMigrations();
     Scheduler.init(config, DB.getDataSource());
+    checkModuleDependencies();
 
     ds = DB.getDataSource();
 
@@ -89,6 +94,61 @@ public class App
 
     server.start();
     System.out.println("[info] Server in ascolto sulla porta " + port);
+  }
+
+  /**
+   * Verifica che le dipendenze dichiarate nei moduli installati siano tutte presenti.
+   * Legge il manifest generato da cmd module install/remove.
+   * Logga un warning per ogni dipendenza mancante, senza interrompere l'avvio.
+   */
+  @SuppressWarnings("unchecked")
+  private static void checkModuleDependencies()
+  {
+    InputStream is;
+    ObjectMapper mapper;
+    Map<String, Map<String, Object>> installed;
+    boolean ok;
+
+    is = App.class.getClassLoader().getResourceAsStream("module/installed.json");
+    if (is != null) {
+      mapper = new ObjectMapper();
+      installed = null;
+      try {
+        installed = mapper.readValue(is, new TypeReference<Map<String, Map<String, Object>>>() {});
+      } catch (Exception e) {
+        System.out.println("[warn] Impossibile leggere module/installed.json: " + e.getMessage());
+      }
+      if (installed != null) {
+        ok = true;
+        for (Map.Entry<String, Map<String, Object>> entry : installed.entrySet()) {
+          Map<String, Object> info;
+          Object depsObj;
+
+          info = entry.getValue();
+          depsObj = info.get("dependencies");
+          if (depsObj instanceof Map) {
+            Map<String, Object> deps;
+            deps = (Map<String, Object>) depsObj;
+            for (String dep : deps.keySet()) {
+              boolean found;
+              found = false;
+              for (Map.Entry<String, Map<String, Object>> e2 : installed.entrySet()) {
+                if (dep.equals(e2.getValue().get("name"))) {
+                  found = true;
+                }
+              }
+              if (!found) {
+                System.out.println("[warn] Modulo '" + info.get("name") + "': dipendenza non installata: " + dep);
+                ok = false;
+              }
+            }
+          }
+        }
+        if (!ok) {
+          System.out.println("[warn] Dipendenze moduli non soddisfatte — alcune funzionalita' potrebbero non essere disponibili");
+        }
+      }
+    }
   }
 
   private static void runMigrations()

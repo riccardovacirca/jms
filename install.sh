@@ -455,6 +455,7 @@ GITIGNORE
         ln -sf /workspace/bin/cmd /usr/local/bin/cmd
         chmod +x /workspace/bin/cmd
         grep -qxF \"alias cls='clear'\" /root/.bashrc || echo \"alias cls='clear'\" >> /root/.bashrc
+        grep -qxF \"export LC_ALL=C\" /root/.bashrc || echo \"export LC_ALL=C\" >> /root/.bashrc
     "
 
     echo "# $PROJECT_NAME" > README.md

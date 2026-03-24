@@ -1,7 +1,9 @@
 {
     "name": "user",
     "version": "1.0.0",
-    "dependencies": {},
+    "dependencies": {
+        "audit": "*"
+    },
     "api": {
         "routes": "dev.jms.app.module.user.Routes.register(router, config);",
         "config": {
