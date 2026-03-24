@@ -7,14 +7,14 @@
 # IMPORTANTE: eseguire dalla macchina HOST, NON dentro il container di sviluppo.
 # I comandi Docker non sono disponibili all'interno del container.
 #
-# Usage: ./release.sh [-v|--vers <version>]
+# Usage: ./release.sh -v|--vers <version>
 #
 # Options:
-#   -v, --vers <version>   Versione del release (default: ARTIFACT_VERSION da .env)
+#   -v, --vers <version>   Versione del release (obbligatoria)
 #
 # Examples:
-#   ./release.sh              # Usa ARTIFACT_VERSION da .env (es. 1.0.0)
-#   ./release.sh -v 1.2.0     # Forza una versione specifica
+#   ./release.sh -v 1.0.0
+#   ./release.sh -v 1.2.0
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI RELEASE
@@ -22,10 +22,11 @@
 #
 # Questo script esegue automaticamente i seguenti passi:
 #
-#   1. Build Java (Maven)      — compila il backend dentro il container di sviluppo
-#                                e produce target/service.jar (fat JAR via Shade plugin)
-#   2. Build Svelte (Vite)     — compila il frontend e lo deposita in
-#                                src/main/resources/static/ (bundled nel JAR al passo 1)
+#   1. Build Vite (frontend)   — compila il frontend e lo deposita in
+#                                src/main/resources/static/
+#   2. Build Java (Maven)      — compila il backend dentro il container di sviluppo
+#                                e produce target/service.jar (fat JAR via Shade plugin,
+#                                include src/main/resources/static/ buildata al passo 1)
 #   3. Dockerfile produzione   — genera un Dockerfile temporaneo basato su
 #                                ubuntu:24.04 + openjdk-21-jre-headless
 #   4. Docker image            — costruisce l'immagine di produzione con tag
@@ -123,13 +124,17 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Opzione sconosciuta: $1"
-            echo "Uso: $0 [-v|--vers <versione>]"
-            echo ""
-            echo "Se -v non specificata, usa ARTIFACT_VERSION da .env"
+            echo "Uso: $0 -v|--vers <versione>"
             exit 1
             ;;
     esac
 done
+
+if [ -z "$VERSION" ]; then
+    echo "Errore: versione obbligatoria."
+    echo "Uso: $0 -v|--vers <versione>"
+    exit 1
+fi
 
 # =============================================================================
 # Configuration
@@ -172,13 +177,7 @@ else
     PROJECT_NAME="app"
 fi
 
-# Use VERSION from argument or default
-if [ -z "$VERSION" ]; then
-    VERSION="${ARTIFACT_VERSION:-1.0.0}"
-    info "Using version from .env: $VERSION"
-else
-    info "Using version from argument: $VERSION"
-fi
+info "Using version: $VERSION"
 
 # Set release configuration with defaults if not in .env
 : ${RELEASE_IMAGE:=ubuntu:24.04}
@@ -216,33 +215,10 @@ mkdir -p "$RELEASE_DIR"
 success "Dist directory prepared: $RELEASE_DIR"
 
 # =============================================================================
-# Step 1: Build Java Application
+# Step 1: Build Vite Frontend
 # =============================================================================
 
-info "Step 1/6: Building Java application (Undertow/Maven)..."
-
-# DEBUG: If this fails, check:
-# - Maven is installed: mvn --version
-# - pom.xml is valid: mvn validate
-# - All dependencies are resolvable: mvn dependency:resolve
-# - Java version matches pom.xml requirements
-
-cd "$WORKSPACE"
-docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd app build" || {
-    error "Failed to build Java application. Check Maven logs above."
-}
-
-if [ ! -f "$JAR_FILE" ]; then
-    error "JAR file not found: $JAR_FILE. Build may have failed silently."
-fi
-
-success "Java application built: $JAR_FILE"
-
-# =============================================================================
-# Step 2: Build Svelte GUI
-# =============================================================================
-
-info "Step 2/6: Building Vite frontend..."
+info "Step 1/6: Building Vite frontend..."
 
 # DEBUG: If this fails, check:
 # - Node.js and npm are installed in container
@@ -250,6 +226,7 @@ info "Step 2/6: Building Vite frontend..."
 # - All npm dependencies are installed: cd gui && npm install
 # - Vite config is correct: gui/vite.config.js
 
+cd "$WORKSPACE"
 docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd gui build" || {
     error "Failed to build Vite frontend. Check npm/vite logs above."
 }
@@ -261,6 +238,28 @@ if [ ! -d "$STATIC_DIR" ] || [ -z "$(ls -A $STATIC_DIR)" ]; then
 fi
 
 success "Vite frontend built: $STATIC_DIR"
+
+# =============================================================================
+# Step 2: Build Java Application
+# =============================================================================
+
+info "Step 2/6: Building Java application (Undertow/Maven)..."
+
+# DEBUG: If this fails, check:
+# - Maven is installed: mvn --version
+# - pom.xml is valid: mvn validate
+# - All dependencies are resolvable: mvn dependency:resolve
+# - Java version matches pom.xml requirements
+
+docker exec "$PROJECT_NAME" bash -c "cd /workspace && bin/cmd app build" || {
+    error "Failed to build Java application. Check Maven logs above."
+}
+
+if [ ! -f "$JAR_FILE" ]; then
+    error "JAR file not found: $JAR_FILE. Build may have failed silently."
+fi
+
+success "Java application built: $JAR_FILE"
 
 # =============================================================================
 # Step 3: Create Production Dockerfile
