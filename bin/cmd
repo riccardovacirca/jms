@@ -1239,6 +1239,25 @@ with open(path, 'w') as f:
     success "  Tracker scritto: ${TRACKER_DIR#$WORKSPACE/}/module.json"
     _module_manifest_update
 
+    # Execute post-install script if present
+    local INSTALL_SCRIPT
+    INSTALL_SCRIPT=$(python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+print(m.get('install_script', ''))
+" 2>/dev/null || echo "")
+
+    if [ -n "$INSTALL_SCRIPT" ] && [ -f "$MODULE_DIR/$INSTALL_SCRIPT" ]; then
+        info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
+        if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
+            success "  Script di post-install completato"
+        else
+            warn "  Script di post-install fallito (exit code: $?)"
+            warn "  L'installazione del modulo continua comunque"
+        fi
+    fi
+
     printf '\n'
     success "Installazione modulo '$MODULE' completata"
 
@@ -1765,6 +1784,35 @@ for root, dirs, files in os.walk(tracker_base):
     printf '\n'
     info "[module] Rimozione modulo: $MODULE_KEY"
     printf '\n'
+
+    # Execute pre-remove script if present
+    local UNINSTALL_SCRIPT
+    UNINSTALL_SCRIPT=$(python3 -c "
+import json
+with open('$TRACKER_DIR/module.json') as f:
+    m = json.load(f)
+print(m.get('uninstall_script', ''))
+" 2>/dev/null || echo "")
+
+    if [ -n "$UNINSTALL_SCRIPT" ]; then
+        # Try to find the script in the original module directory
+        local SCRIPT_PATH=""
+        if [ -d "$WORKSPACE/module/$MODULE_KEY" ] && [ -f "$WORKSPACE/module/$MODULE_KEY/$UNINSTALL_SCRIPT" ]; then
+            SCRIPT_PATH="$WORKSPACE/module/$MODULE_KEY/$UNINSTALL_SCRIPT"
+        fi
+
+        if [ -n "$SCRIPT_PATH" ]; then
+            info "[module] Esecuzione script di pre-remove: $UNINSTALL_SCRIPT"
+            if bash "$SCRIPT_PATH" "$WORKSPACE" "$MODULE_KEY"; then
+                success "  Script di pre-remove completato"
+            else
+                warn "  Script di pre-remove fallito (exit code: $?)"
+                warn "  La rimozione del modulo continua comunque"
+            fi
+        else
+            warn "  Script di pre-remove non trovato: $UNINSTALL_SCRIPT"
+        fi
+    fi
 
     # Java sources
     local JAVA_MODULE_DIR="$WORKSPACE/src/main/java/dev/jms/app/module"

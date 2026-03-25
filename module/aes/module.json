@@ -1,17 +1,17 @@
 {
     "name": "aes",
-    "version": "1.0.0",
+    "version": "dev",
     "dependencies": {},
     "api": {
         "routes": "dev.jms.app.module.aes.Routes.register(router, config);",
         "config": {
-            "aes.api.key": "change-me-in-production"
+            "aes.temp.retention.days": "7"
         }
     },
     "gui": {
         "config": {
             "route": null,
-            "path": null,
+            "path": "aes",
             "container": "main",
             "authorization": null,
             "persistent": false,
@@ -19,5 +19,7 @@
             "init": null
         }
     },
+    "install_script": "install.sh",
+    "uninstall_script": "uninstall.sh",
     "install_notice": null
 }

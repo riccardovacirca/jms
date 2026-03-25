@@ -2,37 +2,45 @@ package dev.jms.app.module.aes.handler;
 
 import dev.jms.app.module.aes.helper.SignHelper;
 import dev.jms.util.DB;
+import dev.jms.util.HTML2PDF;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import java.util.HashMap;
 
 /**
- * Handler per l'apposizione di campi firma AcroForm in documenti PDF.
- * Delega la logica di elaborazione a {@link SignHelper}.
+ * Handler per la conversione HTML → PDF e apposizione campi firma.
+ * <p>
+ * Flusso:
+ * 1. Riceve HTML via body JSON
+ * 2. Converte HTML → PDF con preprocessing automatico (tag input → span)
+ * 3. Applica campi firma con SignHelper
+ * 4. Salva in directory temporanea
+ * 5. Restituisce path file e numero placeholder sostituiti
+ * </p>
  */
-public class SignHandler
+public class HtmlSignHandler
 {
   private final SignHelper signHelper;
 
-  /** Crea un'istanza con il proprio helper di elaborazione PDF. */
-  public SignHandler()
+  public HtmlSignHandler()
   {
     this.signHelper = new SignHelper();
   }
 
   /**
-   * POST /api/aes/firma — riceve un PDF via multipart e applica un campo firma
-   * in corrispondenza di ogni occorrenza del placeholder indicato.
+   * POST /api/aes/firma-html — converte HTML in PDF e applica campi firma.
    * <p>
    * Richiede autenticazione JWT via cookie {@code access_token} o header {@code Authorization: Bearer <token>}.<br>
-   * Parametri multipart: {@code file} (PDF).<br>
+   * Body JSON: {@code {"html": "..."}}<br>
    * Parametri querystring: {@code placeholder}, {@code width}, {@code height} (in punti PDF).
    * </p>
    * Risposta: {@code replaced} (numero di occorrenze sostituite), {@code outputFile} (path locale).
    */
   public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
-    byte[] fileBytes;
+    HashMap<String, Object> body;
+    String html;
+    byte[] pdfBytes;
     String placeholder;
     String widthParam;
     String heightParam;
@@ -41,48 +49,59 @@ public class SignHandler
 
     req.requireAuth();
 
-    fileBytes = req.getMultipartFileBytes("file");
+    body = req.body();
+    html = (String) body.get("html");
     placeholder = req.getQueryParam("placeholder");
     widthParam = req.getQueryParam("width");
     heightParam = req.getQueryParam("height");
 
-    if (fileBytes == null || fileBytes.length == 0) {
+    if (html == null || html.isBlank()) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Nessun file ricevuto")
+         .log("Parametro 'html' obbligatorio")
          .out(null)
          .send();
-    } else if (placeholder == null || placeholder.isBlank()) {
+      return;
+    }
+
+    if (placeholder == null || placeholder.isBlank()) {
       res.status(200)
          .contentType("application/json")
          .err(true)
          .log("Parametro 'placeholder' obbligatorio")
          .out(null)
          .send();
-    } else if (widthParam == null || heightParam == null) {
+      return;
+    }
+
+    if (widthParam == null || heightParam == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
          .log("Parametri 'width' e 'height' obbligatori")
          .out(null)
          .send();
-    } else {
-      result = signHelper.sign(
-        fileBytes,
-        placeholder,
-        Float.parseFloat(widthParam),
-        Float.parseFloat(heightParam)
-      );
-      out = new HashMap<>();
-      out.put("replaced", result.replaced);
-      out.put("outputFile", result.outputFile);
-      res.status(200)
-         .contentType("application/json")
-         .err(false)
-         .log(null)
-         .out(out)
-         .send();
+      return;
     }
+
+    pdfBytes = HTML2PDF.convert(html, true);
+
+    result = signHelper.sign(
+      pdfBytes,
+      placeholder,
+      Float.parseFloat(widthParam),
+      Float.parseFloat(heightParam)
+    );
+
+    out = new HashMap<>();
+    out.put("replaced", result.replaced);
+    out.put("outputFile", result.outputFile);
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(out)
+       .send();
   }
 }
