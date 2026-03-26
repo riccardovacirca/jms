@@ -3,7 +3,6 @@ package dev.jms.app.user;
 import dev.jms.app.user.handler.AccountHandler;
 import dev.jms.app.user.handler.AuthHandler;
 import dev.jms.app.user.handler.ProfileHandler;
-import dev.jms.app.user.helper.RootAccountSetup;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.HttpResponse;
@@ -24,9 +23,6 @@ public class Routes
     int            rateLimitMax;
     long           rateLimitWindow;
 
-    // Crea account root se configurato (root.username, root.password, root.email)
-    RootAccountSetup.createIfConfigured(config);
-
     // Configura i cookie di autenticazione con i parametri di sicurezza
     cookieSecure   = Boolean.parseBoolean(config.get("user.cookie.secure", "false"));
     cookieSameSite = config.get("user.cookie.samesite", "Lax");
@@ -41,10 +37,11 @@ public class Routes
     auth    = new AuthHandler(config);
     profile = new ProfileHandler();
 
-    // Account — /sid prima di /{id} (match esatto ha precedenza nel PathTemplateMatcher)
+    // Account — /sid e /root prima di /{id} (match esatto ha precedenza nel PathTemplateMatcher)
     router.route(HttpMethod.GET,    "/api/user/accounts/sid",  account::sid);
     router.route(HttpMethod.PUT,    "/api/user/accounts/sid",  account::update);
     router.route(HttpMethod.DELETE, "/api/user/accounts/sid",  account::delete);
+    router.route(HttpMethod.POST,   "/api/user/root",          account::createRoot);
     router.route(HttpMethod.GET,    "/api/user/accounts/{id}", account::byId);
     router.route(HttpMethod.GET,    "/api/user/accounts",      account::list);
     router.route(HttpMethod.POST,   "/api/user/accounts",      account::register);

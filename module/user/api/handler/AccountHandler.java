@@ -9,6 +9,7 @@ import dev.jms.util.HttpResponse;
 import dev.jms.util.Validator;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,12 +21,14 @@ import java.util.Map;
  *   <li>GET    /api/user/accounts/{id}      - account per id (admin)</li>
  *   <li>GET    /api/user/accounts/sid       - account in sessione</li>
  *   <li>POST   /api/user/accounts           - registrazione</li>
+ *   <li>POST   /api/user/root               - creazione account root</li>
  *   <li>PUT    /api/user/accounts/sid       - aggiornamento self</li>
  *   <li>DELETE /api/user/accounts/sid       - cancellazione soft self</li>
  * </ul>
  */
 public class AccountHandler
 {
+  private static final String ROOT_USERNAME = "root";
   /**
    * GET /api/user/accounts — lista paginata. Richiede ruolo admin.
    */
@@ -155,5 +158,60 @@ public class AccountHandler
     new AccountDAO(db).softDelete(accountId);
     res.status(200).contentType("application/json")
        .err(false).log("Account eliminato").out(null).send();
+  }
+
+  /**
+   * POST /api/user/root — creazione account root. Non richiede autenticazione.
+   * <p>
+   * Crea l'account root se configurato e non già esistente.
+   * Legge root.password e root.email dalla configurazione.
+   * Se entrambi sono valorizzati e non esiste già un account con username "root",
+   * crea l'account con ruolo 'admin'.
+   * </p>
+   * <p>
+   * L'account root ha username fisso "root" e ruolo admin con tutti i privilegi.
+   * </p>
+   */
+  public void createRoot(HttpRequest req, HttpResponse res, DB db) throws Exception
+  {
+    HashMap<String, Object> body;
+    String password;
+    String email;
+    String sql;
+    List<HashMap<String, Object>> existing;
+    String passwordHash;
+    int rows;
+
+    body = req.body();
+    password = (String) body.get("password");
+    email = (String) body.get("email");
+
+    Validator.required(password, "password");
+    Validator.required(email, "email");
+
+    // Verifica se esiste già l'account root
+    sql = "SELECT id FROM accounts WHERE username = ?";
+    existing = db.select(sql, ROOT_USERNAME);
+
+    if (!existing.isEmpty()) {
+      res.status(200).contentType("application/json")
+         .err(true).log("Account root già esistente").out(null).send();
+      return;
+    }
+
+    // Crea l'account root con ruolo admin
+    passwordHash = Auth.hashPassword(password);
+
+    sql = "INSERT INTO accounts (username, email, password_hash, ruolo, must_change_password) " +
+          "VALUES (?, ?, ?, 'admin', false)";
+    rows = db.query(sql, ROOT_USERNAME, email, passwordHash);
+
+    if (rows > 0) {
+      res.status(200).contentType("application/json")
+         .err(false).log("Account root creato con successo").out(null).send();
+    } else {
+      res.status(200).contentType("application/json")
+         .err(true).log("Errore nella creazione dell'account root").out(null).send();
+    }
   }
 }
