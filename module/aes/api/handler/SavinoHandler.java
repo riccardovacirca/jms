@@ -1,15 +1,16 @@
 package dev.jms.app.module.aes.handler;
 
+import dev.jms.app.module.aes.dao.AesTabletConfigDao;
+import dev.jms.app.module.aes.dto.AesTabletConfig;
 import dev.jms.app.module.aes.helper.SavinoClient;
 import dev.jms.app.module.aes.dto.SavinoDocument;
 import dev.jms.app.module.aes.dto.SavinoFolder;
 import dev.jms.app.module.aes.dto.SavinoUploadResult;
-import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
-import dev.jms.util.Json;
 import dev.jms.util.Validator;
+import dev.jms.util.ValidationException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -21,14 +22,15 @@ import java.util.Map;
  * documenti firmati, spostamento file tra folder, gestione relazioni tra documenti,
  * e listing folder/documenti.
  * </p>
+ * <p>
+ * Le credenziali di autenticazione vengono caricate dal database ({@code aes_tablet_config})
+ * in base al {@code tabletId} ricevuto nella request.
+ * </p>
  */
 public final class SavinoHandler
 {
-  private final Config config;
-
-  public SavinoHandler(Config config)
+  public SavinoHandler()
   {
-    this.config = config;
   }
 
   /**
@@ -63,6 +65,8 @@ public final class SavinoHandler
     String tabletId;
     Map<String, Object> metadata;
     byte[] pdfBytes;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
     SavinoUploadResult result;
     Map<String, Object> out;
@@ -83,11 +87,19 @@ public final class SavinoHandler
 
     pdfBytes = Base64.getDecoder().decode(pdfBase64);
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     result = client.requireSignature(pdfBytes, filename, docTypeId, tabletId, metadata);
 
@@ -120,6 +132,8 @@ public final class SavinoHandler
   {
     String docId;
     String tabletId;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
     SavinoDocument doc;
     Map<String, Object> out;
@@ -131,11 +145,19 @@ public final class SavinoHandler
     Validator.required(docId, "docId");
     Validator.required(tabletId, "tabletId");
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     doc = client.getDocument(tabletId, docId);
 
@@ -180,6 +202,8 @@ public final class SavinoHandler
   {
     Map<String, Object> body;
     String tabletId;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
     int movedCount;
     Map<String, Object> out;
@@ -190,11 +214,19 @@ public final class SavinoHandler
 
     Validator.required(tabletId, "tabletId");
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     movedCount = client.moveSigned(tabletId);
 
@@ -235,6 +267,8 @@ public final class SavinoHandler
     String tabletId;
     String docId;
     String relatedId;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
 
     req.requireAuth();
@@ -247,11 +281,19 @@ public final class SavinoHandler
     Validator.required(docId, "docId");
     Validator.required(relatedId, "relatedId");
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     client.makeRelation(tabletId, docId, relatedId);
 
@@ -277,6 +319,8 @@ public final class SavinoHandler
   public void listFolders(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
     String tabletId;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
     List<SavinoFolder> folders;
     List<Map<String, Object>> out;
@@ -286,11 +330,19 @@ public final class SavinoHandler
 
     Validator.required(tabletId, "tabletId");
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     folders = client.listFolders(tabletId);
 
@@ -324,6 +376,8 @@ public final class SavinoHandler
   public void listDocuments(HttpRequest req, HttpResponse res, DB db) throws Exception
   {
     String tabletId;
+    AesTabletConfigDao dao;
+    AesTabletConfig tabletConfig;
     SavinoClient client;
     List<SavinoDocument> documents;
     List<Map<String, Object>> out;
@@ -333,11 +387,19 @@ public final class SavinoHandler
 
     Validator.required(tabletId, "tabletId");
 
-    client = createSavinoClient();
-    client.login(
-      config.get("savino.username", ""),
-      config.get("savino.password", "")
-    );
+    dao = new AesTabletConfigDao(db);
+    tabletConfig = dao.getByTabletId(tabletId);
+
+    if (tabletConfig == null) {
+      throw new ValidationException("Tablet non trovato: " + tabletId);
+    }
+
+    if (!"savino".equals(tabletConfig.provider)) {
+      throw new ValidationException("Tablet non configurato per provider Savino");
+    }
+
+    client = new SavinoClient(tabletConfig.endpoint);
+    client.login(tabletConfig.username, tabletConfig.password);
 
     documents = client.getTabletDocuments(tabletId);
 
@@ -358,18 +420,5 @@ public final class SavinoHandler
        .log(null)
        .out(out)
        .send();
-  }
-
-  /**
-   * Crea un client Savino configurato con endpoint e credenziali da application.properties.
-   *
-   * @return client Savino
-   */
-  private SavinoClient createSavinoClient()
-  {
-    String endpoint;
-
-    endpoint = config.get("savino.endpoint", "");
-    return new SavinoClient(endpoint);
   }
 }

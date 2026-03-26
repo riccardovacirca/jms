@@ -45,7 +45,7 @@ public final class Routes
     htmlSign = new HtmlSignHandler();
     file = new FileHandler();
     namirial = new NamirialHandler(config);
-    savino = new SavinoHandler(config);
+    savino = new SavinoHandler();
     tablet = new TabletHandler();
 
     // Firma digitale PDF
@@ -67,7 +67,7 @@ public final class Routes
     router.route(HttpMethod.GET, "/api/aes/namirial/folders", namirial::listFolders);
     router.route(HttpMethod.GET, "/api/aes/namirial/documents", namirial::listDocuments);
 
-    // Integrazione Savino (firma remota DM7/Conserva)
+    // Integrazione Savino (firma remota DM7/Conserva) - credenziali da DB
     router.route(HttpMethod.POST, "/api/aes/savino/require-signature", savino::requireSignature);
     router.route(HttpMethod.GET, "/api/aes/savino/document/{docId}", savino::getDocument);
     router.route(HttpMethod.POST, "/api/aes/savino/move-signed", savino::moveSigned);
@@ -75,8 +75,12 @@ public final class Routes
     router.route(HttpMethod.GET, "/api/aes/savino/folders", savino::listFolders);
     router.route(HttpMethod.GET, "/api/aes/savino/documents", savino::listDocuments);
 
-    // Configurazione tablet
-    router.route(HttpMethod.GET, "/api/aes/tablets", tablet::getTablets);
+    // CRUD configurazioni tablet (tabella aes_tablet_config)
+    router.route(HttpMethod.GET, "/api/aes/tablets", tablet::list);
+    router.route(HttpMethod.GET, "/api/aes/tablets/{tabletId}", tablet::get);
+    router.route(HttpMethod.POST, "/api/aes/tablets", tablet::create);
+    router.route(HttpMethod.PUT, "/api/aes/tablets/{id}", tablet::update);
+    router.route(HttpMethod.DELETE, "/api/aes/tablets/{id}", tablet::delete);
 
     // Job schedulato: cleanup file temporanei (ogni giorno alle 2:00)
     Scheduler.register("aes-cleanup", "0 2 * * *", CleanupJob::run);

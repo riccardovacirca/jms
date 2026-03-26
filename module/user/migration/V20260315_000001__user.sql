@@ -41,16 +41,6 @@ CREATE TABLE accounts (
   created_at           TIMESTAMP           NOT NULL DEFAULT NOW()
 );
 
--- Account admin iniziale. Password temporanea: Admin@2026!
--- must_change_password = true forza il cambio alla prima autenticazione.
-INSERT INTO accounts (username, email, password_hash, ruolo, must_change_password) VALUES
-  ('admin', 'admin@example.com', 'Y+A23vNH5ARx+BUiNlvcng==:knQfRmlW5n+oCHPy1WgB5mttMclMAFYCcMrgty9DoUk=', 'admin', true);
-
--- Account operatore iniziale. Password temporanea: Admin@2026!
--- must_change_password = true forza il cambio alla prima autenticazione.
-INSERT INTO accounts (username, email, password_hash, ruolo, must_change_password) VALUES
-  ('operatore', 'operatore@example.com', 'Y+A23vNH5ARx+BUiNlvcng==:knQfRmlW5n+oCHPy1WgB5mttMclMAFYCcMrgty9DoUk=', 'operatore', true);
-
 -- Refresh token opachi conservati nel DB per consentire la revoca.
 -- Eliminati in cascata se l'account viene rimosso.
 CREATE TABLE refresh_tokens (

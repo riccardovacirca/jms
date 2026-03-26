@@ -3,6 +3,7 @@ package dev.jms.app.user;
 import dev.jms.app.user.handler.AccountHandler;
 import dev.jms.app.user.handler.AuthHandler;
 import dev.jms.app.user.handler.ProfileHandler;
+import dev.jms.app.user.helper.RootAccountSetup;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.HttpResponse;
@@ -22,6 +23,9 @@ public class Routes
     String         cookieSameSite;
     int            rateLimitMax;
     long           rateLimitWindow;
+
+    // Crea account root se configurato (root.username, root.password, root.email)
+    RootAccountSetup.createIfConfigured(config);
 
     // Configura i cookie di autenticazione con i parametri di sicurezza
     cookieSecure   = Boolean.parseBoolean(config.get("user.cookie.secure", "false"));
