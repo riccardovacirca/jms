@@ -51,6 +51,16 @@ npm run build            # Build → src/main/resources/static/
 ./release.sh -v 1.2.0               # Force specific version
 ```
 
+### Container lifecycle (from host, outside Docker)
+```bash
+./app.sh --start    # Start all project containers in dependency order
+./app.sh --stop     # Stop all project containers in reverse order
+./app.sh --restart  # Stop then start
+./app.sh --status   # Show running state of each container
+```
+
+Reads `PROJECT_NAME`, `PGSQL_HOST`, `PGSQL_ENABLED`, `MAILPIT_CONTAINER` from `.env` to determine which containers to manage. Only acts on containers that actually exist in Docker.
+
 There are no test or lint commands configured.
 
 ## Typical Development Workflow
@@ -131,14 +141,14 @@ After every `.java` file save, `cmd app debug` recompiles and **restarts the JVM
 Two packages:
 
 - **`<groupId>/`** — App-specific code: `App.java` (entry point + server setup), plus any installed module subpackages (e.g. `auth/` with `handler/`, `dao/`, `dto/`, `adapter/`).
-- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `HTML2PDF`, `File`, `RouteHandler`, `HttpMethod`, `Router`, `AuditLog`, `JWTBlacklist`, `RateLimiter`.
+- **`dev.jms.util/`** — Shared utility library: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `HTML2PDF`, `File`, `RouteHandler`, `HttpMethod`, `Router`, `AuditLog`, `JWTBlacklist`, `RateLimiter`, `Session`, `Role`, `Permission`, `Cookie`.
 
-**Handler pattern:** Routes use the `RouteHandler` functional interface `(HttpRequest, HttpResponse, DB) throws Exception`. Handlers are plain classes with methods matching this signature, registered as method references. `HandlerAdapter` wires the handler to Undertow, dispatches to a worker thread, and auto-provides `HttpRequest`, `HttpResponse`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` (or a module's `Routes.java`) via a `Router` instance.
+**Handler pattern:** Routes use the `RouteHandler` functional interface `(HttpRequest, HttpResponse, Session, DB) throws Exception`. Handlers are plain classes with methods matching this signature, registered as method references. `HandlerAdapter` wires the handler to Undertow, dispatches to a worker thread, and auto-provides `HttpRequest`, `HttpResponse`, `Session`, and `DB` per request. Uncaught exceptions return 500 JSON automatically. Routes are registered in `App.java` (or a module's `Routes.java`) via a `Router` instance.
 
 **Async routes:** Use `router.async()` instead of `router.route()` to dispatch to the `AsyncExecutor` dedicated thread pool (not Undertow worker threads). Use for slow DB queries, external API calls, or CPU-intensive operations. The thread name will be `async-handler-N`.
 
 **Adding a new route:**
-1. Create `src/main/java/<groupId>/handler/FooHandler.java` with methods `(HttpRequest req, HttpResponse res, DB db) throws Exception`
+1. Create `src/main/java/<groupId>/handler/FooHandler.java` with methods `(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception`
 2. Register in `App.java` or a module's `Routes.java`:
    - Blocking (Undertow worker): `router.route(HttpMethod.GET, "/api/foo", h::fooMethod)`
    - Async (dedicated pool): `router.async(HttpMethod.GET, "/api/foo", h::fooMethod)`
@@ -166,7 +176,9 @@ Key configuration parameters:
 - `async.max.body.size` (default: 10485760 = 10MB) — Max body size for async handlers
 - `mail.*` — SMTP configuration (disabled by default, set `mail.enabled=true` to enable)
 
-**Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `permissions` (List<String>, e.g. `["can_admin","can_write","can_delete"]`), `must_change_password`.
+**Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `ruolo_level` (int), `must_change_password`.
+
+**Session** (`Session.java`): Per-request JWT session, instantiated by `HandlerAdapter` alongside `HttpRequest`/`HttpResponse` and passed as the third handler argument. Lazy validation — JWT is verified only on first access, result cached for the request lifetime. Key methods: `session.require(Role, Permission)` (throws `UnauthorizedException` if not satisfied), `session.isAuthenticated()`, `session.sub()` (account id), `session.username()`, `session.ruolo()`, `session.ruoloLevel()`, `session.mustChangePassword()`, `session.claims()` (empty map if not authenticated). Roles: `GUEST(0)`, `USER(1)`, `ADMIN(2)`, `ROOT(3)`. `GUEST + READ` is always permitted; all other combinations require a valid JWT with sufficient `ruolo_level`.
 
 **JWT blacklist** (`JWTBlacklist.java`): In-memory blacklist for revoked JWTs (logout, password change). Tracks JWT ID (`jti`) until natural expiry to prevent session replay attacks. Singleton, lazy-init, thread-safe. Auto-cleanup every minute.
 
@@ -273,7 +285,7 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 
 ### Template (`jms/`)
 
-`jms/` is a clone of the original jms repository in its non-contextualized state — not customized for any specific application. When present inside a project root, it means the original repo has been cloned here to keep it aligned with the project. The purpose is to propagate back to this repo any functionality that is general or generalizable (not project-specific), so that all current and future applications built from jms can benefit from those improvements.
+`jms/` is an **optional** clone of the original jms repository in its non-contextualized state — not customized for any specific application. It is not present by default; it is only cloned here when you want to keep this project aligned with the upstream template and propagate improvements back. When present inside a project root, it means the original repo has been cloned here to keep it aligned with the project. The purpose is to propagate back to this repo any functionality that is general or generalizable (not project-specific), so that all current and future applications built from jms can benefit from those improvements.
 
 **Key distinction — project files vs. template files:**
 - Files in the project root are project-specific and fully instantiated (no placeholders).
@@ -287,7 +299,7 @@ Flyway migrations in `src/main/resources/db/migration/`. Naming: `V{timestamp}__
 - Any code that references project-specific names, credentials, routes, or domain logic — these belong only in the project root and must be abstracted before touching `jms/`.
 
 Clone it with the project name to start a new project — the Java source structure is already in its final position. It contains:
-- `src/main/java/dev/jms/util/` — Complete utility library source (23+ files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `RouteHandler`, `HttpMethod`)
+- `src/main/java/dev/jms/util/` — Complete utility library source (26+ files: `Handler`, `HandlerAdapter`, `HttpRequest`, `HttpResponse`, `DB`, `Auth`, `Config`, `Json`, `Log`, `Mail`, `Validator`, `ValidationException`, `UnauthorizedException`, `Async`, `AsyncExecutor`, `Scheduler`, `Excel`, `PDF`, `HTML2PDF`, `File`, `RouteHandler`, `HttpMethod`, `Router`, `AuditLog`, `JWTBlacklist`, `RateLimiter`, `Session`, `Role`, `Permission`, `Cookie`)
 - `src/main/java/dev/jms/app/App.java` — Entry point with AsyncExecutor initialization
 - `src/main/resources/` — `logback.xml`, empty `static/` and `db/migration/` directories
 - `pom.xml` — Maven dependencies (groupId: `dev.jms.app`)

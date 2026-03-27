@@ -24,14 +24,17 @@ import dev.jms.app.user.helper.TokenRefreshHelper;
 import dev.jms.app.user.helper.TwoFactorHelper;
 import dev.jms.util.Auth;
 import dev.jms.util.Config;
+import dev.jms.util.Cookie;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
+import dev.jms.util.Session;
 import dev.jms.util.ValidationException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Handler per le operazioni di autenticazione.
@@ -59,34 +62,38 @@ public class AuthHandler
     this.config = config;
   }
 
-  /** GET /api/user/auth/session — claims della sessione corrente. Richiede JWT. */
-  public void session(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** GET /api/user/auth/session — claims della sessione corrente. Richiede user+. */
+  public void session(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims = req.requireAuth();
+    session.require(Role.USER, Permission.READ);
     res.status(200).contentType("application/json")
-       .err(false).log(null).out(claims).send();
+       .err(false).log(null).out(session.claims()).send();
   }
 
   /** GET /api/user/auth/generate-password — genera password sicura casuale. */
-  public void generatePassword(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void generatePassword(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    HashMap<String, Object> out = new HashMap<>();
+    HashMap<String, Object> out;
+
+    out = new HashMap<>();
     out.put("password", Auth.generatePassword());
     res.status(200).contentType("application/json")
        .err(false).log(null).out(out).send();
   }
 
   /** POST /api/user/auth/login — login con username e password. */
-  public void login(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void login(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    LoginCredentialDTO creds   = LoginCredentialAdapter.from(req);
-    AccountDAO         dao     = new AccountDAO(db);
+    LoginCredentialDTO creds;
+    AccountDAO         dao;
     AccountAuthDTO     account;
     String             clientIP;
     String             rateLimitKey;
 
-    clientIP      = req.getClientIP();
-    rateLimitKey  = "user.login:" + clientIP;
+    creds        = LoginCredentialAdapter.from(req);
+    dao          = new AccountDAO(db);
+    clientIP     = req.getClientIP();
+    rateLimitKey = "user.login:" + clientIP;
 
     if (dev.jms.util.RateLimiter.isBlocked(rateLimitKey)) {
       res.status(429).contentType("application/json")
@@ -111,24 +118,24 @@ public class AuthHandler
     }
     LoginHelper.issueTokens(res, db, new AuthenticatedAccountDTO(
       account.id(), account.username(), account.ruolo(),
-      account.permissions(), account.mustChangePassword()
+      account.ruoloLevel(), account.mustChangePassword()
     ));
   }
 
   /** POST /api/user/auth/logout — revoca refresh token e cancella cookie. */
-  public void logout(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void logout(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     String refreshToken;
     String accessToken;
     String jti;
     long expiresAt;
 
-    refreshToken = req.cookie("refresh_token");
+    refreshToken = req.cookie(Cookie.REFRESH_TOKEN);
     if (refreshToken != null && !refreshToken.isBlank()) {
       new RefreshTokenDAO(db).delete(refreshToken);
     }
 
-    accessToken = req.cookie("access_token");
+    accessToken = req.cookie(Cookie.ACCESS_TOKEN);
     if (accessToken != null && !accessToken.isBlank()) {
       jti       = Auth.get().extractJTI(accessToken);
       expiresAt = Auth.get().extractExpiration(accessToken);
@@ -138,27 +145,29 @@ public class AuthHandler
     }
 
     res.status(200).contentType("application/json")
-       .clearCookie("access_token")
-       .clearCookie("refresh_token")
+       .clearCookie(Cookie.ACCESS_TOKEN)
+       .clearCookie(Cookie.REFRESH_TOKEN)
        .err(false).log("Logout effettuato").out(null).send();
   }
 
   /** POST /api/user/auth/refresh — rinnovo access token tramite refresh token. */
-  public void refresh(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void refresh(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     TokenRefreshHelper.refresh(req, res, db);
   }
 
   /** POST /api/user/auth/2fa — verifica PIN two-factor e completa il login. */
-  public void twoFactor(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void twoFactor(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    TwoFactorCredentialDTO creds  = TwoFactorCredentialAdapter.from(req);
-    AuthPinDAO             pinDao = new AuthPinDAO(db);
-    AuthPinDTO             pin;
-    String                 clientIP;
-    String                 rateLimitKey;
+    TwoFactorCredentialDTO  creds;
+    AuthPinDAO              pinDao;
+    AuthPinDTO              pin;
+    String                  clientIP;
+    String                  rateLimitKey;
     AuthenticatedAccountDTO account;
 
+    creds        = TwoFactorCredentialAdapter.from(req);
+    pinDao       = new AuthPinDAO(db);
     clientIP     = req.getClientIP();
     rateLimitKey = "user.2fa:" + clientIP;
 
@@ -192,7 +201,7 @@ public class AuthHandler
   }
 
   /** POST /api/user/auth/forgot-password — invia link di reset password via email. */
-  public void forgotPassword(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void forgotPassword(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     ForgotPasswordDTO dto;
     String            clientIP;
@@ -215,7 +224,7 @@ public class AuthHandler
   }
 
   /** POST /api/user/auth/reset-password — reset password con token one-time. */
-  public void resetPassword(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void resetPassword(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     ResetPasswordDTO  dto;
     PasswordResetDAO  resetDao;
@@ -232,8 +241,8 @@ public class AuthHandler
       return;
     }
 
-    dto      = ResetPasswordAdapter.from(req);
-    resetDao = new PasswordResetDAO(db);
+    dto       = ResetPasswordAdapter.from(req);
+    resetDao  = new PasswordResetDAO(db);
     accountId = resetDao.findValidAccountId(dto.token());
 
     if (accountId == null) {
@@ -250,15 +259,16 @@ public class AuthHandler
        .err(false).log("Password aggiornata").out(null).send();
   }
 
-  /** PUT /api/user/auth/change-password — cambio password autenticato. Richiede JWT. */
-  public void changePassword(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** PUT /api/user/auth/change-password — cambio password autenticato. Richiede user+. */
+  public void changePassword(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims    = req.requireAuth();
-    long                accountId = Long.parseLong(claims.get("sub").toString());
-    ChangePasswordDTO   dto       = ChangePasswordAdapter.from(req);
+    ChangePasswordDTO dto;
+
+    session.require(Role.USER, Permission.WRITE);
+    dto = ChangePasswordAdapter.from(req);
 
     try {
-      PasswordChangeHelper.changePassword(db, (int) accountId, dto.currentPassword(), dto.newPassword());
+      PasswordChangeHelper.changePassword(db, (int) session.sub(), dto.currentPassword(), dto.newPassword());
     } catch (ValidationException e) {
       res.status(200).contentType("application/json")
          .err(true).log(e.getMessage()).out(null).send();

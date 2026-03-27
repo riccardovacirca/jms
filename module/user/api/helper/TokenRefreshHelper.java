@@ -4,6 +4,7 @@ import dev.jms.app.user.dao.AccountDAO;
 import dev.jms.app.user.dao.RefreshTokenDAO;
 import dev.jms.app.user.dto.AuthenticatedAccountDTO;
 import dev.jms.util.Auth;
+import dev.jms.util.Cookie;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
@@ -29,7 +30,7 @@ public class TokenRefreshHelper
     String newAccessToken;
     LocalDateTime expiresAt;
 
-    refreshToken = req.getCookie("refresh_token");
+    refreshToken = req.getCookie(Cookie.REFRESH_TOKEN);
     if (refreshToken == null) {
       log.warn("Refresh rifiutato: cookie refresh_token assente");
       res.status(200).contentType("application/json")
@@ -45,14 +46,14 @@ public class TokenRefreshHelper
         newRefreshToken = Auth.generateRefreshToken();
         newAccessToken  = Auth.get().createAccessToken(
           account.id(), account.username(), account.ruolo(),
-          account.permissions(), account.mustChangePassword()
+          account.ruoloLevel(), account.mustChangePassword()
         );
         expiresAt = LocalDateTime.now().plusSeconds(Auth.REFRESH_EXPIRY);
         refreshTokenDAO.delete(refreshToken);
         refreshTokenDAO.insert(newRefreshToken, account.id(), expiresAt);
         res.status(200).contentType("application/json")
-           .cookie("access_token",  newAccessToken,  15 * 60)
-           .cookie("refresh_token", newRefreshToken, Auth.REFRESH_EXPIRY)
+           .cookie(Cookie.ACCESS_TOKEN,  newAccessToken,  15 * 60)
+           .cookie(Cookie.REFRESH_TOKEN, newRefreshToken, Auth.REFRESH_EXPIRY)
            .err(false).log(null).out(null).send();
       }
     }

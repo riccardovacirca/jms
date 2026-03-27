@@ -3,6 +3,7 @@ package dev.jms.app.user.helper;
 import dev.jms.app.user.dao.RefreshTokenDAO;
 import dev.jms.app.user.dto.AuthenticatedAccountDTO;
 import dev.jms.util.Auth;
+import dev.jms.util.Cookie;
 import dev.jms.util.DB;
 import dev.jms.util.HttpResponse;
 
@@ -25,7 +26,7 @@ public class LoginHelper
 
     accessToken  = Auth.get().createAccessToken(
       account.id(), account.username(), account.ruolo(),
-      account.permissions(), account.mustChangePassword()
+      account.ruoloLevel(), account.mustChangePassword()
     );
     refreshToken = Auth.generateRefreshToken();
     expiresAt    = LocalDateTime.now().plusSeconds(Auth.REFRESH_EXPIRY);
@@ -33,16 +34,16 @@ public class LoginHelper
     new RefreshTokenDAO(db).insert(refreshToken, account.id(), expiresAt);
 
     out = new HashMap<>();
-    out.put("id",                  account.id());
-    out.put("username",            account.username());
-    out.put("ruolo",               account.ruolo());
-    out.put("permissions",         account.permissions());
+    out.put("id",                   account.id());
+    out.put("username",             account.username());
+    out.put("ruolo",                account.ruolo());
+    out.put("ruolo_level",          account.ruoloLevel());
     out.put("must_change_password", account.mustChangePassword());
 
     res.status(200)
        .contentType("application/json")
-       .cookie("access_token",  accessToken,  15 * 60)
-       .cookie("refresh_token", refreshToken, Auth.REFRESH_EXPIRY)
+       .cookie(Cookie.ACCESS_TOKEN,  accessToken,  15 * 60)
+       .cookie(Cookie.REFRESH_TOKEN, refreshToken, Auth.REFRESH_EXPIRY)
        .err(false).log(null).out(out)
        .send();
   }

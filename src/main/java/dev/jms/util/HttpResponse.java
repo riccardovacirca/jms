@@ -1,8 +1,6 @@
 package dev.jms.util;
 
 import io.undertow.server.HttpServerExchange;
-import io.undertow.server.handlers.Cookie;
-import io.undertow.server.handlers.CookieImpl;
 import io.undertow.util.Headers;
 import io.undertow.util.HttpString;
 
@@ -33,20 +31,16 @@ public class HttpResponse
   private boolean _logSet;
   private boolean _outSet;
 
-  private static boolean cookieSecure = false;
-  private static String cookieSameSite = "Lax";
-
   /**
    * Configura i flag di sicurezza per i cookie a livello globale.
-   * Deve essere chiamato una volta all'avvio dell'applicazione.
+   * Delega a {@link Cookie#configure(boolean, String)}.
    *
    * @param secure   se true, aggiunge il flag Secure (richiede HTTPS)
    * @param sameSite Strict (massima protezione CSRF) | Lax (bilanciato) | None (richiede Secure=true)
    */
   public static void configureCookies(boolean secure, String sameSite)
   {
-    cookieSecure = secure;
-    cookieSameSite = sameSite;
+    Cookie.configure(secure, sameSite);
   }
 
   public HttpResponse(HttpServerExchange exchange)
@@ -100,38 +94,14 @@ public class HttpResponse
   /** Può essere chiamato zero o più volte. */
   public HttpResponse cookie(String name, String value, int maxAge)
   {
-    Cookie cookie;
-
-    cookie = new CookieImpl(name, value)
-      .setHttpOnly(true)
-      .setPath("/")
-      .setMaxAge(maxAge)
-      .setSameSiteMode(cookieSameSite);
-
-    if (cookieSecure) {
-      cookie.setSecure(true);
-    }
-
-    exchange.setResponseCookie(cookie);
+    exchange.setResponseCookie(Cookie.build(name, value, maxAge));
     return this;
   }
 
   /** Cancella un cookie impostando maxAge=0 e value vuoto. Può essere chiamato zero o più volte. */
   public HttpResponse clearCookie(String name)
   {
-    Cookie cookie;
-
-    cookie = new CookieImpl(name, "")
-      .setHttpOnly(true)
-      .setPath("/")
-      .setMaxAge(0)
-      .setSameSiteMode(cookieSameSite);
-
-    if (cookieSecure) {
-      cookie.setSecure(true);
-    }
-
-    exchange.setResponseCookie(cookie);
+    exchange.setResponseCookie(Cookie.buildCleared(name));
     return this;
   }
 

@@ -58,10 +58,10 @@ public class HandlerAdapter implements HttpHandler
   public HandlerAdapter(Handler handler, DataSource dataSource)
   {
     this(dataSource);
-    routes.put(HttpMethod.GET,    (req, res, db) -> handler.get(req, res, db));
-    routes.put(HttpMethod.POST,   (req, res, db) -> handler.post(req, res, db));
-    routes.put(HttpMethod.PUT,    (req, res, db) -> handler.put(req, res, db));
-    routes.put(HttpMethod.DELETE, (req, res, db) -> handler.delete(req, res, db));
+    routes.put(HttpMethod.GET,    (req, res, session, db) -> handler.get(req, res, db));
+    routes.put(HttpMethod.POST,   (req, res, session, db) -> handler.post(req, res, db));
+    routes.put(HttpMethod.PUT,    (req, res, session, db) -> handler.put(req, res, db));
+    routes.put(HttpMethod.DELETE, (req, res, session, db) -> handler.delete(req, res, db));
   }
 
   /**
@@ -112,6 +112,7 @@ public class HandlerAdapter implements HttpHandler
     DB db;
     HttpResponse res;
     HttpRequest req;
+    Session session;
     HttpMethod method;
     RouteHandler handler;
 
@@ -124,6 +125,7 @@ public class HandlerAdapter implements HttpHandler
         db.open();
       }
       req     = new HttpRequest(exchange);
+      session = new Session(req);
       method  = parseMethod(exchange.getRequestMethod().toString());
       handler = method != null ? routes.get(method) : null;
 
@@ -132,7 +134,7 @@ public class HandlerAdapter implements HttpHandler
            .err(true).log("Method Not Allowed").out(null).send();
         return;
       }
-      handler.handle(req, res, db);
+      handler.handle(req, res, session, db);
 
     } catch (UnauthorizedException e) {
       if (!exchange.isResponseStarted()) {

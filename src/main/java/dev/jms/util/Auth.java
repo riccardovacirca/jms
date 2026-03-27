@@ -13,7 +13,6 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -60,9 +59,18 @@ public class Auth
   // ACCESS TOKEN (JWT HS256)
   // -------------------------
 
-  /** Crea un JWT firmato con userId, username, ruolo, lista permessi e must_change_password. */
+  /**
+   * Crea un JWT firmato con userId, username, ruolo, livello ruolo e must_change_password.
+   *
+   * @param userId              id account
+   * @param username            username account
+   * @param ruolo               nome del ruolo (es. "admin")
+   * @param ruoloLevel          livello numerico del ruolo (vedi {@link Role})
+   * @param mustChangePassword  flag cambio password obbligatorio
+   * @return JWT firmato
+   */
   public String createAccessToken(int userId, String username, String ruolo,
-                                  List<String> permissions, boolean mustChangePassword)
+                                  int ruoloLevel, boolean mustChangePassword)
   {
     String result;
     String jti;
@@ -73,7 +81,7 @@ public class Auth
       .withSubject(String.valueOf(userId))
       .withClaim("username", username)
       .withClaim("ruolo", ruolo)
-      .withClaim("permissions", permissions)
+      .withClaim("ruolo_level", ruoloLevel)
       .withClaim("must_change_password", mustChangePassword)
       .withExpiresAt(Date.from(Instant.now().plusSeconds(accessExpiry)))
       .sign(algorithm);

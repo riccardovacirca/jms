@@ -71,17 +71,18 @@ public class App
     // lente (async.pool.size).
     AsyncExecutor.init(asyncPoolSize);
 
+    // === SETUP DATABASE E MODULI ===
+
+    // Esegue migrazioni Flyway (db/migration/*.sql) PRIMA di Scheduler.init():
+    // JobRunr crea le proprie tabelle al primo avvio e Flyway richiede uno schema
+    // vuoto (o con history table) per procedere senza errori.
+    runMigrations();
+
     // Inizializza JobRunr scheduler per job periodici.
     // Usa PostgreSQL come storage per job persistenti (tabelle jobrunr_*,
     // create automaticamente da JobRunr al primo avvio).
     // Configurabile via scheduler.enabled e scheduler.poll.interval.seconds.
     Scheduler.init(config, DB.getDataSource());
-
-    // === SETUP DATABASE E MODULI ===
-
-    // Esegue migrazioni Flyway (db/migration/*.sql)
-    // Versiona le modifiche al database (tabella flyway_schema_history).
-    runMigrations();
 
     // Verifica dipendenze dichiarate in module/installed.json.
     // Logga warning se moduli richiesti non sono installati. Non blocca l'avvio.

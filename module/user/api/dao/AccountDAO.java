@@ -5,8 +5,6 @@ import dev.jms.app.user.dto.AuthenticatedAccountDTO;
 import dev.jms.util.DB;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -29,9 +27,9 @@ public class AccountDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql =
-      "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, " +
-      "(SELECT string_agg(permission_name, ',' ORDER BY permission_name) FROM role_permissions WHERE role_name = a.ruolo) AS permissions " +
+      "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, r.level AS ruolo_level " +
       "FROM accounts a " +
+      "JOIN roles r ON r.name = a.ruolo " +
       "WHERE a.username = ? AND a.attivo = true";
     rows = db.select(sql, username);
 
@@ -46,9 +44,9 @@ public class AccountDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql =
-      "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, " +
-      "(SELECT string_agg(permission_name, ',' ORDER BY permission_name) FROM role_permissions WHERE role_name = a.ruolo) AS permissions " +
+      "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, r.level AS ruolo_level " +
       "FROM accounts a " +
+      "JOIN roles r ON r.name = a.ruolo " +
       "WHERE a.id = ? AND a.attivo = true";
     rows = db.select(sql, id);
 
@@ -62,9 +60,9 @@ public class AccountDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql =
-      "SELECT a.id, a.username, a.must_change_password, a.ruolo, " +
-      "(SELECT string_agg(permission_name, ',' ORDER BY permission_name) FROM role_permissions WHERE role_name = a.ruolo) AS permissions " +
+      "SELECT a.id, a.username, a.must_change_password, a.ruolo, r.level AS ruolo_level " +
       "FROM accounts a " +
+      "JOIN roles r ON r.name = a.ruolo " +
       "WHERE a.id = ? AND a.attivo = true";
     rows = db.select(sql, id);
 
@@ -78,17 +76,17 @@ public class AccountDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql =
-      "SELECT a.id, a.username, a.must_change_password, a.ruolo, " +
-      "(SELECT string_agg(permission_name, ',' ORDER BY permission_name) FROM role_permissions WHERE role_name = a.ruolo) AS permissions " +
+      "SELECT a.id, a.username, a.must_change_password, a.ruolo, r.level AS ruolo_level " +
       "FROM refresh_tokens rt " +
       "JOIN accounts a ON a.id = rt.account_id " +
+      "JOIN roles r ON r.name = a.ruolo " +
       "WHERE rt.token = ? AND rt.expires_at > NOW() AND a.attivo = true";
     rows = db.select(sql, token);
 
     return rows.isEmpty() ? null : toAuthenticatedAccountDTO(rows.get(0));
   }
 
-  /** Restituisce i dati di management dell'account autenticato. Null se non trovato. */
+  /** Restituisce i dati dell'account autenticato. Null se non trovato. */
   public HashMap<String, Object> findSelf(long id) throws Exception
   {
     String sql;
@@ -232,17 +230,6 @@ public class AccountDAO
 
   // ── mapping privato ──────────────────────────────────────────────────
 
-  private List<String> parsePermissions(Object raw)
-  {
-    String permsStr;
-
-    permsStr = DB.toString(raw);
-    if (permsStr == null || permsStr.isEmpty()) {
-      return Collections.emptyList();
-    }
-    return Arrays.asList(permsStr.split(","));
-  }
-
   private AccountAuthDTO toAccountAuthDTO(HashMap<String, Object> row)
   {
     return new AccountAuthDTO(
@@ -250,7 +237,7 @@ public class AccountDAO
       DB.toString(row.get("username")),
       DB.toString(row.get("password_hash")),
       DB.toString(row.get("ruolo")),
-      parsePermissions(row.get("permissions")),
+      DB.toInteger(row.get("ruolo_level")),
       Boolean.TRUE.equals(row.get("must_change_password")),
       Boolean.TRUE.equals(row.get("two_factor_enabled")),
       DB.toString(row.get("email"))
@@ -263,7 +250,7 @@ public class AccountDAO
       DB.toInteger(row.get("id")),
       DB.toString(row.get("username")),
       DB.toString(row.get("ruolo")),
-      parsePermissions(row.get("permissions")),
+      DB.toInteger(row.get("ruolo_level")),
       Boolean.TRUE.equals(row.get("must_change_password"))
     );
   }

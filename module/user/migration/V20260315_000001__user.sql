@@ -1,26 +1,14 @@
--- Tabella ruoli. I permessi associati sono in role_permissions.
+-- Ruoli gerarchici. Il livello numerico determina i privilegi (maggiore = più privilegiato).
+-- guest (0) non è nel DB: è lo stato implicito non autenticato.
 CREATE TABLE roles (
-  name  VARCHAR(50) PRIMARY KEY
+  name  VARCHAR(10) PRIMARY KEY,
+  level SMALLINT    NOT NULL
 );
 
-INSERT INTO roles (name) VALUES
-  ('admin'),
-  ('operatore');
-
--- Permessi associati ai ruoli. Ogni riga rappresenta un permesso assegnato a un ruolo.
--- I permessi vengono embeddati nel JWT all'accesso e aggiornati ad ogni refresh.
-CREATE TABLE role_permissions (
-  role_name       VARCHAR(50) NOT NULL REFERENCES roles(name) ON DELETE CASCADE,
-  permission_name VARCHAR(50) NOT NULL,
-  PRIMARY KEY (role_name, permission_name)
-);
-
-INSERT INTO role_permissions (role_name, permission_name) VALUES
-  ('admin',     'can_admin'),
-  ('admin',     'can_write'),
-  ('admin',     'can_delete'),
-  ('admin',     'can_send_mail'),
-  ('operatore', 'can_write');
+INSERT INTO roles (name, level) VALUES
+  ('user',  1),
+  ('admin', 2),
+  ('root',  3);
 
 -- Tabella account. password_hash contiene "salt:hash" generato con PBKDF2WithHmacSHA256.
 -- ruolo: FK a roles.name.
@@ -33,7 +21,7 @@ CREATE TABLE accounts (
   id                   SERIAL       PRIMARY KEY,
   username             VARCHAR(100) UNIQUE NOT NULL,
   password_hash        VARCHAR(255)        NOT NULL,
-  ruolo                VARCHAR(50)         NOT NULL DEFAULT 'operatore' REFERENCES roles(name),
+  ruolo                VARCHAR(10)         NOT NULL DEFAULT 'user' REFERENCES roles(name),
   attivo               BOOLEAN             NOT NULL DEFAULT true,
   must_change_password BOOLEAN             NOT NULL DEFAULT false,
   two_factor_enabled   BOOLEAN             NOT NULL DEFAULT false,

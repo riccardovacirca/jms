@@ -66,6 +66,7 @@ Usage: cmd COMMAND [OPTIONS]
   module dist <path>                Package module folder (relative to module/) → dist/<name>-<version>.tar.gz
   module remove --name <name>       Remove installed module (blocked if other modules depend on it)
   module remove --name <name> --force  Bypass reverse dependency check
+  module cli <module> <cmd> <file> <name> [OPTIONS]  Run module/<module>/<cmd>_<file>_<name>.sh [OPTIONS]
 
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
                                      Default: -c 10 -r 100 (10 concurrent users, 100 reps each)
@@ -1956,6 +1957,31 @@ print('OK')
     success "Modulo '$MODULE_KEY' rimosso"
 }
 
+# ============================================================================
+# module_cli — esegue uno script CLI di un modulo
+#
+# Formato: cmd module cli <module_name> <command> <file> <name> [OPTIONS]
+# Risolve in: module/<module_name>/<command>_<file>_<name>.sh [OPTIONS]
+# ============================================================================
+
+module_cli() {
+    local MODULE_NAME="$1"
+    local COMMAND="$2"
+    local FILE="$3"
+    local NAME="$4"
+    shift 4 2>/dev/null || true
+
+    [ -n "$MODULE_NAME" ] || error "Usage: cmd module cli <module_name> <command> <file> <name> [OPTIONS]"
+    [ -n "$COMMAND" ]     || error "Usage: cmd module cli <module_name> <command> <file> <name> [OPTIONS]"
+    [ -n "$FILE" ]        || error "Usage: cmd module cli <module_name> <command> <file> <name> [OPTIONS]"
+    [ -n "$NAME" ]        || error "Usage: cmd module cli <module_name> <command> <file> <name> [OPTIONS]"
+
+    local SCRIPT="$WORKSPACE/module/${MODULE_NAME}/cli/${COMMAND}_${FILE}_${NAME}.sh"
+    [ -f "$SCRIPT" ] || error "Script not found: module/${MODULE_NAME}/cli/${COMMAND}_${FILE}_${NAME}.sh"
+
+    bash "$SCRIPT" "$@"
+}
+
 # Benchmark Operations
 # ============================================================================
 
@@ -2129,7 +2155,8 @@ case "$1" in
             import) shift 2; module_import "$@" ;;
             dist)   shift 2; module_dist "$@" ;;
             remove) shift 2; module_remove "$@" ;;
-            *) error "Unknown module command: $2. Use: export, import, dist, remove" ;;
+            cli)    shift 2; module_cli "$@" ;;
+            *) error "Unknown module command: $2. Use: export, import, dist, remove, cli" ;;
         esac
         ;;
     -h|--help|help|"")

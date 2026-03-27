@@ -5,12 +5,14 @@ import dev.jms.app.user.helper.ProfileSettingsHelper;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
+import dev.jms.util.Session;
 import dev.jms.util.Validator;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Handler per le operazioni sul profilo utente.
@@ -27,12 +29,13 @@ import java.util.Map;
  */
 public class ProfileHandler
 {
-  /** GET /api/user/users/sid — profilo in sessione. Richiede JWT. */
-  public void sid(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** GET /api/user/users/sid — profilo in sessione. Richiede user+. */
+  public void sid(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims    = req.requireAuth();
-    long                accountId = Long.parseLong(claims.get("sub").toString());
-    HashMap<String, Object> profile = new ProfileDAO(db).findByAccountId(accountId);
+    HashMap<String, Object> profile;
+
+    session.require(Role.USER, Permission.READ);
+    profile = new ProfileDAO(db).findByAccountId(session.sub());
     if (profile == null) {
       res.status(200).contentType("application/json")
          .err(true).log("Profilo non trovato").out(null).send();
@@ -42,22 +45,29 @@ public class ProfileHandler
        .err(false).log(null).out(profile).send();
   }
 
-  /** PUT /api/user/users/sid — crea o aggiorna il profilo in sessione. Richiede JWT. */
-  public void update(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** PUT /api/user/users/sid — crea o aggiorna il profilo in sessione. Richiede user+. */
+  public void update(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims    = req.requireAuth();
-    long                accountId = Long.parseLong(claims.get("sub").toString());
-    HashMap<String, Object> body  = req.body();
-    String nome     = (String) body.get("nome");
-    String cognome  = (String) body.get("cognome");
-    String nickname = (String) body.get("nickname");
-    String immagine = (String) body.get("immagine");
-    Validator.required(nome, "nome");
+    HashMap<String, Object> body;
+    String nome;
+    String cognome;
+    String nickname;
+    String immagine;
+    ProfileDAO dao;
+    boolean exists;
+
+    session.require(Role.USER, Permission.WRITE);
+    body     = req.body();
+    nome     = (String) body.get("nome");
+    cognome  = (String) body.get("cognome");
+    nickname = (String) body.get("nickname");
+    immagine = (String) body.get("immagine");
+    Validator.required(nome,    "nome");
     Validator.required(cognome, "cognome");
-    ProfileDAO dao    = new ProfileDAO(db);
-    boolean    exists = dao.existsByAccountId(accountId);
+    dao    = new ProfileDAO(db);
+    exists = dao.existsByAccountId(session.sub());
     if (exists) {
-      HashMap<String, Object> current   = dao.findByAccountId(accountId);
+      HashMap<String, Object> current   = dao.findByAccountId(session.sub());
       long                    profileId = Long.parseLong(current.get("id").toString());
       if (nickname != null && !nickname.isBlank() && dao.existsByNickname(nickname, profileId)) {
         res.status(200).contentType("application/json")
@@ -71,35 +81,41 @@ public class ProfileHandler
            .err(true).log("Nickname già in uso").out(null).send();
         return;
       }
-      dao.create(accountId, nome, cognome, nickname, immagine, 0);
+      dao.create(session.sub(), nome, cognome, nickname, immagine, 0);
     }
     res.status(200).contentType("application/json")
        .err(false).log("Profilo aggiornato").out(null).send();
   }
 
-  /** GET /api/user/users/sid/settings — tutte le impostazioni. Richiede JWT. */
-  public void settings(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** GET /api/user/users/sid/settings — tutte le impostazioni. Richiede user+. */
+  public void settings(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object>          claims    = req.requireAuth();
-    long                         accountId = Long.parseLong(claims.get("sub").toString());
-    ProfileSettingsHelper        helper    = new ProfileSettingsHelper(db);
-    List<HashMap<String, Object>> list     = helper.getAll(accountId);
+    ProfileSettingsHelper helper;
+    List<HashMap<String, Object>> list;
+
+    session.require(Role.USER, Permission.READ);
+    helper = new ProfileSettingsHelper(db);
+    list   = helper.getAll(session.sub());
     res.status(200).contentType("application/json")
        .err(false).log(null).out(list != null ? list : Collections.emptyList()).send();
   }
 
-  /** POST /api/user/users/sid/settings — crea o aggiorna impostazione. Richiede JWT. */
-  public void addSetting(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** POST /api/user/users/sid/settings — crea o aggiorna impostazione. Richiede user+. */
+  public void addSetting(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims    = req.requireAuth();
-    long                accountId = Long.parseLong(claims.get("sub").toString());
-    HashMap<String, Object> body  = req.body();
-    String chiave = (String) body.get("chiave");
-    String valore = (String) body.get("valore");
+    HashMap<String, Object> body;
+    String chiave;
+    String valore;
+    ProfileSettingsHelper helper;
+
+    session.require(Role.USER, Permission.WRITE);
+    body   = req.body();
+    chiave = (String) body.get("chiave");
+    valore = (String) body.get("valore");
     Validator.required(chiave, "chiave");
     Validator.required(valore, "valore");
-    ProfileSettingsHelper helper = new ProfileSettingsHelper(db);
-    if (!helper.upsert(accountId, chiave, valore)) {
+    helper = new ProfileSettingsHelper(db);
+    if (!helper.upsert(session.sub(), chiave, valore)) {
       res.status(200).contentType("application/json")
          .err(true).log("Profilo non trovato").out(null).send();
       return;
@@ -108,15 +124,19 @@ public class ProfileHandler
        .err(false).log("Impostazione salvata").out(null).send();
   }
 
-  /** GET /api/user/users/sid/settings/{key} — singola impostazione. Richiede JWT. */
-  public void settingByKey(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** GET /api/user/users/sid/settings/{key} — singola impostazione. Richiede user+. */
+  public void settingByKey(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object>          claims    = req.requireAuth();
-    long                         accountId = Long.parseLong(claims.get("sub").toString());
-    String                       key       = req.urlArgs().get("key");
-    ProfileSettingsHelper        helper    = new ProfileSettingsHelper(db);
-    List<HashMap<String, Object>> all      = helper.getAll(accountId);
-    HashMap<String, Object>      found     = null;
+    String key;
+    ProfileSettingsHelper helper;
+    List<HashMap<String, Object>> all;
+    HashMap<String, Object> found;
+
+    session.require(Role.USER, Permission.READ);
+    key    = req.urlArgs().get("key");
+    helper = new ProfileSettingsHelper(db);
+    all    = helper.getAll(session.sub());
+    found  = null;
     if (all != null) {
       for (HashMap<String, Object> s : all) {
         if (key.equals(s.get("chiave"))) {
@@ -134,13 +154,14 @@ public class ProfileHandler
        .err(false).log(null).out(found).send();
   }
 
-  /** DELETE /api/user/users/sid/settings/{key} — elimina impostazione. Richiede JWT. */
-  public void deleteSetting(HttpRequest req, HttpResponse res, DB db) throws Exception
+  /** DELETE /api/user/users/sid/settings/{key} — elimina impostazione. Richiede user+. */
+  public void deleteSetting(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    Map<String, Object> claims    = req.requireAuth();
-    long                accountId = Long.parseLong(claims.get("sub").toString());
-    String              key       = req.urlArgs().get("key");
-    new ProfileSettingsHelper(db).delete(accountId, key);
+    String key;
+
+    session.require(Role.USER, Permission.WRITE);
+    key = req.urlArgs().get("key");
+    new ProfileSettingsHelper(db).delete(session.sub(), key);
     res.status(200).contentType("application/json")
        .err(false).log("Impostazione eliminata").out(null).send();
   }

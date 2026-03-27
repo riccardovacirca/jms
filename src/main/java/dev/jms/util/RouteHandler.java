@@ -8,5 +8,5 @@ package dev.jms.util;
 public interface RouteHandler
 {
   /** Gestisce la richiesta HTTP. */
-  void handle(HttpRequest req, HttpResponse res, DB db) throws Exception;
+  void handle(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception;
 }

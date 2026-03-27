@@ -224,44 +224,6 @@ public class HttpRequest
   }
 
   /**
-   * Verifica il cookie {@code access_token} e restituisce i claims del JWT.
-   * Lancia {@link UnauthorizedException} se il token è assente o non valido.
-   *
-   * @return mappa dei claims: sub, username, ruolo, permissions, must_change_password
-   * @throws UnauthorizedException se non autenticato o token scaduto
-   */
-  public java.util.Map<String, Object> requireAuth()
-  {
-    String token;
-    com.auth0.jwt.interfaces.DecodedJWT jwt;
-    java.util.Map<String, Object> claims;
-    String jti;
-
-    token = getCookie("access_token");
-    if (token == null || token.isBlank()) {
-      throw new UnauthorizedException("Non autenticato");
-    }
-    try {
-      jwt = Auth.get().verifyAccessToken(token);
-      jti = jwt.getId();
-
-      if (jti != null && JWTBlacklist.isRevoked(jti)) {
-        throw new UnauthorizedException("Token revocato");
-      }
-
-      claims = new java.util.HashMap<>();
-      claims.put("sub",                 jwt.getSubject());
-      claims.put("username",            jwt.getClaim("username").asString());
-      claims.put("ruolo",               jwt.getClaim("ruolo").asString());
-      claims.put("permissions",         jwt.getClaim("permissions").asList(String.class));
-      claims.put("must_change_password", jwt.getClaim("must_change_password").asBoolean());
-      return claims;
-    } catch (com.auth0.jwt.exceptions.JWTVerificationException e) {
-      throw new UnauthorizedException("Token non valido o scaduto");
-    }
-  }
-
-  /**
    * Parsa il body JSON e lo restituisce come mappa.
    * Restituisce una mappa vuota se il body è assente o vuoto.
    *
