@@ -129,8 +129,6 @@ public class App
     // cmd module import inserisce chiamate a Routes.register(router) qui.
     
     // [MODULE_ROUTES]
-    dev.jms.app.module.user.Routes.register(router, config);
-    dev.jms.app.module.home.Routes.register(router);
 
     // === AVVIO SERVER ===
 
