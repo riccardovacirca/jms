@@ -1,17 +1,19 @@
 package dev.jms.app.contatti.handler;
 
-import com.auth0.jwt.exceptions.JWTVerificationException;
 import dev.jms.app.contatti.adapter.ListaAdapter;
 import dev.jms.app.contatti.dao.ListaDAO;
 import dev.jms.app.contatti.dto.ListaContattoDTO;
 import dev.jms.app.contatti.dto.ListaDTO;
-import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
+import dev.jms.util.Session;
 import dev.jms.util.ValidationException;
+
 import java.util.HashMap;
 import java.util.List;
 
@@ -25,9 +27,8 @@ public class ListeHandler
   /**
    * GET /api/liste — lista paginata delle liste.
    */
-  public void list(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void list(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String pageStr;
     String sizeStr;
     int page;
@@ -37,229 +38,150 @@ public class ListeHandler
     int total;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Non autenticato")
-         .out(null)
-         .send();
-    } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        pageStr = req.getQueryParam("page");
-        sizeStr = req.getQueryParam("size");
-        page = pageStr != null ? Integer.parseInt(pageStr) : 1;
-        size = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
-        dao = new ListaDAO(db);
-        items = dao.findAll(page, size);
-        total = dao.count();
-        out = new HashMap<>();
-        out.put("total", total);
-        out.put("page", page);
-        out.put("size", size);
-        out.put("items", items);
+    session.require(Role.USER, Permission.READ);
+    pageStr = req.getQueryParam("page");
+    sizeStr = req.getQueryParam("size");
+    page    = pageStr != null ? Integer.parseInt(pageStr) : 1;
+    size    = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
+    dao     = new ListaDAO(db);
+    items   = dao.findAll(page, size);
+    total   = dao.count();
+    out     = new HashMap<>();
+    out.put("total", total);
+    out.put("page",  page);
+    out.put("size",  size);
+    out.put("items", items);
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(out)
+       .send();
+  }
+
+  /**
+   * POST /api/liste — crea una nuova lista. Restituisce l'id generato.
+   */
+  public void create(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    ListaDAO dao;
+    ListaDTO lista;
+    int newId;
+    HashMap<String, Object> out;
+
+    session.require(Role.USER, Permission.WRITE);
+    try {
+      dao   = new ListaDAO(db);
+      lista = ListaAdapter.from(req);
+      if (dao.existsByNome(lista.nome(), null)) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Nome già esistente")
+           .out(null)
+           .send();
+      } else {
+        newId = dao.insert(lista);
+        out   = new HashMap<>();
+        out.put("id", newId);
         res.status(200)
            .contentType("application/json")
            .err(false)
            .log(null)
            .out(out)
            .send();
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
       }
-    }
-  }
-
-  /**
-   * POST /api/liste — crea una nuova lista. Restituisce l'id generato.
-   */
-  public void create(HttpRequest req, HttpResponse res, DB db) throws Exception
-  {
-    String token;
-    ListaDAO dao;
-    ListaDTO lista;
-    int newId;
-    HashMap<String, Object> out;
-
-    token = req.getCookie("access_token");
-    if (token == null) {
+    } catch (ValidationException e) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log(e.getMessage())
          .out(null)
          .send();
-    } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        try {
-          dao = new ListaDAO(db);
-          lista = ListaAdapter.from(req);
-          if (dao.existsByNome(lista.nome(), null)) {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Nome già esistente")
-               .out(null)
-               .send();
-          } else {
-            newId = dao.insert(lista);
-            out = new HashMap<>();
-            out.put("id", newId);
-            res.status(200)
-               .contentType("application/json")
-               .err(false)
-               .log(null)
-               .out(out)
-               .send();
-          }
-        } catch (ValidationException e) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log(e.getMessage())
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
     }
   }
 
   /**
    * GET /api/liste/{id} — recupera una lista per id.
    */
-  public void get(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void get(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO lista;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.READ);
+    id    = Integer.parseInt(req.urlArgs().get("id"));
+    dao   = new ListaDAO(db);
+    lista = dao.findById(id);
+    if (lista == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        lista = dao.findById(id);
-        if (lista == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(lista)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(lista)
+         .send();
     }
   }
 
   /**
    * PUT /api/liste/{id} — aggiorna tutti i campi della lista.
    */
-  public void update(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void update(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO existing;
     ListaDTO updated;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ListaDAO(db);
+    existing = dao.findById(id);
+    if (existing == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
       try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        existing = dao.findById(id);
-        if (existing == null) {
+        updated = ListaAdapter.from(req);
+        if (dao.existsByNome(updated.nome(), id)) {
           res.status(200)
              .contentType("application/json")
              .err(true)
-             .log("Lista non trovata")
+             .log("Nome già esistente")
              .out(null)
              .send();
         } else {
-          try {
-            updated = ListaAdapter.from(req);
-            if (dao.existsByNome(updated.nome(), id)) {
-              res.status(200)
-                 .contentType("application/json")
-                 .err(true)
-                 .log("Nome già esistente")
-                 .out(null)
-                 .send();
-            } else {
-              updated = new ListaDTO(
-                id,
-                updated.nome(), updated.descrizione(), updated.consenso(),
-                updated.stato(), updated.scadenza(),
-                existing.createdAt(), null, null, existing.contattiCount()
-              );
-              dao.update(updated);
-              res.status(200)
-                 .contentType("application/json")
-                 .err(false)
-                 .log(null)
-                 .out(null)
-                 .send();
-            }
-          } catch (ValidationException e) {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log(e.getMessage())
-               .out(null)
-               .send();
-          }
+          updated = new ListaDTO(
+            id,
+            updated.nome(), updated.descrizione(), updated.consenso(),
+            updated.stato(), updated.scadenza(),
+            existing.createdAt(), null, null, existing.contattiCount()
+          );
+          dao.update(updated);
+          res.status(200)
+             .contentType("application/json")
+             .err(false)
+             .log(null)
+             .out(null)
+             .send();
         }
-      } catch (JWTVerificationException e) {
+      } catch (ValidationException e) {
         res.status(200)
            .contentType("application/json")
            .err(true)
-           .log("Token non valido o scaduto")
+           .log(e.getMessage())
            .out(null)
            .send();
       }
@@ -269,51 +191,31 @@ public class ListeHandler
   /**
    * DELETE /api/liste/{id} — elimina una lista (soft delete).
    */
-  public void delete(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void delete(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO existing;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ListaDAO(db);
+    existing = dao.findById(id);
+    if (existing == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        existing = dao.findById(id);
-        if (existing == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          dao.delete(id);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      dao.delete(id);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
     }
   }
 
@@ -321,55 +223,35 @@ public class ListeHandler
    * PUT /api/liste/{id}/stato — aggiorna solo il campo stato. Body: {@code {"stato": 1}}.
    */
   @SuppressWarnings("unchecked")
-  public void updateStato(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void updateStato(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO existing;
     HashMap<String, Object> body;
     int stato;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ListaDAO(db);
+    existing = dao.findById(id);
+    if (existing == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        existing = dao.findById(id);
-        if (existing == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          body = Json.decode(req.getBody(), HashMap.class);
-          stato = ((Number) body.get("stato")).intValue();
-          dao.updateStato(id, stato);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      body  = Json.decode(req.getBody(), HashMap.class);
+      stato = ((Number) body.get("stato")).intValue();
+      dao.updateStato(id, stato);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
     }
   }
 
@@ -377,55 +259,35 @@ public class ListeHandler
    * PUT /api/liste/{id}/scadenza — aggiorna solo la scadenza. Body: {@code {"scadenza": "2026-12-31"}}.
    */
   @SuppressWarnings("unchecked")
-  public void updateScadenza(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void updateScadenza(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO existing;
     HashMap<String, Object> body;
     String scadenza;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id       = Integer.parseInt(req.urlArgs().get("id"));
+    dao      = new ListaDAO(db);
+    existing = dao.findById(id);
+    if (existing == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        existing = dao.findById(id);
-        if (existing == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          body = Json.decode(req.getBody(), HashMap.class);
-          scadenza = (String) body.get("scadenza");
-          dao.updateScadenza(id, scadenza);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      body     = Json.decode(req.getBody(), HashMap.class);
+      scadenza = (String) body.get("scadenza");
+      dao.updateScadenza(id, scadenza);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
     }
   }
 
@@ -433,9 +295,8 @@ public class ListeHandler
    * GET /api/liste/{id}/contatti — contatti della lista, paginati.
    */
   @SuppressWarnings("unchecked")
-  public void listContatti(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void listContatti(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     String pageStr;
     String sizeStr;
@@ -447,54 +308,35 @@ public class ListeHandler
     int total;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.READ);
+    id      = Integer.parseInt(req.urlArgs().get("id"));
+    dao     = new ListaDAO(db);
+    lista   = dao.findById(id);
+    if (lista == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        lista = dao.findById(id);
-        if (lista == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          pageStr = req.getQueryParam("page");
-          sizeStr = req.getQueryParam("size");
-          page = pageStr != null ? Integer.parseInt(pageStr) : 1;
-          size = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
-          items = dao.findContatti(id, page, size);
-          total = dao.countContatti(id);
-          out = new HashMap<>();
-          out.put("total", total);
-          out.put("page", page);
-          out.put("size", size);
-          out.put("items", items);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(out)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      pageStr = req.getQueryParam("page");
+      sizeStr = req.getQueryParam("size");
+      page    = pageStr != null ? Integer.parseInt(pageStr) : 1;
+      size    = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
+      items   = dao.findContatti(id, page, size);
+      total   = dao.countContatti(id);
+      out     = new HashMap<>();
+      out.put("total", total);
+      out.put("page",  page);
+      out.put("size",  size);
+      out.put("items", items);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(out)
+         .send();
     }
   }
 
@@ -502,108 +344,68 @@ public class ListeHandler
    * POST /api/liste/{id}/contatti — aggiunge un contatto alla lista. Body: {@code {"contattoId": 42}}.
    */
   @SuppressWarnings("unchecked")
-  public void addContatto(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void addContatto(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     ListaDAO dao;
     ListaDTO lista;
     HashMap<String, Object> body;
     int contattoId;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id    = Integer.parseInt(req.urlArgs().get("id"));
+    dao   = new ListaDAO(db);
+    lista = dao.findById(id);
+    if (lista == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        dao = new ListaDAO(db);
-        lista = dao.findById(id);
-        if (lista == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          body = Json.decode(req.getBody(), HashMap.class);
-          contattoId = ((Number) body.get("contattoId")).intValue();
-          dao.addContatto(id, contattoId);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      body       = Json.decode(req.getBody(), HashMap.class);
+      contattoId = ((Number) body.get("contattoId")).intValue();
+      dao.addContatto(id, contattoId);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
     }
   }
 
   /**
    * DELETE /api/liste/{id}/contatti/{cid} — rimuove un contatto dalla lista.
    */
-  public void removeContatto(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void removeContatto(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     int id;
     int cid;
     ListaDAO dao;
     ListaDTO lista;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    id    = Integer.parseInt(req.urlArgs().get("id"));
+    cid   = Integer.parseInt(req.urlArgs().get("cid"));
+    dao   = new ListaDAO(db);
+    lista = dao.findById(id);
+    if (lista == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Lista non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        id = Integer.parseInt(req.urlArgs().get("id"));
-        cid = Integer.parseInt(req.urlArgs().get("cid"));
-        dao = new ListaDAO(db);
-        lista = dao.findById(id);
-        if (lista == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Lista non trovata")
-             .out(null)
-             .send();
-        } else {
-          dao.removeContatto(id, cid);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(null)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
+      dao.removeContatto(id, cid);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
     }
   }
 }

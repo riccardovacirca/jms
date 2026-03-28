@@ -2,30 +2,89 @@ package dev.jms.util;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 
+import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Rappresenta la sessione JWT per una singola richiesta HTTP.
+ * Rappresenta la sessione per una singola richiesta HTTP.
+ *
+ * <p>Gestisce due aspetti distinti della sessione:
+ * <ul>
+ *   <li><b>JWT</b>: validazione lazy del token di accesso, con accesso ai claims e ai ruoli.</li>
+ *   <li><b>Storage server-side</b>: {@link ConcurrentHashMap} in memoria condivisa tra richieste,
+ *       identificata da un cookie {@code session_id} con TTL sliding (default 30 minuti).</li>
+ * </ul>
  *
  * <p>Istanziata da {@link HandlerAdapter} per ogni richiesta e passata agli handler
  * come terzo argomento, prima di {@link DB}.
  *
- * <p>La validazione del token è lazy: avviene alla prima chiamata di un metodo
- * che richiede autenticazione, e il risultato è memorizzato in cache per la
- * durata della richiesta.
+ * <p>La validazione JWT è lazy: avviene alla prima chiamata di un metodo che richiede
+ * autenticazione, e il risultato è memorizzato in cache per la durata della richiesta.
+ *
+ * <p>Lo storage server-side è lazy: la sessione non viene creata finché non viene
+ * chiamato {@link #setAttr(String, Object)}. La lettura con {@link #getAttr(String)}
+ * non crea la sessione. Il TTL viene rinnovato ad ogni risposta in cui la sessione è
+ * accessibile, tramite il rinnovo automatico del cookie.
+ *
+ * <p>Il cleanup delle sessioni scadute avviene automaticamente ogni minuto
+ * in background (thread daemon).
  *
  * <pre>{@code
- * // Esempio d'uso in un handler:
+ * // Uso JWT in un handler:
  * session.require(Role.ADMIN, Permission.READ);
  * long id = session.sub();
+ *
+ * // Uso storage in un handler:
+ * session.setAttr("cart", cartItems);
+ * List<?> cart = (List<?>) session.getAttr("cart");
  * }</pre>
  */
 public class Session
 {
+  // ── Static session store ─────────────────────────────────────────────────────
+
+  private static final ConcurrentHashMap<String, HashMap<String, Object>> store;
+  private static final ConcurrentHashMap<String, Long> touched;
+  private static final SecureRandom secureRandom;
+  private static ScheduledExecutorService cleanupExecutor;
+  private static int ttlSeconds;
+
+  static {
+    store = new ConcurrentHashMap<>();
+    touched = new ConcurrentHashMap<>();
+    secureRandom = new SecureRandom();
+    ttlSeconds = 1800;
+    cleanupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+      Thread t;
+      t = new Thread(r);
+      t.setName("session-cleanup");
+      t.setDaemon(true);
+      return t;
+    });
+    cleanupExecutor.scheduleAtFixedRate(Session::cleanup, 60, 60, TimeUnit.SECONDS);
+  }
+
+  // ── Per-request JWT state ────────────────────────────────────────────────────
+
   private final HttpRequest req;
   private Map<String, Object> _claims;
   private boolean _resolved;
+
+  // ── Per-request storage state ────────────────────────────────────────────────
+
+  private String _sessionId;
+  private HashMap<String, Object> _attrs;
+  private boolean _attrsLoaded;
+  private boolean _dirty;
+
+  // ── Constructor ──────────────────────────────────────────────────────────────
 
   /**
    * Costruttore package-private — istanziato da {@link HandlerAdapter}.
@@ -34,9 +93,38 @@ public class Session
    */
   Session(HttpRequest req)
   {
-    this.req      = req;
+    this.req = req;
     this._resolved = false;
+    this._attrsLoaded = false;
+    this._dirty = false;
   }
+
+  // ── Static configuration ─────────────────────────────────────────────────────
+
+  /**
+   * Configura il TTL dello store server-side.
+   * Da chiamare una volta in {@code App.main()} prima del primo request.
+   *
+   * @param ttl durata in secondi di inattività prima della scadenza della sessione (default: 1800)
+   */
+  public static void configure(int ttl)
+  {
+    ttlSeconds = ttl;
+  }
+
+  /**
+   * Arresta il thread di cleanup dello store server-side.
+   * Da chiamare nel shutdown hook dell'applicazione.
+   */
+  public static void shutdown()
+  {
+    if (cleanupExecutor != null) {
+      cleanupExecutor.shutdownNow();
+      System.out.println("[info] Session store terminato");
+    }
+  }
+
+  // ── JWT methods ──────────────────────────────────────────────────────────────
 
   /**
    * Verifica che la sessione soddisfi il livello minimo richiesto.
@@ -61,7 +149,7 @@ public class Session
   public void require(Role minRole, Permission permission)
   {
     Map<String, Object> c;
-    int                 userLevel;
+    int userLevel;
 
     if (minRole != Role.GUEST || permission != Permission.READ) {
       c = resolve();
@@ -152,7 +240,114 @@ public class Session
     return resolve();
   }
 
-  // ── private ─────────────────────────────────────────────────────────────────
+  // ── Storage methods ──────────────────────────────────────────────────────────
+
+  /**
+   * Restituisce il valore associato alla chiave nello storage server-side.
+   * Restituisce {@code null} se la sessione non esiste o la chiave non è presente.
+   * Non crea una nuova sessione.
+   *
+   * @param key chiave dell'attributo
+   * @return valore o {@code null}
+   */
+  public Object getAttr(String key)
+  {
+    HashMap<String, Object> attrs;
+    Object result;
+
+    attrs = ensureAttrs();
+    result = attrs != null ? attrs.get(key) : null;
+    return result;
+  }
+
+  /**
+   * Imposta un valore nello storage server-side.
+   * Se la sessione non esiste, la crea automaticamente.
+   *
+   * @param key   chiave dell'attributo
+   * @param value valore da memorizzare
+   */
+  public void setAttr(String key, Object value)
+  {
+    if (!_attrsLoaded) {
+      ensureAttrs();
+    }
+    if (_attrs == null) {
+      _sessionId = generateSessionId();
+      _attrs = new HashMap<>();
+      store.put(_sessionId, _attrs);
+    }
+    _attrs.put(key, value);
+    _dirty = true;
+  }
+
+  /**
+   * Rimuove la chiave dallo storage server-side.
+   * Non effettua operazioni se la sessione non esiste.
+   *
+   * @param key chiave da rimuovere
+   */
+  public void removeAttr(String key)
+  {
+    HashMap<String, Object> attrs;
+
+    attrs = ensureAttrs();
+    if (attrs != null) {
+      attrs.remove(key);
+      _dirty = true;
+    }
+  }
+
+  /**
+   * Svuota tutto lo storage server-side della sessione corrente.
+   * Non elimina la sessione: il cookie e la entry nello store rimangono.
+   */
+  public void clearAttrs()
+  {
+    HashMap<String, Object> attrs;
+
+    attrs = ensureAttrs();
+    if (attrs != null) {
+      attrs.clear();
+      _dirty = true;
+    }
+  }
+
+  /**
+   * Restituisce l'ID della sessione corrente, o {@code null} se non esiste.
+   * Non crea una nuova sessione.
+   *
+   * @return session ID o {@code null}
+   */
+  public String sessionId()
+  {
+    String result;
+
+    ensureAttrs();
+    result = _sessionId;
+    return result;
+  }
+
+  // ── Package-private ──────────────────────────────────────────────────────────
+
+  /**
+   * Persiste lo storage e rinnova il cookie di sessione nella risposta corrente.
+   * Invocato da {@link HandlerAdapter} tramite il pre-send hook di {@link HttpResponse}
+   * prima che gli header HTTP vengano committati al client.
+   * Non effettua operazioni se la sessione non è stata acceduta o non esiste.
+   *
+   * @param res response HTTP corrente
+   */
+  void flush(HttpResponse res)
+  {
+    if (_attrsLoaded && _sessionId != null) {
+      store.put(_sessionId, _attrs);
+      touched.put(_sessionId, Instant.now().getEpochSecond());
+      res.cookie(Cookie.SESSION_ID, _sessionId, ttlSeconds);
+    }
+  }
+
+  // ── Private JWT helpers ──────────────────────────────────────────────────────
 
   /** Restituisce i claims lanciando {@link UnauthorizedException} se non autenticato. */
   private Map<String, Object> requireClaims()
@@ -172,24 +367,24 @@ public class Session
    */
   private Map<String, Object> resolve()
   {
-    String              token;
-    DecodedJWT          jwt;
-    String              jti;
+    String token;
+    DecodedJWT jwt;
+    String jti;
     Map<String, Object> result;
 
     if (!_resolved) {
       _resolved = true;
-      token     = req.getCookie(Cookie.ACCESS_TOKEN);
+      token = req.getCookie(Cookie.ACCESS_TOKEN);
       if (token != null && !token.isBlank()) {
         try {
           jwt = Auth.get().verifyAccessToken(token);
           jti = jwt.getId();
           if (jti == null || !JWTBlacklist.isRevoked(jti)) {
             result = new HashMap<>();
-            result.put("sub",                  jwt.getSubject());
-            result.put("username",             jwt.getClaim("username").asString());
-            result.put("ruolo",                jwt.getClaim("ruolo").asString());
-            result.put("ruolo_level",          jwt.getClaim("ruolo_level").asInt());
+            result.put("sub", jwt.getSubject());
+            result.put("username", jwt.getClaim("username").asString());
+            result.put("ruolo", jwt.getClaim("ruolo").asString());
+            result.put("ruolo_level", jwt.getClaim("ruolo_level").asInt());
             result.put("must_change_password", jwt.getClaim("must_change_password").asBoolean());
             _claims = result;
           } else {
@@ -203,5 +398,58 @@ public class Session
       }
     }
     return _claims;
+  }
+
+  // ── Private storage helpers ──────────────────────────────────────────────────
+
+  /**
+   * Carica lazy lo storage dal cookie di sessione.
+   * Restituisce la mappa degli attributi, o {@code null} se la sessione non esiste.
+   */
+  private HashMap<String, Object> ensureAttrs()
+  {
+    String cookieId;
+    HashMap<String, Object> found;
+
+    if (!_attrsLoaded) {
+      _attrsLoaded = true;
+      cookieId = req.getCookie(Cookie.SESSION_ID);
+      if (cookieId != null) {
+        found = store.get(cookieId);
+        if (found != null) {
+          _sessionId = cookieId;
+          _attrs = found;
+        }
+      }
+    }
+    return _attrs;
+  }
+
+  /** Genera un session ID casuale sicuro (64 caratteri hex). */
+  private static String generateSessionId()
+  {
+    byte[] bytes;
+    String result;
+
+    bytes = new byte[32];
+    secureRandom.nextBytes(bytes);
+    result = HexFormat.of().formatHex(bytes);
+    return result;
+  }
+
+  /** Rimuove dallo store le sessioni con TTL scaduto. Eseguito ogni minuto. */
+  private static void cleanup()
+  {
+    long now;
+    long cutoff;
+
+    now = Instant.now().getEpochSecond();
+    cutoff = now - ttlSeconds;
+    for (Map.Entry<String, Long> entry : touched.entrySet()) {
+      if (entry.getValue() < cutoff) {
+        store.remove(entry.getKey());
+        touched.remove(entry.getKey());
+      }
+    }
   }
 }

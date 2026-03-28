@@ -35,7 +35,7 @@ public class HandlerAdapter implements HttpHandler
   private static final Log log = Log.get(HandlerAdapter.class);
 
   private final Map<HttpMethod, RouteHandler> routes;
-  private final Map<HttpMethod, Boolean>      asyncFlags;
+  private final Map<HttpMethod, Boolean> asyncFlags;
   private final DataSource dataSource;
 
   /**
@@ -44,9 +44,9 @@ public class HandlerAdapter implements HttpHandler
    */
   HandlerAdapter(DataSource dataSource)
   {
-    this.dataSource  = dataSource;
-    this.routes      = new EnumMap<>(HttpMethod.class);
-    this.asyncFlags  = new EnumMap<>(HttpMethod.class);
+    this.dataSource = dataSource;
+    this.routes = new EnumMap<>(HttpMethod.class);
+    this.asyncFlags = new EnumMap<>(HttpMethod.class);
   }
 
   /**
@@ -75,13 +75,25 @@ public class HandlerAdapter implements HttpHandler
     this(handler, null);
   }
 
-  /** Registra un RouteHandler blocking per il metodo HTTP indicato. */
+  /**
+   * Registra un {@link RouteHandler} blocking per il metodo HTTP indicato.
+   * L'handler verrà eseguito su un worker thread di Undertow.
+   *
+   * @param method  metodo HTTP
+   * @param handler handler da registrare
+   */
   void register(HttpMethod method, RouteHandler handler)
   {
     routes.put(method, handler);
   }
 
-  /** Registra un RouteHandler async per il metodo HTTP indicato. */
+  /**
+   * Registra un {@link RouteHandler} asincrono per il metodo HTTP indicato.
+   * L'handler verrà eseguito su {@link AsyncExecutor} invece dei worker thread di Undertow.
+   *
+   * @param method  metodo HTTP
+   * @param handler handler da registrare
+   */
   void registerAsync(HttpMethod method, RouteHandler handler)
   {
     routes.put(method, handler);
@@ -92,19 +104,19 @@ public class HandlerAdapter implements HttpHandler
   public void handleRequest(HttpServerExchange exchange) throws Exception
   {
     HttpMethod method;
-    boolean    async;
+    boolean async;
 
     if (exchange.isInIoThread()) {
       method = parseMethod(exchange.getRequestMethod().toString());
-      async  = method != null && asyncFlags.getOrDefault(method, Boolean.FALSE);
+      async = method != null && asyncFlags.getOrDefault(method, Boolean.FALSE);
       if (async) {
         exchange.dispatch(AsyncExecutor.getExecutor(), () -> executeBlocking(exchange));
       } else {
         exchange.dispatch(this);
       }
-      return;
+    } else {
+      executeBlocking(exchange);
     }
-    executeBlocking(exchange);
   }
 
   private void executeBlocking(HttpServerExchange exchange)
@@ -132,9 +144,10 @@ public class HandlerAdapter implements HttpHandler
       if (handler == null) {
         res.status(405).contentType("application/json")
            .err(true).log("Method Not Allowed").out(null).send();
-        return;
+      } else {
+        res.setPreSendHook(() -> session.flush(res));
+        handler.handle(req, res, session, db);
       }
-      handler.handle(req, res, session, db);
 
     } catch (UnauthorizedException e) {
       if (!exchange.isResponseStarted()) {
@@ -156,11 +169,15 @@ public class HandlerAdapter implements HttpHandler
 
   private static HttpMethod parseMethod(String method)
   {
+    HttpMethod result;
+
+    result = null;
     try {
-      return HttpMethod.valueOf(method);
+      result = HttpMethod.valueOf(method);
     } catch (IllegalArgumentException e) {
-      return null;
+      result = null;
     }
+    return result;
   }
 
   private void sendErrorResponse(HttpServerExchange exchange, int status, String message)

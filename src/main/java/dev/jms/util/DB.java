@@ -62,32 +62,42 @@ public class DB
 
     if (host.isBlank() || name.isBlank() || user.isBlank()) {
       System.out.println("[info] Database non configurato, pool non inizializzato");
-      return;
-    }
+    } else {
+      dbPort = config.get("db.port", "5432");
+      password = config.get("db.password", "");
+      poolSize = config.getInt("db.pool.size", 10);
 
-    dbPort   = config.get("db.port", "5432");
-    password = config.get("db.password", "");
-    poolSize = config.getInt("db.pool.size", 10);
-
-    try {
-      hc = new HikariConfig();
-      hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
-      hc.setUsername(user);
-      hc.setPassword(password);
-      hc.setMaximumPoolSize(poolSize);
-      hc.setInitializationFailTimeout(-1);
-      sharedDataSource = new HikariDataSource(hc);
-      System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
-    } catch (Exception e) {
-      System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+      try {
+        hc = new HikariConfig();
+        hc.setJdbcUrl("jdbc:postgresql://" + host + ":" + dbPort + "/" + name);
+        hc.setUsername(user);
+        hc.setPassword(password);
+        hc.setMaximumPoolSize(poolSize);
+        hc.setInitializationFailTimeout(-1);
+        sharedDataSource = new HikariDataSource(hc);
+        System.out.println("[info] Pool database inizializzato (" + host + ":" + dbPort + "/" + name + ")");
+      } catch (Exception e) {
+        System.err.println("[warn] Inizializzazione pool fallita: " + e.getMessage());
+      }
     }
   }
 
+  /**
+   * Restituisce {@code true} se il pool HikariCP è stato inizializzato con successo.
+   *
+   * @return {@code true} se il database è configurato e raggiungibile
+   */
   public static boolean isConfigured()
   {
     return sharedDataSource != null;
   }
 
+  /**
+   * Restituisce il {@link DataSource} condiviso HikariCP.
+   * Restituisce {@code null} se il database non è configurato.
+   *
+   * @return DataSource condiviso, o {@code null}
+   */
   public static DataSource getDataSource()
   {
     return sharedDataSource;
@@ -97,6 +107,12 @@ public class DB
   // CONNECTION LIFECYCLE
   // =========================
 
+  /**
+   * Apre una connessione dal pool e la associa al thread corrente.
+   * No-op se una connessione è già aperta sul thread.
+   *
+   * @throws Exception se la connessione non può essere acquisita
+   */
   public void open() throws Exception
   {
     Connection c;
@@ -106,6 +122,9 @@ public class DB
     }
   }
 
+  /**
+   * Rilascia la connessione associata al thread corrente e la restituisce al pool.
+   */
   public void close()
   {
     Connection c;
@@ -119,6 +138,11 @@ public class DB
     }
   }
 
+  /**
+   * Verifica se la connessione corrente è aperta e non chiusa.
+   *
+   * @return {@code true} se la connessione è attiva
+   */
   public boolean connected()
   {
     Connection c;
@@ -147,6 +171,11 @@ public class DB
   // TRANSACTIONS (MANUAL)
   // =========================
 
+  /**
+   * Avvia una transazione manuale disabilitando l'auto-commit.
+   *
+   * @throws Exception se la connessione non è disponibile
+   */
   public void begin() throws Exception
   {
     Connection c;
@@ -154,6 +183,11 @@ public class DB
     c.setAutoCommit(false);
   }
 
+  /**
+   * Esegue il commit della transazione corrente e riabilita l'auto-commit.
+   *
+   * @throws Exception se la connessione non è disponibile o il commit fallisce
+   */
   public void commit() throws Exception
   {
     Connection c;
@@ -162,6 +196,11 @@ public class DB
     c.setAutoCommit(true);
   }
 
+  /**
+   * Esegue il rollback della transazione corrente e riabilita l'auto-commit.
+   *
+   * @throws Exception se la connessione non è disponibile o il rollback fallisce
+   */
   public void rollback() throws Exception
   {
     Connection c;
@@ -174,6 +213,15 @@ public class DB
   // WRITE QUERIES
   // =========================
 
+  /**
+   * Esegue una query di scrittura (INSERT, UPDATE, DELETE) e restituisce il numero di righe modificate.
+   * Aggiorna {@link #lastInsertId()} se la query genera una chiave auto-generata.
+   *
+   * @param sql    istruzione SQL con placeholder {@code ?}
+   * @param params parametri da legare ai placeholder
+   * @return numero di righe modificate
+   * @throws Exception se l'esecuzione fallisce
+   */
   public int query(String sql, Object... params) throws Exception
   {
     Connection c;
@@ -197,6 +245,12 @@ public class DB
     return rows;
   }
 
+  /**
+   * Restituisce l'ultima chiave auto-generata dall'operazione {@link #query} precedente.
+   *
+   * @return chiave auto-generata
+   * @throws Exception se nessuna chiave auto-generata è disponibile
+   */
   public long lastInsertId() throws Exception
   {
     long id;
@@ -211,6 +265,15 @@ public class DB
   // READ QUERIES
   // =========================
 
+  /**
+   * Esegue una query di lettura e restituisce tutte le righe come lista di mappe.
+   * Ogni mappa ha come chiave il nome della colonna e come valore il dato tipizzato JDBC.
+   *
+   * @param sql    istruzione SQL con placeholder {@code ?}
+   * @param params parametri da legare ai placeholder
+   * @return lista di righe; vuota se nessuna riga trovata
+   * @throws Exception se l'esecuzione fallisce
+   */
   public ArrayList<HashMap<String, Object>> select(String sql, Object... params) throws Exception
   {
     Connection c;
@@ -245,6 +308,15 @@ public class DB
   // CURSOR (STREAMING)
   // =========================
 
+  /**
+   * Apre un cursore di streaming per iterare righe senza caricarle tutte in memoria.
+   * Chiudere il {@link Cursor} dopo l'uso per liberare le risorse JDBC.
+   *
+   * @param sql    istruzione SQL con placeholder {@code ?}
+   * @param params parametri da legare ai placeholder
+   * @return cursore posizionato prima della prima riga
+   * @throws Exception se l'esecuzione fallisce
+   */
   public Cursor cursor(String sql, Object... params) throws Exception
   {
     Connection c;
@@ -262,6 +334,13 @@ public class DB
   // METADATA
   // =========================
 
+  /**
+   * Restituisce l'insieme dei nomi di colonna (in minuscolo) per la tabella indicata.
+   *
+   * @param tableName nome della tabella da interrogare
+   * @return insieme di nomi colonna in minuscolo
+   * @throws Exception se la query sui metadati fallisce
+   */
   public HashSet<String> getTableColumns(String tableName) throws Exception
   {
     Connection c;
@@ -308,6 +387,12 @@ public class DB
   // Type Conversion Helpers (Java 8+ Time API)
   // ========================================
 
+  /**
+   * Converte un valore {@link java.sql.Date} JDBC in {@link java.time.LocalDate}.
+   *
+   * @param sqlDate valore proveniente da un ResultSet
+   * @return LocalDate corrispondente, o {@code null} se il valore non è un {@link java.sql.Date}
+   */
   public static java.time.LocalDate toLocalDate(Object sqlDate)
   {
     java.time.LocalDate result;
@@ -318,6 +403,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore {@link java.sql.Time} JDBC in {@link java.time.LocalTime}.
+   *
+   * @param sqlTime valore proveniente da un ResultSet
+   * @return LocalTime corrispondente, o {@code null} se il valore non è un {@link java.sql.Time}
+   */
   public static java.time.LocalTime toLocalTime(Object sqlTime)
   {
     java.time.LocalTime result;
@@ -328,6 +419,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore {@link java.sql.Timestamp} JDBC o una stringa ISO in {@link java.time.LocalDateTime}.
+   *
+   * @param sqlTimestamp valore proveniente da un ResultSet o stringa ISO-8601
+   * @return LocalDateTime corrispondente, o {@code null} se la conversione non è possibile
+   */
   public static java.time.LocalDateTime toLocalDateTime(Object sqlTimestamp)
   {
     java.time.LocalDateTime result;
@@ -344,6 +441,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un {@link java.time.LocalDate} in {@link java.sql.Date} per i parametri JDBC.
+   *
+   * @param localDate data da convertire
+   * @return Date SQL corrispondente, o {@code null} se {@code localDate} è {@code null}
+   */
   public static java.sql.Date toSqlDate(java.time.LocalDate localDate)
   {
     java.sql.Date result;
@@ -354,6 +457,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un {@link java.time.LocalTime} in {@link java.sql.Time} per i parametri JDBC.
+   *
+   * @param localTime ora da convertire
+   * @return Time SQL corrispondente, o {@code null} se {@code localTime} è {@code null}
+   */
   public static java.sql.Time toSqlTime(java.time.LocalTime localTime)
   {
     java.sql.Time result;
@@ -364,6 +473,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un {@link java.time.LocalDateTime} in {@link java.sql.Timestamp} per i parametri JDBC.
+   *
+   * @param localDateTime data-ora da convertire
+   * @return Timestamp SQL corrispondente, o {@code null} se {@code localDateTime} è {@code null}
+   */
   public static java.sql.Timestamp toSqlTimestamp(java.time.LocalDateTime localDateTime)
   {
     java.sql.Timestamp result;
@@ -374,6 +489,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore numerico proveniente da un ResultSet in {@link Long}.
+   *
+   * @param value valore da convertire
+   * @return Long corrispondente, o {@code null} se il valore non è numerico
+   */
   public static Long toLong(Object value)
   {
     Long result;
@@ -386,6 +507,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore numerico proveniente da un ResultSet in {@link Integer}.
+   *
+   * @param value valore da convertire
+   * @return Integer corrispondente, o {@code null} se il valore non è numerico
+   */
   public static Integer toInteger(Object value)
   {
     Integer result;
@@ -398,6 +525,13 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore booleano o numerico proveniente da un ResultSet in {@link Boolean}.
+   * Un numero != 0 è considerato {@code true}.
+   *
+   * @param value valore da convertire
+   * @return Boolean corrispondente, o {@code null} se il valore non è compatibile
+   */
   public static Boolean toBoolean(Object value)
   {
     Boolean result;
@@ -410,6 +544,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte qualsiasi valore proveniente da un ResultSet in {@link String} tramite {@code toString()}.
+   *
+   * @param value valore da convertire
+   * @return stringa corrispondente, o {@code null} se {@code value} è {@code null}
+   */
   public static String toString(Object value)
   {
     String result;
@@ -420,6 +560,12 @@ public class DB
     return result;
   }
 
+  /**
+   * Converte un valore {@link java.math.BigDecimal} proveniente da un ResultSet.
+   *
+   * @param value valore da convertire
+   * @return BigDecimal corrispondente, o {@code null} se il valore non è un BigDecimal
+   */
   public static java.math.BigDecimal toBigDecimal(Object value)
   {
     java.math.BigDecimal result;

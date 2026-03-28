@@ -330,14 +330,17 @@ public final class File
   public static boolean exists(String path)
   {
     Path sanitized;
+    boolean result;
 
+    result = false;
     try {
       sanitized = sanitizePath(path);
-      return Files.exists(sanitized);
+      result = Files.exists(sanitized);
     } catch (Exception e) {
       log.warn("Error checking existence of {}: {}", path, e.getMessage());
-      return false;
+      result = false;
     }
+    return result;
   }
 
   /**

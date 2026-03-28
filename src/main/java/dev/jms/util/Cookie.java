@@ -23,6 +23,9 @@ public final class Cookie
   /** Nome del cookie che trasporta il token di refresh (scadenza lunga, opaco, persistito su DB). */
   public static final String REFRESH_TOKEN = "refresh_token";
 
+  /** Nome del cookie che identifica la sessione server-side. */
+  public static final String SESSION_ID = "session_id";
+
   private static boolean secure   = false;
   private static String  sameSite = "Lax";
 

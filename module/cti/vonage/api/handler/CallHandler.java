@@ -1,18 +1,18 @@
 package dev.jms.app.module.cti.vonage.handler;
 
-import com.auth0.jwt.exceptions.JWTVerificationException;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import dev.jms.app.module.cti.vonage.dao.CallDAO;
 import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
 import dev.jms.app.module.cti.vonage.dto.CallDTO;
 import dev.jms.app.module.cti.vonage.dto.OperatorDTO;
 import dev.jms.app.module.cti.vonage.helper.VoiceHelper;
-import dev.jms.util.Auth;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Log;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
+import dev.jms.util.Session;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
@@ -51,10 +51,8 @@ public class CallHandler
    *
    * <p>Risposta: {@code {"token": "<JWT RS256>"}}.</p>
    */
-  public void sdkToken(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void sdkToken(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String      token;
-    DecodedJWT  decoded;
     int         accountId;
     String      userId;
     String      sdkToken;
@@ -62,67 +60,51 @@ public class CallHandler
     OperatorDAO dao;
     OperatorDTO operator;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Non autenticato")
-         .out(null)
-         .send();
+    if (session.isAuthenticated()) {
+      accountId = (int) session.sub();
     } else {
-      try {
-        decoded   = Auth.get().verifyAccessToken(token);
-        accountId = Integer.parseInt(decoded.getSubject());
-        userId    = null;
-        operator  = null;
-        dao       = null;
+      accountId = 0;
+    }
+    userId   = null;
+    operator = null;
+    dao      = null;
 
-        if (accountId > 0) {
-          dao      = new OperatorDAO(db);
-          operator = dao.claimOrRenew(accountId);
-          if (operator != null) {
-            userId = operator.vonageUserId();
-          }
-        } else {
-          userId = req.getQueryParam("userId");
-        }
+    if (accountId > 0) {
+      dao      = new OperatorDAO(db);
+      operator = dao.claimOrRenew(accountId);
+      if (operator != null) {
+        userId = operator.vonageUserId();
+      }
+    } else {
+      userId = req.getQueryParam("userId");
+    }
 
-        if (userId == null || userId.isBlank()) {
-          if (accountId > 0) {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Nessun operatore CTI disponibile")
-               .out(null)
-               .send();
-          } else {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Parametro userId obbligatorio")
-               .out(null)
-               .send();
-          }
-        } else {
-          sdkToken = voiceHelper.generateSdkJwt(userId);
-          out      = new HashMap<>();
-          out.put("token", sdkToken);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(out)
-             .send();
-        }
-      } catch (JWTVerificationException e) {
+    if (userId == null || userId.isBlank()) {
+      if (accountId > 0) {
         res.status(200)
            .contentType("application/json")
            .err(true)
-           .log("Token non valido o scaduto")
+           .log("Nessun operatore CTI disponibile")
+           .out(null)
+           .send();
+      } else {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Parametro userId obbligatorio")
            .out(null)
            .send();
       }
+    } else {
+      sdkToken = voiceHelper.generateSdkJwt(userId);
+      out      = new HashMap<>();
+      out.put("token", sdkToken);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(out)
+         .send();
     }
   }
 
@@ -132,25 +114,17 @@ public class CallHandler
    * <p>Chiamato dal frontend al disconnect del componente. Operazione idempotente:
    * non restituisce errore se l'account non ha operatori assegnati o il token non è valido.</p>
    */
-  public void releaseSession(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void releaseSession(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String      token;
-    DecodedJWT  decoded;
     int         accountId;
     OperatorDAO dao;
 
-    token = req.getCookie("access_token");
-    if (token != null) {
-      try {
-        decoded   = Auth.get().verifyAccessToken(token);
-        accountId = Integer.parseInt(decoded.getSubject());
-        if (accountId > 0) {
-          dao = new OperatorDAO(db);
-          dao.releaseSession(accountId);
-          log.info("[CTI] releaseSession: accountId={}", accountId);
-        }
-      } catch (JWTVerificationException e) {
-        log.warn("[CTI] releaseSession: token non valido, nessun rilascio eseguito");
+    if (session.isAuthenticated()) {
+      accountId = (int) session.sub();
+      if (accountId > 0) {
+        dao = new OperatorDAO(db);
+        dao.releaseSession(accountId);
+        log.info("[CTI] releaseSession: accountId={}", accountId);
       }
     }
     res.status(200)
@@ -177,7 +151,7 @@ public class CallHandler
    * dopo aver inviato la risposta.</p>
    */
   @SuppressWarnings("unchecked")
-  public void answer(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void answer(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     HashMap<String, Object> body;
     String fromUser;
@@ -221,48 +195,27 @@ public class CallHandler
   /**
    * PUT /api/cti/vonage/call/{uuid}/hangup — riagancia la chiamata dell'operatore e del cliente.
    */
-  public void hangup(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void hangup(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String uuid;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Non autenticato")
-         .out(null)
-         .send();
-    } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        uuid = req.urlArgs().get("uuid");
-        voiceHelper.hangupCall(uuid);
-        res.status(200)
-           .contentType("application/json")
-           .err(false)
-           .log(null)
-           .out(null)
-           .send();
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
-    }
+    session.require(Role.USER, Permission.WRITE);
+    uuid = req.urlArgs().get("uuid");
+    voiceHelper.hangupCall(uuid);
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(null)
+       .send();
   }
 
   /**
    * GET /api/cti/vonage/chiamate — lista paginata delle chiamate.
    * <p>Query params: {@code page} (default 1), {@code size} (default 20).</p>
    */
-  public void list(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void list(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String pageStr;
     String sizeStr;
     int page;
@@ -272,43 +225,24 @@ public class CallHandler
     int total;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Non autenticato")
-         .out(null)
-         .send();
-    } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        pageStr = req.getQueryParam("page");
-        sizeStr = req.getQueryParam("size");
-        page    = pageStr != null ? Integer.parseInt(pageStr) : 1;
-        size    = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
-        dao     = new CallDAO(db);
-        items   = dao.findAll(page, size);
-        total   = dao.count();
-        out     = new HashMap<>();
-        out.put("total", total);
-        out.put("page", page);
-        out.put("size", size);
-        out.put("items", items);
-        res.status(200)
-           .contentType("application/json")
-           .err(false)
-           .log(null)
-           .out(out)
-           .send();
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
-    }
+    session.require(Role.USER, Permission.READ);
+    pageStr = req.getQueryParam("page");
+    sizeStr = req.getQueryParam("size");
+    page    = pageStr != null ? Integer.parseInt(pageStr) : 1;
+    size    = sizeStr != null ? Integer.parseInt(sizeStr) : 20;
+    dao     = new CallDAO(db);
+    items   = dao.findAll(page, size);
+    total   = dao.count();
+    out     = new HashMap<>();
+    out.put("total", total);
+    out.put("page", page);
+    out.put("size", size);
+    out.put("items", items);
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(out)
+       .send();
   }
 }

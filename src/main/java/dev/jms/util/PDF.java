@@ -175,10 +175,13 @@ public class PDF
    */
   public static boolean validatePlaceholder(String placeholder)
   {
-    if (placeholder == null || placeholder.isBlank()) {
-      return false;
+    boolean result;
+
+    result = false;
+    if (placeholder != null && !placeholder.isBlank()) {
+      result = placeholder.matches("^[a-zA-Z0-9]+$");
     }
-    return placeholder.matches("^[a-zA-Z0-9]+$");
+    return result;
   }
 
   /**

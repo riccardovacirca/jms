@@ -41,11 +41,21 @@ public class HttpRequest
     this.bodyBytes = bodyBytes;
   }
 
+  /**
+   * Restituisce il metodo HTTP della richiesta (es. {@code "GET"}, {@code "POST"}).
+   *
+   * @return metodo HTTP come stringa
+   */
   public String getMethod()
   {
     return exchange.getRequestMethod().toString();
   }
 
+  /**
+   * Restituisce il path della richiesta (es. {@code "/api/users/42"}).
+   *
+   * @return path della richiesta
+   */
   public String getPath()
   {
     return exchange.getRequestPath();
@@ -62,7 +72,11 @@ public class HttpRequest
     return result;
   }
 
-  /** Restituisce tutti i parametri querystring. */
+  /**
+   * Restituisce tutti i parametri querystring come mappa multivalore.
+   *
+   * @return mappa dei parametri querystring
+   */
   public Map<String, Deque<String>> getQueryParams()
   {
     return exchange.getQueryParameters();
@@ -100,14 +114,16 @@ public class HttpRequest
   {
     String forwarded;
     String[] ips;
+    String result;
 
     forwarded = getHeader("X-Forwarded-For");
     if (forwarded != null && !forwarded.isBlank()) {
       ips = forwarded.split(",");
-      return ips[0].trim();
+      result = ips[0].trim();
+    } else {
+      result = exchange.getSourceAddress().getAddress().getHostAddress();
     }
-
-    return exchange.getSourceAddress().getAddress().getHostAddress();
+    return result;
   }
 
   /** Restituisce i parametri estratti dal template URL (es. /api/users/{id} → {"id": "42"}).
@@ -129,22 +145,20 @@ public class HttpRequest
    */
   public String getBody() throws Exception
   {
-    if (bodyString != null) {
-      return bodyString; // Cache
+    if (bodyString == null) {
+      if (bodyBytes != null) {
+        // Async mode: body già disponibile
+        bodyString = new String(bodyBytes, StandardCharsets.UTF_8);
+      } else {
+        // Blocking mode: legge da InputStream (comportamento attuale)
+        try (InputStream is = exchange.getInputStream()) {
+          byte[] bytes;
+          bytes = is.readAllBytes();
+          bodyString = new String(bytes, StandardCharsets.UTF_8);
+        }
+      }
     }
-
-    if (bodyBytes != null) {
-      // Async mode: body già disponibile
-      bodyString = new String(bodyBytes, StandardCharsets.UTF_8);
-      return bodyString;
-    }
-
-    // Blocking mode: legge da InputStream (comportamento attuale)
-    try (InputStream is = exchange.getInputStream()) {
-      byte[] bytes = is.readAllBytes();
-      bodyString = new String(bytes, StandardCharsets.UTF_8);
-      return bodyString;
-    }
+    return bodyString; // Cache
   }
 
   /**
@@ -153,14 +167,18 @@ public class HttpRequest
    */
   public byte[] getBodyBytes() throws Exception
   {
-    if (bodyBytes != null) {
-      return bodyBytes; // Async mode
-    }
+    byte[] result;
 
-    // Blocking mode
-    try (InputStream is = exchange.getInputStream()) {
-      return is.readAllBytes();
+    if (bodyBytes != null) {
+      // Async mode
+      result = bodyBytes;
+    } else {
+      // Blocking mode
+      try (InputStream is = exchange.getInputStream()) {
+        result = is.readAllBytes();
+      }
     }
+    return result;
   }
 
   /**

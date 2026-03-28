@@ -47,26 +47,25 @@ public class Scheduler
   public static void init(Config config, DataSource ds)
   {
     boolean enabled;
-    int     pollInterval;
+    int pollInterval;
 
     enabled = config.get("scheduler.enabled", "true").equalsIgnoreCase("true");
 
-    if (!enabled) {
+    if (enabled) {
+      pollInterval = config.getInt("scheduler.poll.interval.seconds", 15);
+
+      jobRunr = JobRunr.configure()
+        .useStorageProvider(new PostgresStorageProvider(ds))
+        .useBackgroundJobServer(
+          BackgroundJobServerConfiguration.usingStandardBackgroundJobServerConfiguration()
+            .andPollIntervalInSeconds(pollInterval)
+        )
+        .initialize();
+
+      System.out.println("[info] Scheduler inizializzato (poll interval: " + pollInterval + "s)");
+    } else {
       System.out.println("[info] Scheduler disabilitato (scheduler.enabled=false)");
-      return;
     }
-
-    pollInterval = config.getInt("scheduler.poll.interval.seconds", 15);
-
-    jobRunr = JobRunr.configure()
-      .useStorageProvider(new PostgresStorageProvider(ds))
-      .useBackgroundJobServer(
-        BackgroundJobServerConfiguration.usingStandardBackgroundJobServerConfiguration()
-          .andPollIntervalInSeconds(pollInterval)
-      )
-      .initialize();
-
-    System.out.println("[info] Scheduler inizializzato (poll interval: " + pollInterval + "s)");
   }
 
   /**
@@ -95,11 +94,10 @@ public class Scheduler
    */
   public static void register(String id, String cron, JobLambda job)
   {
-    if (jobRunr == null) {
-      return;
+    if (jobRunr != null) {
+      BackgroundJob.scheduleRecurrently(id, cron, job);
+      System.out.println("[info] Scheduler: job '" + id + "' registrato (" + cron + ")");
     }
-    BackgroundJob.scheduleRecurrently(id, cron, job);
-    System.out.println("[info] Scheduler: job '" + id + "' registrato (" + cron + ")");
   }
 
   /**

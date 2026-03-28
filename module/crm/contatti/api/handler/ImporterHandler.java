@@ -1,18 +1,20 @@
 package dev.jms.app.contatti.handler;
 
-import com.auth0.jwt.exceptions.JWTVerificationException;
 import dev.jms.app.contatti.dao.ContattoDAO;
 import dev.jms.app.contatti.dao.ImportSessionDAO;
 import dev.jms.app.contatti.dao.ListaDAO;
 import dev.jms.app.contatti.dto.ContattoDTO;
 import dev.jms.app.contatti.dto.ImportSessionDTO;
-import dev.jms.util.Auth;
 import dev.jms.util.DB;
 import dev.jms.util.Excel;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
+import dev.jms.util.Session;
+
 import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -37,56 +39,35 @@ public class ImporterHandler
   /**
    * GET /api/import/campi — elenco dei campi importabili del sistema.
    */
-  public void campi(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void campi(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     List<HashMap<String, String>> result;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Non autenticato")
-         .out(null)
-         .send();
-    } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        result = new ArrayList<>();
-        result.add(campo("nome", "Nome"));
-        result.add(campo("cognome", "Cognome"));
-        result.add(campo("ragione_sociale", "Ragione Sociale"));
-        result.add(campo("telefono", "Telefono"));
-        result.add(campo("email", "Email"));
-        result.add(campo("indirizzo", "Indirizzo"));
-        result.add(campo("citta", "Città"));
-        result.add(campo("cap", "CAP"));
-        result.add(campo("provincia", "Provincia"));
-        result.add(campo("note", "Note"));
-        res.status(200)
-           .contentType("application/json")
-           .err(false)
-           .log(null)
-           .out(result)
-           .send();
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
-      }
-    }
+    session.require(Role.USER, Permission.READ);
+    result = new ArrayList<>();
+    result.add(campo("nome",            "Nome"));
+    result.add(campo("cognome",         "Cognome"));
+    result.add(campo("ragione_sociale", "Ragione Sociale"));
+    result.add(campo("telefono",        "Telefono"));
+    result.add(campo("email",           "Email"));
+    result.add(campo("indirizzo",       "Indirizzo"));
+    result.add(campo("citta",           "Città"));
+    result.add(campo("cap",             "CAP"));
+    result.add(campo("provincia",       "Provincia"));
+    result.add(campo("note",            "Note"));
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(result)
+       .send();
   }
 
   /**
    * POST /api/import/analyze — upload file Excel, analizza e crea sessione di importazione.
    */
-  public void analyze(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void analyze(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     byte[] fileBytes;
     String filename;
     Excel.AnalysisResult analysis;
@@ -96,78 +77,59 @@ public class ImporterHandler
     ImportSessionDAO dao;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    fileBytes = req.getMultipartFileBytes("file");
+    if (fileBytes == null || fileBytes.length == 0) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Nessun file ricevuto")
          .out(null)
          .send();
     } else {
+      filename = req.getMultipartFilename("file");
+      if (filename == null) {
+        filename = "import.xlsx";
+      }
+      analysisError = null;
+      analysis      = null;
       try {
-        Auth.get().verifyAccessToken(token);
-        fileBytes = req.getMultipartFileBytes("file");
-        if (fileBytes == null || fileBytes.length == 0) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Nessun file ricevuto")
-             .out(null)
-             .send();
-        } else {
-          filename = req.getMultipartFilename("file");
-          if (filename == null) {
-            filename = "import.xlsx";
-          }
-          analysisError = null;
-          analysis = null;
-          try {
-            analysis = Excel.analyze(new ByteArrayInputStream(fileBytes), 5);
-          } catch (Exception e) {
-            log.warn("Errore analisi file: " + e.getMessage());
-            analysisError = e.getMessage();
-          }
-          if (analysisError != null) {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Errore nel file: " + analysisError)
-               .out(null)
-               .send();
-          } else {
-            tmpFile = createTempFile(filename, fileBytes);
-            sessionId = UUID.randomUUID().toString();
-            dao = new ImportSessionDAO(db);
-            dao.create(
-              sessionId,
-              filename,
-              tmpFile.toString(),
-              analysis.totalRows,
-              Json.encode(analysis.headers),
-              Json.encode(analysis.previewRows)
-            );
-            out = new HashMap<>();
-            out.put("sessionId", sessionId);
-            out.put("filename", filename);
-            out.put("rowCount", analysis.totalRows);
-            out.put("headers", analysis.headers);
-            out.put("preview", analysis.previewRows);
-            out.put("warnings", analysis.warnings);
-            res.status(200)
-               .contentType("application/json")
-               .err(false)
-               .log(null)
-               .out(out)
-               .send();
-          }
-        }
-      } catch (JWTVerificationException e) {
+        analysis = Excel.analyze(new ByteArrayInputStream(fileBytes), 5);
+      } catch (Exception e) {
+        log.warn("Errore analisi file: " + e.getMessage());
+        analysisError = e.getMessage();
+      }
+      if (analysisError != null) {
         res.status(200)
            .contentType("application/json")
            .err(true)
-           .log("Token non valido o scaduto")
+           .log("Errore nel file: " + analysisError)
            .out(null)
+           .send();
+      } else {
+        tmpFile   = createTempFile(filename, fileBytes);
+        sessionId = UUID.randomUUID().toString();
+        dao       = new ImportSessionDAO(db);
+        dao.create(
+          sessionId,
+          filename,
+          tmpFile.toString(),
+          analysis.totalRows,
+          Json.encode(analysis.headers),
+          Json.encode(analysis.previewRows)
+        );
+        out = new HashMap<>();
+        out.put("sessionId", sessionId);
+        out.put("filename",  filename);
+        out.put("rowCount",  analysis.totalRows);
+        out.put("headers",   analysis.headers);
+        out.put("preview",   analysis.previewRows);
+        out.put("warnings",  analysis.warnings);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(out)
            .send();
       }
     }
@@ -177,61 +139,41 @@ public class ImporterHandler
    * PUT /api/import/{id}/mapping — salva la mappatura colonne → campi. Body: {@code {"mapping": {...}}}.
    */
   @SuppressWarnings("unchecked")
-  public void mapping(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void mapping(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String sessionId;
     ImportSessionDAO dao;
-    ImportSessionDTO session;
+    ImportSessionDTO importSession;
     HashMap<String, Object> body;
     Object mappingObj;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    sessionId     = req.urlArgs().get("id");
+    dao           = new ImportSessionDAO(db);
+    importSession = dao.findById(sessionId);
+    if (importSession == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Sessione non trovata")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        sessionId = req.urlArgs().get("id");
-        dao = new ImportSessionDAO(db);
-        session = dao.findById(sessionId);
-        if (session == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Sessione non trovata")
-             .out(null)
-             .send();
-        } else {
-          body = Json.decode(req.getBody(), HashMap.class);
-          mappingObj = body.get("mapping");
-          if (mappingObj == null) {
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Parametro 'mapping' mancante")
-               .out(null)
-               .send();
-          } else {
-            dao.updateMapping(sessionId, Json.encode(mappingObj));
-            res.status(200)
-               .contentType("application/json")
-               .err(false)
-               .log(null)
-               .out(null)
-               .send();
-          }
-        }
-      } catch (JWTVerificationException e) {
+      body       = Json.decode(req.getBody(), HashMap.class);
+      mappingObj = body.get("mapping");
+      if (mappingObj == null) {
         res.status(200)
            .contentType("application/json")
            .err(true)
-           .log("Token non valido o scaduto")
+           .log("Parametro 'mapping' mancante")
+           .out(null)
+           .send();
+      } else {
+        dao.updateMapping(sessionId, Json.encode(mappingObj));
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
            .out(null)
            .send();
       }
@@ -242,12 +184,11 @@ public class ImporterHandler
    * GET /api/import/{id}/validate — valida le righe del file con la mappatura salvata.
    */
   @SuppressWarnings("unchecked")
-  public void validate(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void validate(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String sessionId;
     ImportSessionDAO dao;
-    ImportSessionDTO session;
+    ImportSessionDTO importSession;
     HashMap<String, Object> mapping;
     List<Map<String, Object>> rows;
     List<HashMap<String, Object>> result;
@@ -257,109 +198,90 @@ public class ImporterHandler
     int warningCount;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.READ);
+    sessionId     = req.urlArgs().get("id");
+    dao           = new ImportSessionDAO(db);
+    importSession = dao.findById(sessionId);
+    if (importSession == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Sessione non trovata")
+         .out(null)
+         .send();
+    } else if (importSession.columnMapping() == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Mappatura colonne non configurata")
+         .out(null)
+         .send();
+    } else if (!Files.exists(Paths.get(importSession.filePath()))) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("File di importazione non trovato")
          .out(null)
          .send();
     } else {
-      try {
-        Auth.get().verifyAccessToken(token);
-        sessionId = req.urlArgs().get("id");
-        dao = new ImportSessionDAO(db);
-        session = dao.findById(sessionId);
-        if (session == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Sessione non trovata")
-             .out(null)
-             .send();
-        } else if (session.columnMapping() == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Mappatura colonne non configurata")
-             .out(null)
-             .send();
-        } else if (!Files.exists(Paths.get(session.filePath()))) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("File di importazione non trovato")
-             .out(null)
-             .send();
-        } else {
-          mapping = Json.decode(session.columnMapping(), HashMap.class);
-          rows = Excel.read(new FileInputStream(session.filePath()));
-          result = new ArrayList<>();
-          seenPhones = new HashSet<>();
-          validCount = 0;
-          errorCount = 0;
-          warningCount = 0;
-          for (Map<String, Object> row : rows) {
-            HashMap<String, Object> mapped;
-            List<String> errors;
-            List<String> warnings;
-            String nome;
-            String cognome;
-            String ragioneSociale;
-            String telefono;
-            HashMap<String, Object> r;
-            mapped = applyMapping(row, mapping);
-            errors = new ArrayList<>();
-            warnings = new ArrayList<>();
-            nome = stringify(mapped.get("nome"));
-            cognome = stringify(mapped.get("cognome"));
-            ragioneSociale = stringify(mapped.get("ragione_sociale"));
-            telefono = normalize(stringify(mapped.get("telefono")));
-            if (nome.isEmpty() && cognome.isEmpty() && ragioneSociale.isEmpty()) {
-              errors.add("Identificatore mancante (nome, cognome o ragione sociale)");
-            }
-            if (telefono.isEmpty()) {
-              warnings.add("Telefono mancante");
-            } else if (seenPhones.contains(telefono)) {
-              warnings.add("Telefono duplicato nel file");
-            } else {
-              seenPhones.add(telefono);
-            }
-            r = new HashMap<>();
-            r.put("data", mapped);
-            r.put("errors", errors);
-            r.put("warnings", warnings);
-            r.put("status", errors.isEmpty() ? (warnings.isEmpty() ? "ok" : "warning") : "error");
-            result.add(r);
-            if (!errors.isEmpty()) {
-              errorCount++;
-            } else if (!warnings.isEmpty()) {
-              warningCount++;
-            } else {
-              validCount++;
-            }
-          }
-          out = new HashMap<>();
-          out.put("valid", validCount);
-          out.put("errors", errorCount);
-          out.put("warnings", warningCount);
-          out.put("rows", result);
-          res.status(200)
-             .contentType("application/json")
-             .err(false)
-             .log(null)
-             .out(out)
-             .send();
+      mapping      = Json.decode(importSession.columnMapping(), HashMap.class);
+      rows         = Excel.read(new FileInputStream(importSession.filePath()));
+      result       = new ArrayList<>();
+      seenPhones   = new HashSet<>();
+      validCount   = 0;
+      errorCount   = 0;
+      warningCount = 0;
+      for (Map<String, Object> row : rows) {
+        HashMap<String, Object> mapped;
+        List<String> errors;
+        List<String> warnings;
+        String nome;
+        String cognome;
+        String ragioneSociale;
+        String telefono;
+        HashMap<String, Object> r;
+        mapped        = applyMapping(row, mapping);
+        errors        = new ArrayList<>();
+        warnings      = new ArrayList<>();
+        nome          = stringify(mapped.get("nome"));
+        cognome       = stringify(mapped.get("cognome"));
+        ragioneSociale = stringify(mapped.get("ragione_sociale"));
+        telefono      = normalize(stringify(mapped.get("telefono")));
+        if (nome.isEmpty() && cognome.isEmpty() && ragioneSociale.isEmpty()) {
+          errors.add("Identificatore mancante (nome, cognome o ragione sociale)");
         }
-      } catch (JWTVerificationException e) {
-        res.status(200)
-           .contentType("application/json")
-           .err(true)
-           .log("Token non valido o scaduto")
-           .out(null)
-           .send();
+        if (telefono.isEmpty()) {
+          warnings.add("Telefono mancante");
+        } else if (seenPhones.contains(telefono)) {
+          warnings.add("Telefono duplicato nel file");
+        } else {
+          seenPhones.add(telefono);
+        }
+        r = new HashMap<>();
+        r.put("data",    mapped);
+        r.put("errors",  errors);
+        r.put("warnings", warnings);
+        r.put("status",  errors.isEmpty() ? (warnings.isEmpty() ? "ok" : "warning") : "error");
+        result.add(r);
+        if (!errors.isEmpty()) {
+          errorCount++;
+        } else if (!warnings.isEmpty()) {
+          warningCount++;
+        } else {
+          validCount++;
+        }
       }
+      out = new HashMap<>();
+      out.put("valid",    validCount);
+      out.put("errors",   errorCount);
+      out.put("warnings", warningCount);
+      out.put("rows",     result);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(out)
+         .send();
     }
   }
 
@@ -367,12 +289,11 @@ public class ImporterHandler
    * POST /api/import/{id}/execute — esegue l'importazione dei contatti nel database.
    */
   @SuppressWarnings("unchecked")
-  public void execute(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void execute(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    String token;
     String sessionId;
     ImportSessionDAO dao;
-    ImportSessionDTO session;
+    ImportSessionDTO importSession;
     HashMap<String, Object> body;
     HashMap<String, Object> mapping;
     Integer listaId;
@@ -387,149 +308,130 @@ public class ImporterHandler
     String txError;
     HashMap<String, Object> out;
 
-    token = req.getCookie("access_token");
-    if (token == null) {
+    session.require(Role.USER, Permission.WRITE);
+    sessionId     = req.urlArgs().get("id");
+    dao           = new ImportSessionDAO(db);
+    importSession = dao.findById(sessionId);
+    if (importSession == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Non autenticato")
+         .log("Sessione non trovata")
+         .out(null)
+         .send();
+    } else if (importSession.columnMapping() == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Mappatura colonne non configurata")
+         .out(null)
+         .send();
+    } else if (!Files.exists(Paths.get(importSession.filePath()))) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("File di importazione non trovato")
          .out(null)
          .send();
     } else {
+      body          = Json.decode(req.getBody(), HashMap.class);
+      listaId       = body.get("listaId") != null ? ((Number) body.get("listaId")).intValue() : null;
+      consenso      = body.get("consenso") instanceof Boolean ? (Boolean) body.get("consenso") : false;
+      mapping       = Json.decode(importSession.columnMapping(), HashMap.class);
+      rows          = Excel.read(new FileInputStream(importSession.filePath()));
+      contattoDao   = new ContattoDAO(db);
+      listaDao      = listaId != null ? new ListaDAO(db) : null;
+      importedCount = 0;
+      skippedCount  = 0;
+      warningCount  = 0;
+      txFailed      = false;
+      txError       = null;
+      db.begin();
       try {
-        Auth.get().verifyAccessToken(token);
-        sessionId = req.urlArgs().get("id");
-        dao = new ImportSessionDAO(db);
-        session = dao.findById(sessionId);
-        if (session == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Sessione non trovata")
-             .out(null)
-             .send();
-        } else if (session.columnMapping() == null) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("Mappatura colonne non configurata")
-             .out(null)
-             .send();
-        } else if (!Files.exists(Paths.get(session.filePath()))) {
-          res.status(200)
-             .contentType("application/json")
-             .err(true)
-             .log("File di importazione non trovato")
-             .out(null)
-             .send();
-        } else {
-          body = Json.decode(req.getBody(), HashMap.class);
-          listaId = body.get("listaId") != null ? ((Number) body.get("listaId")).intValue() : null;
-          consenso = body.get("consenso") instanceof Boolean ? (Boolean) body.get("consenso") : false;
-          mapping = Json.decode(session.columnMapping(), HashMap.class);
-          rows = Excel.read(new FileInputStream(session.filePath()));
-          contattoDao = new ContattoDAO(db);
-          listaDao = listaId != null ? new ListaDAO(db) : null;
-          importedCount = 0;
-          skippedCount = 0;
-          warningCount = 0;
-          txFailed = false;
-          txError = null;
-          db.begin();
-          try {
-            for (Map<String, Object> row : rows) {
-              HashMap<String, Object> mapped;
-              String nome;
-              String cognome;
-              String ragioneSociale;
-              String telefono;
-              String email;
-              String indirizzo;
-              String citta;
-              String cap;
-              String provincia;
-              String note;
-              ContattoDTO c;
-              int newId;
-              mapped = applyMapping(row, mapping);
-              nome = capitalize(stringify(mapped.get("nome")));
-              cognome = capitalize(stringify(mapped.get("cognome")));
-              ragioneSociale = stringify(mapped.get("ragione_sociale"));
-              telefono = normalize(stringify(mapped.get("telefono")));
-              email = stringify(mapped.get("email")).toLowerCase();
-              indirizzo = stringify(mapped.get("indirizzo"));
-              citta = stringify(mapped.get("citta"));
-              cap = stringify(mapped.get("cap"));
-              provincia = stringify(mapped.get("provincia"));
-              note = stringify(mapped.get("note"));
-              if (nome.isEmpty() && cognome.isEmpty() && ragioneSociale.isEmpty()) {
-                skippedCount++;
-                continue;
-              }
-              if (!telefono.isEmpty() && contattoDao.existsByTelefono(telefono, null)) {
-                warningCount++;
-                continue;
-              }
-              c = new ContattoDTO(
-                null,
-                nome.isEmpty() ? null : nome,
-                cognome.isEmpty() ? null : cognome,
-                ragioneSociale.isEmpty() ? null : ragioneSociale,
-                telefono.isEmpty() ? null : telefono,
-                email.isEmpty() ? null : email,
-                indirizzo.isEmpty() ? null : indirizzo,
-                citta.isEmpty() ? null : citta,
-                cap.isEmpty() ? null : cap,
-                provincia.isEmpty() ? null : provincia,
-                note.isEmpty() ? null : note,
-                1,
-                consenso,
-                false,
-                null,
-                null,
-                0L
-              );
-              newId = contattoDao.insert(c);
-              if (listaDao != null) {
-                listaDao.addContatto(listaId, newId);
-              }
-              importedCount++;
-            }
-            db.commit();
-          } catch (Exception e) {
-            db.rollback();
-            txFailed = true;
-            txError = e.getMessage();
+        for (Map<String, Object> row : rows) {
+          HashMap<String, Object> mapped;
+          String nome;
+          String cognome;
+          String ragioneSociale;
+          String telefono;
+          String email;
+          String indirizzo;
+          String citta;
+          String cap;
+          String provincia;
+          String note;
+          ContattoDTO c;
+          int newId;
+          mapped         = applyMapping(row, mapping);
+          nome           = capitalize(stringify(mapped.get("nome")));
+          cognome        = capitalize(stringify(mapped.get("cognome")));
+          ragioneSociale = stringify(mapped.get("ragione_sociale"));
+          telefono       = normalize(stringify(mapped.get("telefono")));
+          email          = stringify(mapped.get("email")).toLowerCase();
+          indirizzo      = stringify(mapped.get("indirizzo"));
+          citta          = stringify(mapped.get("citta"));
+          cap            = stringify(mapped.get("cap"));
+          provincia      = stringify(mapped.get("provincia"));
+          note           = stringify(mapped.get("note"));
+          if (nome.isEmpty() && cognome.isEmpty() && ragioneSociale.isEmpty()) {
+            skippedCount++;
+            continue;
           }
-          if (txFailed) {
-            dao.updateStatus(sessionId, "failed", txError);
-            log.error("Errore durante importazione sessione " + sessionId + ": " + txError);
-            res.status(200)
-               .contentType("application/json")
-               .err(true)
-               .log("Errore durante l'importazione")
-               .out(null)
-               .send();
-          } else {
-            dao.markCompleted(sessionId);
-            out = new HashMap<>();
-            out.put("imported", importedCount);
-            out.put("skipped", skippedCount);
-            out.put("warnings", warningCount);
-            res.status(200)
-               .contentType("application/json")
-               .err(false)
-               .log(null)
-               .out(out)
-               .send();
+          if (!telefono.isEmpty() && contattoDao.existsByTelefono(telefono, null)) {
+            warningCount++;
+            continue;
           }
+          c = new ContattoDTO(
+            null,
+            nome.isEmpty()           ? null : nome,
+            cognome.isEmpty()        ? null : cognome,
+            ragioneSociale.isEmpty() ? null : ragioneSociale,
+            telefono.isEmpty()       ? null : telefono,
+            email.isEmpty()          ? null : email,
+            indirizzo.isEmpty()      ? null : indirizzo,
+            citta.isEmpty()          ? null : citta,
+            cap.isEmpty()            ? null : cap,
+            provincia.isEmpty()      ? null : provincia,
+            note.isEmpty()           ? null : note,
+            1,
+            consenso,
+            false,
+            null,
+            null,
+            0L
+          );
+          newId = contattoDao.insert(c);
+          if (listaDao != null) {
+            listaDao.addContatto(listaId, newId);
+          }
+          importedCount++;
         }
-      } catch (JWTVerificationException e) {
+        db.commit();
+      } catch (Exception e) {
+        db.rollback();
+        txFailed = true;
+        txError  = e.getMessage();
+      }
+      if (txFailed) {
+        dao.updateStatus(sessionId, "failed", txError);
+        log.error("Errore durante importazione sessione " + sessionId + ": " + txError);
         res.status(200)
            .contentType("application/json")
            .err(true)
-           .log("Token non valido o scaduto")
+           .log("Errore durante l'importazione")
            .out(null)
+           .send();
+      } else {
+        dao.markCompleted(sessionId);
+        out = new HashMap<>();
+        out.put("imported", importedCount);
+        out.put("skipped",  skippedCount);
+        out.put("warnings", warningCount);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(out)
            .send();
       }
     }
@@ -541,8 +443,8 @@ public class ImporterHandler
     Path dir;
     Path file;
 
-    ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : ".xlsx";
-    dir = Path.of(System.getProperty("java.io.tmpdir"), "hola_import");
+    ext  = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : ".xlsx";
+    dir  = Path.of(System.getProperty("java.io.tmpdir"), "hola_import");
     Files.createDirectories(dir);
     file = Files.createTempFile(dir, "import_", ext);
     Files.write(file, bytes);
@@ -552,11 +454,12 @@ public class ImporterHandler
   private static HashMap<String, Object> applyMapping(Map<String, Object> row, HashMap<String, Object> mapping)
   {
     HashMap<String, Object> mapped;
+
     mapped = new HashMap<>();
     for (Map.Entry<String, Object> entry : mapping.entrySet()) {
       String colFile;
       String campoSys;
-      colFile = entry.getKey();
+      colFile  = entry.getKey();
       campoSys = entry.getValue().toString();
       if (row.containsKey(colFile)) {
         mapped.put(campoSys, row.get(colFile));
@@ -585,7 +488,7 @@ public class ImporterHandler
       result = s;
     } else {
       words = s.split("\\s+");
-      sb = new StringBuilder();
+      sb    = new StringBuilder();
       for (String w : words) {
         if (!w.isEmpty()) {
           if (sb.length() > 0) {
@@ -605,8 +508,9 @@ public class ImporterHandler
   private static HashMap<String, String> campo(String key, String label)
   {
     HashMap<String, String> m;
+
     m = new HashMap<>();
-    m.put("key", key);
+    m.put("key",   key);
     m.put("label", label);
     return m;
   }

@@ -41,12 +41,24 @@ public class Auth
     this.accessExpiry = accessExpirySeconds;
   }
 
-  /** Da chiamare una volta in App.main() prima di avviare il server. */
+  /**
+   * Inizializza il singleton Auth con il segreto JWT e la durata degli access token.
+   * Da chiamare una volta in App.main() prima di avviare il server.
+   *
+   * @param secret               chiave segreta per la firma JWT HS256
+   * @param accessExpirySeconds  durata in secondi degli access token
+   */
   public static void init(String secret, int accessExpirySeconds)
   {
     instance = new Auth(secret, accessExpirySeconds);
   }
 
+  /**
+   * Restituisce l'istanza singleton Auth.
+   * Lancia {@link IllegalStateException} se {@link #init} non è stato chiamato.
+   *
+   * @return istanza Auth inizializzata
+   */
   public static Auth get()
   {
     if (instance == null) {
@@ -107,13 +119,16 @@ public class Auth
   public String extractJTI(String token)
   {
     DecodedJWT jwt;
+    String result;
 
+    result = null;
     try {
       jwt = JWT.decode(token);
-      return jwt.getId();
+      result = jwt.getId();
     } catch (Exception e) {
-      return null;
+      result = null;
     }
+    return result;
   }
 
   /**
@@ -127,21 +142,28 @@ public class Auth
   {
     DecodedJWT jwt;
     Date exp;
+    long result;
 
+    result = 0;
     try {
       jwt = JWT.decode(token);
       exp = jwt.getExpiresAt();
-      return exp != null ? exp.getTime() : 0;
+      result = exp != null ? exp.getTime() : 0;
     } catch (Exception e) {
-      return 0;
+      result = 0;
     }
+    return result;
   }
 
   // -------------------------
   // REFRESH TOKEN
   // -------------------------
 
-  /** Genera un token opaco casuale (64 hex char) da conservare nel DB. */
+  /**
+   * Genera un token opaco casuale di 64 caratteri esadecimali da conservare nel DB.
+   *
+   * @return token di refresh in formato hex
+   */
   public static String generateRefreshToken()
   {
     String result;
@@ -154,9 +176,9 @@ public class Auth
   // PASSWORD POLICY
   // -------------------------
 
-  private static final String LOWER   = "abcdefghijklmnopqrstuvwxyz";
-  private static final String UPPER   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  private static final String DIGITS  = "0123456789";
+  private static final String LOWER = "abcdefghijklmnopqrstuvwxyz";
+  private static final String UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  private static final String DIGITS = "0123456789";
   private static final String SPECIAL = "!@#$%&*?+-_=";
 
   /**
@@ -170,31 +192,48 @@ public class Auth
     boolean hasUpper;
     boolean hasDigit;
     boolean hasSpecial;
+    String result;
 
+    result = null;
     if (password == null || password.length() < 8) {
-      return "La password deve avere almeno 8 caratteri";
+      result = "La password deve avere almeno 8 caratteri";
+    } else if (password.length() > 32) {
+      result = "La password non può superare i 32 caratteri";
+    } else {
+      hasLower = false;
+      hasUpper = false;
+      hasDigit = false;
+      hasSpecial = false;
+      for (char c : password.toCharArray()) {
+        if (Character.isLowerCase(c)) {
+          hasLower = true;
+        } else if (Character.isUpperCase(c)) {
+          hasUpper = true;
+        } else if (Character.isDigit(c)) {
+          hasDigit = true;
+        } else {
+          hasSpecial = true;
+        }
+      }
+      if (!hasLower) {
+        result = "La password deve contenere almeno una lettera minuscola";
+      } else if (!hasUpper) {
+        result = "La password deve contenere almeno una lettera maiuscola";
+      } else if (!hasDigit) {
+        result = "La password deve contenere almeno un numero";
+      } else if (!hasSpecial) {
+        result = "La password deve contenere almeno un carattere speciale";
+      }
     }
-    if (password.length() > 32) {
-      return "La password non può superare i 32 caratteri";
-    }
-    hasLower   = false;
-    hasUpper   = false;
-    hasDigit   = false;
-    hasSpecial = false;
-    for (char c : password.toCharArray()) {
-      if      (Character.isLowerCase(c)) hasLower   = true;
-      else if (Character.isUpperCase(c)) hasUpper   = true;
-      else if (Character.isDigit(c))     hasDigit   = true;
-      else                               hasSpecial = true;
-    }
-    if (!hasLower)   return "La password deve contenere almeno una lettera minuscola";
-    if (!hasUpper)   return "La password deve contenere almeno una lettera maiuscola";
-    if (!hasDigit)   return "La password deve contenere almeno un numero";
-    if (!hasSpecial) return "La password deve contenere almeno un carattere speciale";
-    return null;
+    return result;
   }
 
-  /** Genera una password casuale di 12 caratteri conforme alla policy. */
+  /**
+   * Genera una password casuale di 12 caratteri conforme alla policy
+   * (almeno una minuscola, una maiuscola, una cifra e un carattere speciale).
+   *
+   * @return password generata
+   */
   public static String generatePassword()
   {
     SecureRandom rnd;
@@ -221,7 +260,11 @@ public class Auth
     return new String(pwd);
   }
 
-  /** Genera un PIN numerico di 8 cifre per la 2FA. */
+  /**
+   * Genera un PIN numerico casuale di 8 cifre per la 2FA.
+   *
+   * @return stringa di 8 cifre
+   */
   public static String generatePin()
   {
     SecureRandom rnd;

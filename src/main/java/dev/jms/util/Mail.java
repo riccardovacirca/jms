@@ -66,36 +66,44 @@ public class Mail
 
     if (!config.get("mail.enabled", "false").equalsIgnoreCase("true")) {
       System.out.println("[info] Mail disabilitato (mail.enabled=false)");
-      return;
+    } else {
+      host = config.get("mail.host", "");
+      from = config.get("mail.from", "");
+
+      if (host.isBlank() || from.isBlank()) {
+        System.out.println("[info] Mail non configurato, invio email disabilitato");
+      } else {
+        port = config.getInt("mail.port", 1025);
+        auth = config.get("mail.auth", "false").equalsIgnoreCase("true");
+        user = config.get("mail.user", "");
+        password = config.get("mail.password", "");
+
+        if (auth && (user.isBlank() || password.isBlank())) {
+          System.out.println("[warn] Mail: mail.auth=true ma mail.user o mail.password mancanti, invio email disabilitato");
+        } else {
+          instance = new Mail(host, port, auth, user, password, from);
+          System.out.println("[info] Mail inizializzato (" + host + ":" + port + ")");
+        }
+      }
     }
-
-    host = config.get("mail.host", "");
-    from = config.get("mail.from", "");
-
-    if (host.isBlank() || from.isBlank()) {
-      System.out.println("[info] Mail non configurato, invio email disabilitato");
-      return;
-    }
-
-    port     = config.getInt("mail.port", 1025);
-    auth     = config.get("mail.auth", "false").equalsIgnoreCase("true");
-    user     = config.get("mail.user", "");
-    password = config.get("mail.password", "");
-
-    if (auth && (user.isBlank() || password.isBlank())) {
-      System.out.println("[warn] Mail: mail.auth=true ma mail.user o mail.password mancanti, invio email disabilitato");
-      return;
-    }
-
-    instance = new Mail(host, port, auth, user, password, from);
-    System.out.println("[info] Mail inizializzato (" + host + ":" + port + ")");
   }
 
+  /**
+   * Restituisce {@code true} se il client SMTP è stato inizializzato con successo.
+   *
+   * @return {@code true} se Mail è configurato e pronto per l'invio
+   */
   public static boolean isConfigured()
   {
     return instance != null;
   }
 
+  /**
+   * Restituisce l'istanza singleton Mail.
+   * Lancia {@link IllegalStateException} se {@link #init} non è stato chiamato o è fallito.
+   *
+   * @return istanza Mail inizializzata
+   */
   public static Mail get()
   {
     if (instance == null) {
@@ -104,7 +112,14 @@ public class Mail
     return instance;
   }
 
-  /** Invia un'email in testo semplice. */
+  /**
+   * Invia un'email in testo semplice.
+   *
+   * @param to      indirizzo email del destinatario
+   * @param subject oggetto dell'email
+   * @param text    corpo del messaggio in testo semplice
+   * @throws Exception se l'invio fallisce
+   */
   public void send(String to, String subject, String text) throws Exception
   {
     MimeMessage msg;
@@ -117,7 +132,14 @@ public class Mail
     Transport.send(msg);
   }
 
-  /** Invia un'email con corpo HTML. */
+  /**
+   * Invia un'email con corpo HTML.
+   *
+   * @param to      indirizzo email del destinatario
+   * @param subject oggetto dell'email
+   * @param html    corpo del messaggio in formato HTML
+   * @throws Exception se l'invio fallisce
+   */
   public void sendHtml(String to, String subject, String html) throws Exception
   {
     MimeMessage msg;

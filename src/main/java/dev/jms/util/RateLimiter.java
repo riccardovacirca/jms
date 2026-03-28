@@ -45,17 +45,20 @@ public class RateLimiter
   {
     AttemptRecord record;
     long now;
+    boolean result;
 
     record = attempts.get(key);
-    if (record == null) {
-      return false;
+    result = false;
+    if (record != null) {
+      now = Instant.now().getEpochSecond();
+      if (now - record.firstAttempt > windowSeconds) {
+        attempts.remove(key);
+        result = false;
+      } else {
+        result = record.count >= maxAttempts;
+      }
     }
-    now = Instant.now().getEpochSecond();
-    if (now - record.firstAttempt > windowSeconds) {
-      attempts.remove(key);
-      return false;
-    }
-    return record.count >= maxAttempts;
+    return result;
   }
 
   /**

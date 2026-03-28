@@ -5,6 +5,7 @@ import dev.jms.util.Auth;
 import dev.jms.util.JWTBlacklist;
 import dev.jms.util.RateLimiter;
 import dev.jms.util.Scheduler;
+import dev.jms.util.Session;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Mail;
@@ -35,18 +36,18 @@ public class App
    */
   public static void main(String[] args)
   {
-    Config              config;
-    int                 port;
-    int                 asyncPoolSize;
-    ResourceHandler     staticHandler;
+    Config config;
+    int port;
+    int asyncPoolSize;
+    ResourceHandler staticHandler;
     PathTemplateHandler paths;
-    Router              router;
-    Undertow            server;
-    DataSource          ds;
+    Router router;
+    Undertow server;
+    DataSource ds;
 
     // === CARICAMENTO CONFIGURAZIONE ===
-    config        = new Config();
-    port          = config.getInt("server.port", 8080);
+    config = new Config();
+    port = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
 
     // === INIZIALIZZAZIONE UTILITY CORE ===
@@ -103,7 +104,7 @@ public class App
 
     // PathTemplateHandler gestisce routing Undertow con fallback a staticHandler.
     // Se nessuna route API matcha, serve file statici (SPA routing lato client).
-    paths  = new PathTemplateHandler(staticHandler);
+    paths = new PathTemplateHandler(staticHandler);
 
     // Router wrapper per registrare route con HandlerAdapter automatico.
     // Fornisce metodi route() e async() per route con path parameters.
@@ -124,9 +125,12 @@ public class App
       }
     });
 
-    // [MODULE_ROUTES]
     // Marker per inserimento route da moduli installati.
     // cmd module import inserisce chiamate a Routes.register(router) qui.
+    
+    // [MODULE_ROUTES]
+    dev.jms.app.module.user.Routes.register(router, config);
+    dev.jms.app.module.home.Routes.register(router);
 
     // === AVVIO SERVER ===
 
@@ -145,6 +149,7 @@ public class App
       Scheduler.shutdown();
       RateLimiter.shutdown();
       JWTBlacklist.shutdown();
+      Session.shutdown();
     }));
 
     server.start();

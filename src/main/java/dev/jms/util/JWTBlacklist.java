@@ -41,17 +41,20 @@ public class JWTBlacklist
   {
     Long expiresAt;
     long now;
+    boolean result;
 
     expiresAt = revokedTokens.get(jti);
-    if (expiresAt == null) {
-      return false;
+    result = false;
+    if (expiresAt != null) {
+      now = System.currentTimeMillis();
+      if (now > expiresAt) {
+        revokedTokens.remove(jti);
+        result = false;
+      } else {
+        result = true;
+      }
     }
-    now = System.currentTimeMillis();
-    if (now > expiresAt) {
-      revokedTokens.remove(jti);
-      return false;
-    }
-    return true;
+    return result;
   }
 
   /** Avvia il cleanup automatico se non gia' attivo. */

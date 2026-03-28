@@ -5,6 +5,7 @@ import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Session;
 import java.util.HashMap;
 
 /**
@@ -31,7 +32,7 @@ public class AuthHandler
    * </p>
    */
   @SuppressWarnings("unchecked")
-  public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void post(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     HashMap<String, Object> body;
     String apiKey;

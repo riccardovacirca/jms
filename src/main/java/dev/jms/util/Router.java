@@ -49,7 +49,8 @@ public class Router
     HandlerAdapter adapter;
 
     adapter = adapters.computeIfAbsent(path, p -> {
-      HandlerAdapter a = new HandlerAdapter(ds);
+      HandlerAdapter a;
+      a = new HandlerAdapter(ds);
       paths.add(p, a);
       return a;
     });
@@ -70,7 +71,8 @@ public class Router
     HandlerAdapter adapter;
 
     adapter = adapters.computeIfAbsent(path, p -> {
-      HandlerAdapter a = new HandlerAdapter(ds);
+      HandlerAdapter a;
+      a = new HandlerAdapter(ds);
       paths.add(p, a);
       return a;
     });

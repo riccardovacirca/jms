@@ -222,6 +222,28 @@ All'avvio, `App.java` legge il manifest e logga `[warn]` per ogni dipendenza non
 | `asynctest` | Test async vs blocking (non per produzione) | — |
 | `schedulertest` | Test Scheduler (non per produzione) | — |
 
+## CLI dei moduli
+
+Alcuni moduli espongono script di utilità nella cartella `module/<nome>/cli/`. Questi script possono essere eseguiti tramite:
+
+```bash
+cmd module cli <nome_modulo> <script> [OPTIONS]
+```
+
+Il comando risolve `<script>` in `module/<nome_modulo>/cli/<script>.sh` e lo esegue passando `[OPTIONS]` invariato.
+
+**Esempio:**
+
+```bash
+cmd module cli aes sign --file document.pdf
+# esegue: module/aes/cli/sign.sh --file document.pdf
+```
+
+**Note:**
+- Gli script vengono cercati nella cartella `module/` originale (non nel path di installazione `app/module/`).
+- `cmd module cli` non è disponibile in produzione — è uno strumento di sviluppo.
+- I moduli non sono obbligati ad avere script CLI; la cartella `cli/` è opzionale.
+
 ## Invarianti
 
 - `jms/gui/src/config.js` non deve contenere entry specifiche del progetto

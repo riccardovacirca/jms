@@ -12,6 +12,13 @@ public class Json
     mapper = new ObjectMapper().disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
   }
 
+  /**
+   * Serializza un oggetto Java in stringa JSON.
+   *
+   * @param obj oggetto da serializzare
+   * @return stringa JSON
+   * @throws RuntimeException se la serializzazione fallisce
+   */
   public static String encode(Object obj)
   {
     String result;
@@ -23,6 +30,15 @@ public class Json
     return result;
   }
 
+  /**
+   * Deserializza una stringa JSON nel tipo specificato.
+   *
+   * @param json stringa JSON da deserializzare
+   * @param type classe di destinazione
+   * @param <T>  tipo generico di ritorno
+   * @return istanza del tipo specificato
+   * @throws RuntimeException se la deserializzazione fallisce
+   */
   public static <T> T decode(String json, Class<T> type)
   {
     T result;

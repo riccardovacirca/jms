@@ -31,6 +31,7 @@ cmd module export --name <nome> [--vers 1.2.3]  # Esporta modulo in cartella mod
 cmd module import <path>                         # Installa modulo da path relativo a module/ (cartella o .tar.gz)
 cmd module dist <path>                           # Pacchettizza modulo (path relativo a module/) → dist/<nome>-<vers>.tar.gz
 cmd module remove --name <nome>                  # Disinstalla modulo usando il tracker installato
+cmd module cli <module> <script> [OPTIONS]       # Esegue module/<module>/cli/<script>.sh (solo in sviluppo)
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
 
@@ -178,7 +179,7 @@ Key configuration parameters:
 
 **Auth:** PBKDF2 password hashing (16-byte salt, 310k iterations, SHA-256) in `Auth.java`. Two-token flow: access token (JWT HS256, 15 min) + refresh token (64-char hex, stored in `refresh_tokens` table, 7 days). JWT claims: `sub` (accountId), `username`, `ruolo`, `ruolo_level` (int), `must_change_password`.
 
-**Session** (`Session.java`): Per-request JWT session, instantiated by `HandlerAdapter` alongside `HttpRequest`/`HttpResponse` and passed as the third handler argument. Lazy validation — JWT is verified only on first access, result cached for the request lifetime. Key methods: `session.require(Role, Permission)` (throws `UnauthorizedException` if not satisfied), `session.isAuthenticated()`, `session.sub()` (account id), `session.username()`, `session.ruolo()`, `session.ruoloLevel()`, `session.mustChangePassword()`, `session.claims()` (empty map if not authenticated). Roles: `GUEST(0)`, `USER(1)`, `ADMIN(2)`, `ROOT(3)`. `GUEST + READ` is always permitted; all other combinations require a valid JWT with sufficient `ruolo_level`.
+**Session** (`Session.java`): Dual-role per-request object — JWT validation + server-side in-memory storage. Instantiated by `HandlerAdapter` alongside `HttpRequest`/`HttpResponse` and passed as the third handler argument. JWT is validated lazily on first access; result is cached for the request lifetime. Server-side storage (`ConcurrentHashMap`, sliding TTL, 30 min default) is keyed by `session_id` cookie (64-char hex, `SecureRandom`); the session is flushed to the store automatically via a pre-send hook before HTTP headers are committed. JWT methods: `session.require(Role, Permission)` (throws `UnauthorizedException` if not satisfied), `session.isAuthenticated()`, `session.sub()`, `session.username()`, `session.ruolo()`, `session.ruoloLevel()`, `session.mustChangePassword()`, `session.claims()` (empty map if not authenticated). Storage methods: `session.getAttr(key)`, `session.setAttr(key, value)`, `session.removeAttr(key)`, `session.clearAttrs()`, `session.sessionId()`. Static config: `Session.configure(int ttlSeconds)`, `Session.shutdown()` (called in JVM shutdown hook). Roles: `GUEST(0)`, `USER(1)`, `ADMIN(2)`, `ROOT(3)`. `GUEST + READ` is always permitted; all other combinations require a valid JWT with sufficient `ruolo_level`.
 
 **JWT blacklist** (`JWTBlacklist.java`): In-memory blacklist for revoked JWTs (logout, password change). Tracks JWT ID (`jti`) until natural expiry to prevent session replay attacks. Singleton, lazy-init, thread-safe. Auto-cleanup every minute.
 
@@ -259,7 +260,7 @@ A new installation includes `status` as the only pre-installed frontend module (
 - `authorization: null` — Publicly accessible
 - `authorization: { redirectTo: '/path' }` — Protected; redirects unauthorized users
 
-**Global fetch interceptor** (`init.js`): Intercepts all `fetch()` calls and checks for authentication errors in API responses. If `err: true` with `log` matching known auth errors (`'Non autenticato'`, `'Token non valido o scaduto'`), sets `authorized` store to `false`, triggering router redirect.
+**Global fetch interceptor** (`init.js`): Replaces `window.fetch` to intercept all API responses. On `err: true` with a known auth error (`'Non autenticato'`, `'Token non valido o scaduto'`), it first attempts to refresh the token via `/api/user/auth/refresh`. If refresh succeeds, the original request is automatically retried. If refresh fails, `authorized` is set to `false`, triggering the router redirect to login. Requests to `/auth/refresh` and `/auth/login` skip the retry to prevent infinite loops.
 
 **State management** (`store.js`): Uses [nanostores](https://github.com/nanostores/nanostores) (v0.11.3) for reactive state. Exports:
 - `authorized` store (boolean) — Authentication state

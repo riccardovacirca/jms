@@ -30,6 +30,7 @@ public class HttpResponse
   private boolean _errSet;
   private boolean _logSet;
   private boolean _outSet;
+  private Runnable preSendHook;
 
   /**
    * Configura i flag di sicurezza per i cookie a livello globale.
@@ -49,6 +50,12 @@ public class HttpResponse
     this._status = -1;
   }
 
+  /**
+   * Imposta il codice di stato HTTP della risposta.
+   *
+   * @param code codice di stato HTTP (es. 200, 401, 500)
+   * @return this per chaining
+   */
   public HttpResponse status(int code)
   {
     _status = code;
@@ -56,13 +63,25 @@ public class HttpResponse
     return this;
   }
 
-  /** Può essere chiamato zero o più volte. */
+  /**
+   * Aggiunge un header HTTP alla risposta. Può essere chiamato zero o più volte.
+   *
+   * @param name  nome dell'header
+   * @param value valore dell'header
+   * @return this per chaining
+   */
   public HttpResponse header(String name, String value)
   {
     exchange.getResponseHeaders().put(new HttpString(name), value);
     return this;
   }
 
+  /**
+   * Imposta il Content-Type della risposta (es. {@code "application/json"}).
+   *
+   * @param type MIME type della risposta
+   * @return this per chaining
+   */
   public HttpResponse contentType(String type)
   {
     _contentType = type;
@@ -70,6 +89,12 @@ public class HttpResponse
     return this;
   }
 
+  /**
+   * Imposta il campo {@code err} dell'envelope JSON.
+   *
+   * @param value {@code true} se la risposta rappresenta un errore business
+   * @return this per chaining
+   */
   public HttpResponse err(boolean value)
   {
     _err = value;
@@ -77,6 +102,12 @@ public class HttpResponse
     return this;
   }
 
+  /**
+   * Imposta il campo {@code log} dell'envelope JSON (messaggio leggibile per il client).
+   *
+   * @param message messaggio da includere nella risposta, o {@code null}
+   * @return this per chaining
+   */
   public HttpResponse log(String message)
   {
     _log = message;
@@ -84,6 +115,12 @@ public class HttpResponse
     return this;
   }
 
+  /**
+   * Imposta il campo {@code out} dell'envelope JSON (payload dati della risposta).
+   *
+   * @param payload oggetto da serializzare come JSON, o {@code null}
+   * @return this per chaining
+   */
   public HttpResponse out(Object payload)
   {
     _out = payload;
@@ -91,14 +128,39 @@ public class HttpResponse
     return this;
   }
 
-  /** Può essere chiamato zero o più volte. */
+  /**
+   * Aggiunge un cookie alla risposta. Può essere chiamato zero o più volte.
+   *
+   * @param name   nome del cookie
+   * @param value  valore del cookie
+   * @param maxAge durata in secondi
+   * @return this per chaining
+   */
   public HttpResponse cookie(String name, String value, int maxAge)
   {
     exchange.setResponseCookie(Cookie.build(name, value, maxAge));
     return this;
   }
 
-  /** Cancella un cookie impostando maxAge=0 e value vuoto. Può essere chiamato zero o più volte. */
+  /**
+   * Registra un hook eseguito appena prima dell'invio della risposta, all'interno di
+   * {@link #send()}, {@link #raw(String)} e {@link #download(byte[], String, String)}.
+   * Usato da {@link HandlerAdapter} per invocare {@link Session#flush(HttpResponse)}
+   * prima che gli header vengano committati.
+   *
+   * @param hook callback da eseguire pre-send
+   */
+  void setPreSendHook(Runnable hook)
+  {
+    this.preSendHook = hook;
+  }
+
+  /**
+   * Cancella un cookie impostando {@code maxAge=0} e valore vuoto. Può essere chiamato zero o più volte.
+   *
+   * @param name nome del cookie da cancellare
+   * @return this per chaining
+   */
   public HttpResponse clearCookie(String name)
   {
     exchange.setResponseCookie(Cookie.buildCleared(name));
@@ -118,6 +180,9 @@ public class HttpResponse
     }
     if (!_ctSet) {
       throw new IllegalStateException("contentType() non chiamato");
+    }
+    if (preSendHook != null) {
+      preSendHook.run();
     }
     exchange.setStatusCode(_status);
     exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, _contentType);
@@ -151,6 +216,10 @@ public class HttpResponse
       throw new IllegalArgumentException("contentType cannot be null or empty");
     }
 
+    if (preSendHook != null) {
+      preSendHook.run();
+    }
+
     disposition = "attachment; filename=\"" + filename + "\"";
 
     exchange.setStatusCode(_status);
@@ -178,6 +247,10 @@ public class HttpResponse
     }
     if (!_outSet) {
       throw new IllegalStateException("out() non chiamato");
+    }
+
+    if (preSendHook != null) {
+      preSendHook.run();
     }
 
     body = new LinkedHashMap<>();

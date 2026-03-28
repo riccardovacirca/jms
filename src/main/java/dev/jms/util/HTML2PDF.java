@@ -128,6 +128,8 @@ public final class HTML2PDF
     boolean hasDoctype;
     boolean hasHtml;
     boolean hasBody;
+    String finalResult;
+    StringBuilder wellFormed;
 
     processed = html;
 
@@ -143,39 +145,42 @@ public final class HTML2PDF
     hasHtml = trimmed.toLowerCase().contains("<html");
     hasBody = trimmed.toLowerCase().contains("<body");
 
+    finalResult = null;
+    wellFormed = null;
+
     if (hasDoctype && hasHtml && hasBody) {
       log.debug("HTML already well-formed");
-      return processed;
+      finalResult = processed;
+    } else {
+      wellFormed = new StringBuilder();
+
+      if (!hasDoctype) {
+        wellFormed.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" ");
+        wellFormed.append("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n");
+      }
+
+      if (!hasHtml) {
+        wellFormed.append("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n");
+        wellFormed.append("<head><meta charset=\"UTF-8\" /></head>\n");
+      }
+
+      if (!hasBody) {
+        wellFormed.append("<body>\n");
+      }
+
+      wellFormed.append(processed);
+
+      if (!hasBody) {
+        wellFormed.append("\n</body>");
+      }
+
+      if (!hasHtml) {
+        wellFormed.append("\n</html>");
+      }
+
+      log.debug("HTML wrapped with well-formed XHTML structure");
+      finalResult = wellFormed.toString();
     }
-
-    StringBuilder wellFormed;
-    wellFormed = new StringBuilder();
-
-    if (!hasDoctype) {
-      wellFormed.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" ");
-      wellFormed.append("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n");
-    }
-
-    if (!hasHtml) {
-      wellFormed.append("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n");
-      wellFormed.append("<head><meta charset=\"UTF-8\" /></head>\n");
-    }
-
-    if (!hasBody) {
-      wellFormed.append("<body>\n");
-    }
-
-    wellFormed.append(processed);
-
-    if (!hasBody) {
-      wellFormed.append("\n</body>");
-    }
-
-    if (!hasHtml) {
-      wellFormed.append("\n</html>");
-    }
-
-    log.debug("HTML wrapped with well-formed XHTML structure");
-    return wellFormed.toString();
+    return finalResult;
   }
 }
