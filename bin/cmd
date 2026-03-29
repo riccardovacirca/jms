@@ -269,6 +269,19 @@ _app_run_common() {
         exit 0
     }
 
+    _dev_wait_ready() {
+        local PORT="${API_PORT:-8080}"
+        local MAX=30
+        local i=0
+        while [ $i -lt $MAX ]; do
+            (echo > /dev/tcp/localhost/$PORT) 2>/dev/null && return 0
+            sleep 0.5
+            i=$((i+1))
+        done
+        warn "[dev] Backend did not become ready in time"
+        return 1
+    }
+
     trap '_dev_cleanup' INT TERM HUP
 
     # Kill any orphaned instance of the app (e.g. from a previous crashed session)
@@ -292,6 +305,7 @@ _app_run_common() {
     info "External: http://localhost:${API_PORT_HOST:-2310}/"
 
     _dev_start
+    _dev_wait_ready && touch "$WORKSPACE/gui/src/index.html" 2>/dev/null || true
 
     while true; do
         inotifywait -r -q -e modify,close_write,create,delete,moved_to \
@@ -305,6 +319,7 @@ _app_run_common() {
         if mvn --no-transfer-progress compile -DskipTests; then
             _dev_stop
             _dev_start
+            _dev_wait_ready && touch "$WORKSPACE/gui/src/index.html" 2>/dev/null || true
         else
             warn "[dev] Compilation failed — keeping running version"
         fi
