@@ -6,9 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * DAO per la tabella {@code cti_operators}.
+ * DAO per la tabella {@code cti_operatori}.
  *
- * <p>La colonna {@code session_account_id} non ha vincolo FK verso {@code accounts}:
+ * <p>La colonna {@code sessione_account_id} non ha vincolo FK verso {@code accounts}:
  * il modulo user è opzionale. L'associazione è logica e garantita applicativamente.</p>
  */
 public class OperatorDAO
@@ -42,8 +42,8 @@ public class OperatorDAO
     long operatorId;
     OperatorDTO result;
 
-    sql  = "SELECT id, vonage_user_id, account_id, display_name, active"
-         + " FROM cti_operators WHERE session_account_id = ? AND active = TRUE LIMIT 1";
+    sql = "SELECT id, vonage_user_id, account_id, nome, attivo"
+        + " FROM cti_operatori WHERE sessione_account_id = ? AND attivo = TRUE LIMIT 1";
     rows = db.select(sql, accountId);
 
     if (!rows.isEmpty()) {
@@ -52,16 +52,16 @@ public class OperatorDAO
       result = null;
       db.begin();
       try {
-        sql  = "SELECT id FROM cti_operators"
-             + " WHERE active = TRUE AND session_account_id IS NULL"
-             + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED";
+        sql = "SELECT id FROM cti_operatori"
+            + " WHERE attivo = TRUE AND sessione_account_id IS NULL"
+            + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED";
         rows = db.select(sql);
         if (!rows.isEmpty()) {
           operatorId = DB.toLong(rows.get(0).get("id"));
-          sql = "UPDATE cti_operators SET session_account_id = ? WHERE id = ?";
+          sql = "UPDATE cti_operatori SET sessione_account_id = ? WHERE id = ?";
           db.query(sql, accountId, operatorId);
-          sql  = "SELECT id, vonage_user_id, account_id, display_name, active"
-               + " FROM cti_operators WHERE id = ?";
+          sql = "SELECT id, vonage_user_id, account_id, nome, attivo"
+              + " FROM cti_operatori WHERE id = ?";
           rows = db.select(sql, operatorId);
           result = mapRow(rows.get(0));
         }
@@ -83,7 +83,7 @@ public class OperatorDAO
   public void releaseSession(int accountId) throws Exception
   {
     String sql;
-    sql = "UPDATE cti_operators SET session_account_id = NULL WHERE session_account_id = ?";
+    sql = "UPDATE cti_operatori SET sessione_account_id = NULL WHERE sessione_account_id = ?";
     db.query(sql, accountId);
   }
 
@@ -99,8 +99,8 @@ public class OperatorDAO
         DB.toLong(row.get("id")),
         DB.toString(row.get("vonage_user_id")),
         DB.toLong(row.get("account_id")),
-        DB.toString(row.get("display_name")),
-        DB.toBoolean(row.get("active"))
+        DB.toString(row.get("nome")),
+        DB.toBoolean(row.get("attivo"))
     );
   }
 }

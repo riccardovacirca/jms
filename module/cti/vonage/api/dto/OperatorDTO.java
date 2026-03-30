@@ -1,7 +1,7 @@
 package dev.jms.app.module.cti.vonage.dto;
 
 /**
- * DTO per la tabella {@code cti_operators}.
+ * DTO per la tabella {@code cti_operatori}.
  * Rappresenta un operatore CTI con il suo identificatore Vonage
  * e l'eventuale associazione all'account applicativo.
  */
@@ -10,24 +10,24 @@ public class OperatorDTO
   private final Long    id;
   private final String  vonageUserId;
   private final Long    accountId;
-  private final String  displayName;
-  private final Boolean active;
+  private final String  nome;
+  private final Boolean attivo;
 
   /**
    * @param id           chiave primaria
    * @param vonageUserId nome utente nel sistema Vonage (claim {@code sub} del JWT SDK)
-   * @param accountId    id account applicativo associato (Long), o {@code null} se non collegato
-   * @param displayName  nome visualizzato dell'operatore, o {@code null}
-   * @param active       true se l'operatore è abilitato
+   * @param accountId    id account applicativo associato, o {@code null} se non collegato
+   * @param nome         nome visualizzato dell'operatore, o {@code null}
+   * @param attivo       true se l'operatore è abilitato
    */
   public OperatorDTO(Long id, String vonageUserId, Long accountId,
-                     String displayName, Boolean active)
+                     String nome, Boolean attivo)
   {
     this.id           = id;
     this.vonageUserId = vonageUserId;
     this.accountId    = accountId;
-    this.displayName  = displayName;
-    this.active       = active;
+    this.nome         = nome;
+    this.attivo       = attivo;
   }
 
   /** @return chiave primaria */
@@ -40,8 +40,8 @@ public class OperatorDTO
   public Long accountId() { return accountId; }
 
   /** @return nome visualizzato, o {@code null} */
-  public String displayName() { return displayName; }
+  public String nome() { return nome; }
 
   /** @return true se l'operatore è abilitato */
-  public Boolean active() { return active; }
+  public Boolean attivo() { return attivo; }
 }

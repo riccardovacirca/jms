@@ -1,39 +1,39 @@
 CREATE TABLE chiamate (
-  id                BIGSERIAL     PRIMARY KEY,
-  uuid              VARCHAR(64),
-  conversation_uuid VARCHAR(64),
-  direction         VARCHAR(16),
-  status            VARCHAR(32),
-  from_type         VARCHAR(16),
-  from_number       VARCHAR(32),
-  to_type           VARCHAR(16),
-  to_number         VARCHAR(32),
-  rate              VARCHAR(16),
-  price             VARCHAR(16),
-  duration          INTEGER,
-  start_time        TIMESTAMP,
-  end_time          TIMESTAMP,
-  network           VARCHAR(32),
-  answer_url        TEXT,
-  event_url         TEXT,
-  error_title       VARCHAR(255),
-  error_detail      TEXT,
-  operator_id       BIGINT,
-  contatto_id       BIGINT,
-  created_at        TIMESTAMP DEFAULT NOW(),
-  updated_at        TIMESTAMP
+  id                  BIGSERIAL     PRIMARY KEY,
+  uuid                VARCHAR(64),
+  conversazione_uuid  VARCHAR(64),
+  direzione           VARCHAR(16),
+  stato               VARCHAR(32),
+  tipo_mittente       VARCHAR(16),
+  numero_mittente     VARCHAR(32),
+  tipo_destinatario   VARCHAR(16),
+  numero_destinatario VARCHAR(32),
+  tariffa             VARCHAR(16),
+  costo               VARCHAR(16),
+  durata              INTEGER,
+  ora_inizio          TIMESTAMP,
+  ora_fine            TIMESTAMP,
+  rete                VARCHAR(32),
+  answer_url          TEXT,
+  event_url           TEXT,
+  errore_titolo       VARCHAR(255),
+  errore_dettaglio    TEXT,
+  operatore_id        BIGINT,
+  contatto_id         BIGINT,
+  data_creazione      TIMESTAMP DEFAULT NOW(),
+  data_aggiornamento  TIMESTAMP
 );
 
-CREATE TABLE cti_operators (
-  id                 SERIAL       PRIMARY KEY,
-  vonage_user_id     VARCHAR(100) NOT NULL UNIQUE,
-  account_id         INTEGER,
-  session_account_id INTEGER,
-  display_name       VARCHAR(100),
-  active             BOOLEAN      NOT NULL DEFAULT TRUE,
-  created_at         TIMESTAMP    NOT NULL DEFAULT NOW()
+CREATE TABLE cti_operatori (
+  id                  SERIAL       PRIMARY KEY,
+  vonage_user_id      VARCHAR(100) NOT NULL UNIQUE,
+  account_id          INTEGER,
+  sessione_account_id INTEGER,
+  nome                VARCHAR(100),
+  attivo              BOOLEAN      NOT NULL DEFAULT TRUE,
+  data_creazione      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_cti_operators_session
-    ON cti_operators(session_account_id)
-    WHERE session_account_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_cti_operatori_sessione
+    ON cti_operatori(sessione_account_id)
+    WHERE sessione_account_id IS NOT NULL;

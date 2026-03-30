@@ -8,17 +8,13 @@ CONFIGURAZIONE
 
 Aggiungere in config/application.properties:
 
-    cti.vonage.api_key=change-me-in-production
     cti.vonage.application_id=<APPLICATION_ID>
     cti.vonage.private_key=/app/config/private.key
-    cti.vonage.base_url=https://api.nexmo.com/v1/calls
     cti.vonage.from_number=+39XXXXXXXXXX
     cti.vonage.event_url=https://your-domain.com/api/cti/vonage/answer
     cti.vonage.music_on_hold_url=https://nexmo-community.github.io/ncco-examples/assets/voice_api_audio_streaming.mp3
 
 Copiare la chiave privata Vonage in /app/config/private.key.
-
-cti.vonage.api_key e la chiave API Vonage usata dal frontend per autenticarsi al modulo CTI.
 
 
 DIPENDENZA FRONTEND

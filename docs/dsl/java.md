@@ -283,6 +283,53 @@ RULE db.sql-variable
       token, userId, expiresAt);
 ```
 
+```
+RULE db.sql-multiline
+  applies-to: stringhe SQL su più righe concatenate con +
+  note: lo spazio separatore tra le clausole SQL appartiene alla fine del
+        frammento corrente, non all'inizio del frammento successivo;
+        ogni frammento deve terminare con uno spazio prima della virgoletta
+        di chiusura
+
+  ok: |
+    sql = "SELECT id FROM cti_operatori "
+        + "WHERE attivo = TRUE AND sessione_account_id IS NULL "
+        + "ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED";
+
+  ko: |
+    sql = "SELECT id FROM cti_operatori"
+        + " WHERE attivo = TRUE AND sessione_account_id IS NULL"
+        + " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED";
+```
+
+---
+
+## LINGUA
+
+```
+RULE lang.exception-messages
+  applies-to: messaggi di eccezione (Exception, IllegalStateException, ecc.)
+  note: i messaggi di eccezione sono in inglese e brevi
+
+  ok: |
+    throw new IllegalStateException("cti.vonage.application_id is required");
+
+  ko: |
+    throw new IllegalStateException("cti.vonage.application_id non configurato");
+```
+
+```
+RULE lang.comments
+  applies-to: tutti i commenti inline (//)
+  note: i commenti sono sempre in italiano
+
+  ok: |
+    // tipo di azione NCCO
+
+  ko: |
+    // NCCO action type
+```
+
 ---
 
 ## GESTIONE ERRORI
@@ -340,6 +387,20 @@ RULE error.log-level
 ---
 
 ## DOCUMENTAZIONE
+
+```
+RULE doc.inline-comment-position
+  applies-to: commenti inline (//)
+  note: i commenti inline vanno sulla riga immediatamente precedente all'istruzione commentata,
+        mai sulla stessa riga (trailing comment)
+
+  ok: |
+    // assegna operatore e genera JWT SDK
+    router.async(HttpMethod.POST, "/api/cti/vonage/sdk/auth", calls::sdkToken);
+
+  ko: |
+    router.async(HttpMethod.POST, "/api/cti/vonage/sdk/auth", calls::sdkToken); // assegna operatore e genera JWT SDK
+```
 
 ```
 RULE doc.javadoc

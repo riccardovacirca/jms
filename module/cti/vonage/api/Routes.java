@@ -1,6 +1,5 @@
 package dev.jms.app.module.cti.vonage;
 
-import dev.jms.app.module.cti.vonage.handler.AuthHandler;
 import dev.jms.app.module.cti.vonage.handler.CallHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
@@ -19,17 +18,19 @@ public class Routes
    */
   public static void register(Router router, Config config)
   {
-    AuthHandler auth;
     CallHandler calls;
 
-    auth  = new AuthHandler(config);
     calls = new CallHandler(config);
 
-    router.route(HttpMethod.POST,   "/api/cti/vonage/auth",                 auth::post);
-    router.route(HttpMethod.GET,    "/api/cti/vonage/chiamate",             calls::list);
-    router.async(HttpMethod.POST,   "/api/cti/vonage/answer",               calls::answer);
-    router.async(HttpMethod.PUT,    "/api/cti/vonage/call/{uuid}/hangup",   calls::hangup);
-    router.async(HttpMethod.POST,   "/api/cti/vonage/sdk/auth",             calls::sdkToken);
-    router.route(HttpMethod.DELETE, "/api/cti/vonage/sdk/auth",             calls::releaseSession);
+    // assegna operatore e genera JWT SDK
+    router.async(HttpMethod.POST, "/api/cti/vonage/sdk/auth", calls::sdkToken);
+    // rilascia operatore a fine sessione
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/sdk/auth", calls::releaseSession);
+    // webhook Vonage: NCCO operatore + avvio chiamata cliente
+    router.async(HttpMethod.POST, "/api/cti/vonage/answer", calls::answer);
+    // hangup operatore e cliente
+    router.async(HttpMethod.PUT, "/api/cti/vonage/call/{uuid}/hangup", calls::hangup);
+    // webhook Vonage: eventi Voice e RTC
+    router.route(HttpMethod.POST, "/api/cti/vonage/event", calls::event);
   }
 }

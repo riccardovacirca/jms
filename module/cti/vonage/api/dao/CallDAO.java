@@ -34,15 +34,15 @@ public class CallDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql = "INSERT INTO chiamate "
-        + "(uuid, conversation_uuid, direction, status, "
-        + "from_type, from_number, to_type, to_number, "
-        + "answer_url, event_url, operator_id, contatto_id, created_at) "
+        + "(uuid, conversazione_uuid, direzione, stato, "
+        + "tipo_mittente, numero_mittente, tipo_destinatario, numero_destinatario, "
+        + "answer_url, event_url, operatore_id, contatto_id, data_creazione) "
         + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) "
         + "RETURNING id";
     rows = db.select(sql,
-        dto.uuid(), dto.conversationUuid(), dto.direction(), dto.status(),
-        dto.fromType(), dto.fromNumber(), dto.toType(), dto.toNumber(),
-        dto.answerUrl(), dto.eventUrl(), dto.operatorId(), dto.contattoId());
+        dto.uuid(), dto.conversazioneUuid(), dto.direzione(), dto.stato(),
+        dto.tipoMittente(), dto.numeroMittente(), dto.tipoDestinatario(), dto.numeroDestinatario(),
+        dto.answerUrl(), dto.eventUrl(), dto.operatoreId(), dto.contattoId());
     return DB.toLong(rows.get(0).get("id"));
   }
 
@@ -58,7 +58,7 @@ public class CallDAO
     ArrayList<HashMap<String, Object>> rows;
     List<CallDTO> result;
 
-    sql = "SELECT * FROM chiamate ORDER BY created_at DESC LIMIT ? OFFSET ?";
+    sql = "SELECT * FROM chiamate ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
     rows = db.select(sql, size, (page - 1) * size);
     result = new ArrayList<>();
     for (HashMap<String, Object> r : rows) {
@@ -85,15 +85,15 @@ public class CallDAO
   /**
    * Aggiorna lo stato di una chiamata identificata dal suo uuid Vonage.
    *
-   * @param uuid   UUID Vonage della chiamata
-   * @param status nuovo stato (es. answered, completed)
+   * @param uuid  UUID Vonage della chiamata
+   * @param stato nuovo stato (es. answered, completed)
    */
-  public void updateStatus(String uuid, String status) throws Exception
+  public void updateStatus(String uuid, String stato) throws Exception
   {
     String sql;
 
-    sql = "UPDATE chiamate SET status = ?, updated_at = NOW() WHERE uuid = ?";
-    db.query(sql, status, uuid);
+    sql = "UPDATE chiamate SET stato = ?, data_aggiornamento = NOW() WHERE uuid = ?";
+    db.query(sql, stato, uuid);
   }
 
   /** Mappa un record del ResultSet nel DTO corrispondente. */
@@ -102,26 +102,26 @@ public class CallDAO
     return new CallDTO(
         DB.toLong(r.get("id")),
         DB.toString(r.get("uuid")),
-        DB.toString(r.get("conversation_uuid")),
-        DB.toString(r.get("direction")),
-        DB.toString(r.get("status")),
-        DB.toString(r.get("from_type")),
-        DB.toString(r.get("from_number")),
-        DB.toString(r.get("to_type")),
-        DB.toString(r.get("to_number")),
-        DB.toString(r.get("rate")),
-        DB.toString(r.get("price")),
-        DB.toInteger(r.get("duration")),
-        DB.toLocalDateTime(r.get("start_time")),
-        DB.toLocalDateTime(r.get("end_time")),
-        DB.toString(r.get("network")),
+        DB.toString(r.get("conversazione_uuid")),
+        DB.toString(r.get("direzione")),
+        DB.toString(r.get("stato")),
+        DB.toString(r.get("tipo_mittente")),
+        DB.toString(r.get("numero_mittente")),
+        DB.toString(r.get("tipo_destinatario")),
+        DB.toString(r.get("numero_destinatario")),
+        DB.toString(r.get("tariffa")),
+        DB.toString(r.get("costo")),
+        DB.toInteger(r.get("durata")),
+        DB.toLocalDateTime(r.get("ora_inizio")),
+        DB.toLocalDateTime(r.get("ora_fine")),
+        DB.toString(r.get("rete")),
         DB.toString(r.get("answer_url")),
         DB.toString(r.get("event_url")),
-        DB.toString(r.get("error_title")),
-        DB.toString(r.get("error_detail")),
-        DB.toLong(r.get("operator_id")),
+        DB.toString(r.get("errore_titolo")),
+        DB.toString(r.get("errore_dettaglio")),
+        DB.toLong(r.get("operatore_id")),
         DB.toLong(r.get("contatto_id")),
-        DB.toLocalDateTime(r.get("created_at")),
-        DB.toLocalDateTime(r.get("updated_at")));
+        DB.toLocalDateTime(r.get("data_creazione")),
+        DB.toLocalDateTime(r.get("data_aggiornamento")));
   }
 }

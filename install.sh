@@ -9,12 +9,14 @@
 #   (nessuna)               Crea o riavvia l'ambiente di sviluppo completo
 #   --postgres              Installa/ricrea il container PostgreSQL del progetto
 #   --mailpit               Installa/ricrea il container Mailpit del progetto
+#   --ngrok                 Installa ngrok nel container di sviluppo
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
 #   ./install.sh             # Primo install o riavvio
 #   ./install.sh --postgres  # Installa/ricrea PostgreSQL
 #   ./install.sh --mailpit   # Installa/ricrea Mailpit
+#   ./install.sh --ngrok     # Installa ngrok nel container
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio)
@@ -72,6 +74,29 @@
 # Porte esposte sull'host (da .env):
 #   - SMTP:   MAILPIT_SMTP_PORT_HOST  (default 1025)
 #   - Web UI: MAILPIT_UI_PORT_HOST    (default 8025, aprire http://localhost:8025)
+#
+# -----------------------------------------------------------------------------
+# PROCEDURA DI INSTALL (--ngrok)
+# -----------------------------------------------------------------------------
+#
+# Installa il pacchetto ngrok dentro il container di sviluppo tramite apt.
+# ngrok crea un tunnel HTTPS pubblico verso la porta del backend (8080),
+# necessario in sviluppo locale per ricevere i webhook Vonage.
+#
+# Configurazione in .env:
+#   - NGROK_ENABLED=true/false  abilita l'avvio automatico con cmd app run/debug
+#   - NGROK_AUTHTOKEN=...       token di autenticazione (dashboard.ngrok.com/authtokens)
+#
+# Avvio automatico:
+#   Se NGROK_ENABLED=true, ngrok viene avviato in background all'avvio di
+#   cmd app run / cmd app debug e terminato al Ctrl+C.
+#   L'URL pubblico è mostrato a console e disponibile via cmd ngrok status.
+#
+# Note:
+#   - Sul piano gratuito l'URL cambia a ogni riavvio del tunnel.
+#   - Aggiornare manualmente cti.vonage.event_url in application.properties
+#     e i webhook URL nel Vonage Dashboard quando l'URL cambia.
+#   - Porta web UI ngrok: http://localhost:4040
 #
 # -----------------------------------------------------------------------------
 # POLICY LOG
@@ -142,12 +167,14 @@ Options:
   (none)                  Create or restart the development environment
   --postgres              Install/recreate project PostgreSQL container
   --mailpit               Install/recreate project Mailpit container
+  --ngrok                 Install ngrok inside the dev container
   --help, -h              Show this message
 
 Examples:
   ./install.sh             # First install or restart
   ./install.sh --postgres  # Install/recreate PostgreSQL (reads from .env)
   ./install.sh --mailpit   # Install/recreate Mailpit (reads from .env)
+  ./install.sh --ngrok     # Install ngrok in dev container
 EOF
     exit 0
 }
@@ -174,6 +201,7 @@ DEV_IMAGE=ubuntu:24.04
 # Undertow (API)
 API_PORT=8080
 API_PORT_HOST=2310
+APP_BASE_URL=http://localhost:2310
 
 # Vite (dev server with proxy)
 VITE_PORT=5173
@@ -209,6 +237,19 @@ PGSQL_ROOT_PASSWORD=postgres
 PGSQL_NAME=PROJECT_DIR_PLACEHOLDER
 PGSQL_USER=PROJECT_DIR_PLACEHOLDER
 PGSQL_PASSWORD=secret
+DB_POOL_SIZE=10
+
+# ========================================
+# JWT
+# ========================================
+JWT_SECRET=dev-secret-change-in-production
+JWT_ACCESS_EXPIRY_SECONDS=900
+
+# ========================================
+# Async Handler
+# ========================================
+ASYNC_POOL_SIZE=20
+ASYNC_MAX_BODY_SIZE=10485760
 
 # ========================================
 # Mailpit (fake SMTP for development)
@@ -222,6 +263,21 @@ MAILPIT_UI_PORT=8025
 MAILPIT_UI_PORT_HOST=2335
 MAILPIT_USER=
 MAILPIT_PASSWORD=
+MAIL_ENABLED=false
+MAIL_AUTH=false
+MAIL_FROM=noreply@example.com
+
+# ========================================
+# Scheduler
+# ========================================
+SCHEDULER_ENABLED=true
+SCHEDULER_POLL_INTERVAL_SECONDS=15
+
+# ========================================
+# ngrok (tunnel per webhook in sviluppo)
+# ========================================
+NGROK_ENABLED=false
+NGROK_AUTHTOKEN=
 
 # ========================================
 # Git
@@ -377,6 +433,44 @@ install_mailpit() {
 }
 
 # =============================================================================
+# install_ngrok — ngrok dentro il container di sviluppo
+# =============================================================================
+
+install_ngrok() {
+    if [ ! -f .env ]; then
+        echo "Generating .env..."
+        generate_env_file
+    fi
+    . ./.env
+
+    local DEV_CONTAINER="$PROJECT_NAME"
+
+    if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_CONTAINER}$"; then
+        echo "Dev container '$DEV_CONTAINER' is not running. Start it first with: ./install.sh"
+        exit 1
+    fi
+
+    echo "Installing ngrok in container '$DEV_CONTAINER'..."
+    docker exec "$DEV_CONTAINER" bash -c "
+        curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+          | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+          && echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' \
+          | tee /etc/apt/sources.list.d/ngrok.list \
+          && apt-get update -qq && apt-get install -y ngrok
+    "
+
+    echo ""
+    echo "Done"
+    echo "ngrok installed in container '$DEV_CONTAINER'"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Set NGROK_AUTHTOKEN=<token> in .env  (get it at https://dashboard.ngrok.com/authtokens)"
+    echo "  2. Set NGROK_ENABLED=true in .env to auto-start ngrok with cmd app run/debug"
+    echo "  3. After startup, update cti.vonage.event_url in config/application.properties"
+    echo "     with the public URL shown by ngrok (changes on every restart)"
+}
+
+# =============================================================================
 # install_dev — ambiente di sviluppo completo
 # =============================================================================
 
@@ -443,8 +537,23 @@ GITIGNORE
     sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|db.host=postgres|db.host=$PGSQL_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-    sed "s|{{MAILPIT_HOST}}|$MAILPIT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-    sed "s|{{APP_BASE_URL}}|http://localhost:$API_PORT_HOST|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{APP_BASE_URL}}|${APP_BASE_URL:-http://localhost:$API_PORT_HOST}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{DB_POOL_SIZE}}|${DB_POOL_SIZE:-10}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{JWT_SECRET}}|${JWT_SECRET:-dev-secret-change-in-production}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{JWT_ACCESS_EXPIRY_SECONDS}}|${JWT_ACCESS_EXPIRY_SECONDS:-900}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{ASYNC_POOL_SIZE}}|${ASYNC_POOL_SIZE:-20}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{ASYNC_MAX_BODY_SIZE}}|${ASYNC_MAX_BODY_SIZE:-10485760}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAILPIT_HOST}}|${MAILPIT_HOST}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAILPIT_SMTP_PORT}}|${MAILPIT_SMTP_PORT:-1025}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAILPIT_USER}}|${MAILPIT_USER:-}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAILPIT_PASSWORD}}|${MAILPIT_PASSWORD:-}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAIL_ENABLED}}|${MAIL_ENABLED:-false}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAIL_AUTH}}|${MAIL_AUTH:-false}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{MAIL_FROM}}|${MAIL_FROM:-noreply@example.com}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{SCHEDULER_ENABLED}}|${SCHEDULER_ENABLED:-true}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{SCHEDULER_POLL_INTERVAL_SECONDS}}|${SCHEDULER_POLL_INTERVAL_SECONDS:-15}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{NGROK_ENABLED}}|${NGROK_ENABLED:-false}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
+    sed "s|{{NGROK_AUTHTOKEN}}|${NGROK_AUTHTOKEN:-}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
@@ -477,6 +586,9 @@ case "$1" in
         ;;
     --mailpit)
         install_mailpit
+        ;;
+    --ngrok)
+        install_ngrok
         ;;
     --help|-h)
         show_help

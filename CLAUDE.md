@@ -256,6 +256,8 @@ A new installation includes `status` as the only pre-installed frontend module (
 - **Navigation ID tracking**: Discards stale module loads during rapid navigation
 - **`/#/` redirect**: Hash exactly equal to `/` redirects to the root URL `/` (not treated as a route)
 
+**Important — Vite dynamic import limitation:** Vite cannot resolve template literal dynamic imports where the variable contains `/` (multi-level paths, e.g. `cti/vonage`). Module loading uses `import.meta.glob('./module/**/index.js')` and `import.meta.glob('./module/**/init.js')` at the top of `router.js` to pre-register all modules, then looks up the resolved module by path string. Never use `import(\`./module/${path}/index.js\`)` directly — it will fail for namespaced modules.
+
 **Authorization model:**
 - `authorization: null` — Publicly accessible
 - `authorization: { redirectTo: '/path' }` — Protected; redirects unauthorized users
@@ -428,7 +430,7 @@ The install script (`_rewrite_java_packages`) automatically updates package decl
 - `home/` — Simple home page with API hello endpoint (no dependencies)
 - `crm/contatti/` — Contact management module (requires: `user`)
 - `aes/` — Advanced Electronic Signature module; provides PDF signature field insertion (`/api/aes/pdf/signature/field`, `/api/aes/html/signature/field`), file storage management, integration with Namirial/Savino remote signature platforms; no frontend (`path: null`); no dependencies
-- `cti/vonage/` — Vonage Voice API integration; route `/cti`, namespace `cti`; protected; requires Vonage config + private key + `npm install @vonage/client-sdk` in `gui/`; routes under `/api/cti/vonage/`; requires: `user`
+- `cti/vonage/` — Vonage Voice API integration; route `/cti`, namespace `cti`; protected; requires Vonage config + private key + `npm install @vonage/client-sdk` in `gui/`; routes under `/api/cti/vonage/`; requires: `user`. Webhook URLs to configure in Vonage dashboard: Voice Answer URL → `/api/cti/vonage/answer`, Voice Event URL → `/api/cti/vonage/event`, RTC Event URL → `/api/cti/vonage/event`. `CTI_VONAGE_FROM_NUMBER` must be a real Vonage virtual number (11 digits, no `+`) linked to the application. Custom data passed via `client.serverCall(data)` arrives in the answer webhook body as `custom_data` (JSON-serialized string), not as a query parameter.
 - `asynctest/` — Test module for async vs blocking behavior comparison; no frontend, not for production
 - `schedulertest/` — Test module for Scheduler functionality; no frontend, not for production
 - `iacs/` — Integrated Access Control System (stub/placeholder — no implementation yet)

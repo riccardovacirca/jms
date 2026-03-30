@@ -46,6 +46,7 @@ public class App
     DataSource ds;
 
     // === CARICAMENTO CONFIGURAZIONE ===
+
     config = new Config();
     port = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
@@ -113,7 +114,7 @@ public class App
     // === REGISTRAZIONE ROUTE ===
 
     // Status endpoint pubblico — verifica che l'applicazione sia attiva.
-    // Ritorna JSON standard {"err":false,"log":null,"out":"Application is running"}.
+    // Ritorna JSON standard {"err":false,"log":null,"out":"App is running"}.
     paths.add("/api/status", new HttpHandler() {
       @Override
       public void handleRequest(HttpServerExchange exchange) throws Exception
@@ -121,13 +122,13 @@ public class App
         exchange.getResponseHeaders()
           .put(Headers.CONTENT_TYPE, "application/json");
         exchange.getResponseSender()
-          .send("{\"err\":false,\"log\":null,\"out\":\"Application is running\"}");
+          .send("{\"err\":false,\"log\":null,\"out\":\"App is running\"}");
       }
     });
 
     // Marker per inserimento route da moduli installati.
     // cmd module import inserisce chiamate a Routes.register(router) qui.
-    
+
     // [MODULE_ROUTES]
 
     // === AVVIO SERVER ===
