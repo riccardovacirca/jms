@@ -1,9 +1,11 @@
 package dev.jms.app.module.cti.vonage;
 
+import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
 import dev.jms.app.module.cti.vonage.handler.CallHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
+import dev.jms.util.Scheduler;
 
 /**
  * Registra le rotte HTTP del modulo cti.
@@ -32,5 +34,11 @@ public class Routes
     router.async(HttpMethod.PUT, "/api/cti/vonage/call/{uuid}/hangup", calls::hangup);
     // webhook Vonage: eventi Voice e RTC
     router.route(HttpMethod.POST, "/api/cti/vonage/event", calls::event);
+
+    // crea utente Vonage e registra operatore in DB
+    router.async(HttpMethod.POST, "/api/cti/vonage/admin/operator", calls::createOperator);
+
+    // cleanup sessioni operatori scadute (ogni minuto)
+    Scheduler.register("cti-session-cleanup", "* * * * *", OperatorDAO::releaseExpired);
   }
 }

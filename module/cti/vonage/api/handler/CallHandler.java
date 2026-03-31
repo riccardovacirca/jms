@@ -1,6 +1,7 @@
 package dev.jms.app.module.cti.vonage.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vonage.client.users.UsersResponseException;
 import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
 import dev.jms.app.module.cti.vonage.dto.OperatorDTO;
 import dev.jms.app.module.cti.vonage.helper.VoiceHelper;
@@ -12,6 +13,8 @@ import dev.jms.util.Log;
 import dev.jms.util.Permission;
 import dev.jms.util.Role;
 import dev.jms.util.Session;
+import dev.jms.util.ValidationException;
+import dev.jms.util.Validator;
 import java.util.HashMap;
 import java.util.UUID;
 
@@ -178,6 +181,60 @@ public class CallHandler
       } catch (Exception e) {
         log.error("[CTI] Errore avvio chiamata cliente: {}", e.getMessage(), e);
       }
+    }
+  }
+
+  /**
+   * POST /api/cti/vonage/admin/operator — crea un utente Vonage e lo registra come operatore.
+   *
+   * <p>Crea l'utente nell'applicazione Vonage tramite {@code UsersClient} e inserisce
+   * la riga corrispondente in {@code cti_operatori}. Il campo {@code name} diventa
+   * il {@code vonage_user_id} (claim {@code sub} del JWT SDK).</p>
+   *
+   * <p>Richiede autenticazione con ruolo ADMIN.</p>
+   *
+   * <p>Body JSON: {@code {"name": "operatore_01", "displayName": "Operatore 01"}}
+   * — {@code displayName} è opzionale.</p>
+   *
+   * <p>Risposta: {@code {"vonageUserId": "...", "nome": "...", "attivo": true}}.</p>
+   */
+  public void createOperator(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    HashMap<String, Object> body;
+    String name;
+    String displayName;
+    String vonageUserId;
+    OperatorDAO operatorDao;
+    HashMap<String, Object> out;
+
+    session.require(Role.ADMIN, Permission.WRITE);
+    body = req.body();
+    name = DB.toString(body.get("name"));
+    displayName = DB.toString(body.get("displayName"));
+
+    try {
+      Validator.required(name, "name");
+      vonageUserId = voiceHelper.createVonageUser(name, displayName);
+      operatorDao = new OperatorDAO(db);
+      operatorDao.insert(vonageUserId, displayName);
+      out = new HashMap<>();
+      out.put("vonageUserId", vonageUserId);
+      out.put("nome", displayName);
+      out.put("attivo", true);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(out)
+         .send();
+    } catch (ValidationException | UsersResponseException e) {
+      log.warn("[CTI] createOperator: {}", e.getMessage());
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log(e.getMessage())
+         .out(null)
+         .send();
     }
   }
 

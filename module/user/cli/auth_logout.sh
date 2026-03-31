@@ -1,50 +1,34 @@
-#\!/bin/bash
-# POST /api/user/auth/logout - Logout utente
+#!/bin/bash
+# POST /api/user/auth/logout - Logout e rimozione sessione
+#
+# Usa la sessione salvata da auth_login.sh, chiama il logout e rimuove il file.
 #
 # Usage:
-#   ./auth_logout.sh USERNAME PASSWORD
+#   ./auth_logout.sh
 #
 # Example:
-#   ./auth_logout.sh admin@example.com password123
+#   ./auth_logout.sh
 
 set -e
 
-USERNAME="${1:?Errore: USERNAME richiesto}"
-PASSWORD="${2:?Errore: PASSWORD richiesta}"
-
 API_BASE="${API_BASE:-http://localhost:8080}"
-TMP_DIR="/tmp/user-cli-$$"
-mkdir -p "$TMP_DIR"
+SESSION_FILE="${SESSION_FILE:-/tmp/jms-session}"
 
-# Login
-echo "[*] Autenticazione in corso..."
-LOGIN_RESPONSE=$(curl -s -c "$TMP_DIR/cookies.txt" -X POST "$API_BASE/api/user/auth/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}")
-
-if \! echo "$LOGIN_RESPONSE" | grep -q "\"err\":false"; then
-  echo "[\!] Login fallito:"
-  echo "$LOGIN_RESPONSE" | grep -oP "\"log\":\"\\K[^\"]+" || echo "Errore sconosciuto"
-  rm -rf "$TMP_DIR"
+if [ ! -f "$SESSION_FILE" ]; then
+  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth_login"
   exit 1
 fi
 
-echo "[✓] Login riuscito"
-
-# Logout
 echo "[*] Logout in corso..."
-RESPONSE=$(curl -s -b "$TMP_DIR/cookies.txt" -X POST "$API_BASE/api/user/auth/logout" \
+RESPONSE=$(curl -s -b "$SESSION_FILE" -X POST "$API_BASE/api/user/auth/logout" \
   -H "Content-Type: application/json")
 
-# Cleanup
-rm -rf "$TMP_DIR"
+rm -f "$SESSION_FILE"
 
-# Output
-if echo "$RESPONSE" | grep -q "\"err\":false"; then
-  echo "[✓] Logout riuscito:"
-  echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
+if echo "$RESPONSE" | grep -q '"err":false'; then
+  echo "[✓] Logout riuscito. Sessione rimossa."
 else
-  echo "[\!] Logout fallito:"
-  echo "$RESPONSE" | grep -oP "\"log\":\"\\K[^\"]+" || echo "$RESPONSE"
+  echo "[!] Logout fallito (sessione rimossa comunque):"
+  echo "$RESPONSE" | grep -oP '"log":"\K[^"]+' || echo "Errore sconosciuto"
   exit 1
 fi

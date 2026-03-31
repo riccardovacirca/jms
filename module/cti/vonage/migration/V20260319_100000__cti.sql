@@ -34,6 +34,8 @@ CREATE TABLE cti_operatori (
   data_creazione      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE cti_operatori ADD COLUMN sessione_ttl TIMESTAMP;
+
 CREATE UNIQUE INDEX idx_cti_operatori_sessione
     ON cti_operatori(sessione_account_id)
     WHERE sessione_account_id IS NOT NULL;

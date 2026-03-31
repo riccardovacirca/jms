@@ -1,6 +1,8 @@
 package dev.jms.app.module.cti.vonage.helper;
 
 import com.vonage.client.VonageClient;
+import com.vonage.client.users.User;
+import com.vonage.client.users.UsersResponseException;
 import com.vonage.client.voice.Call;
 import com.vonage.client.voice.CallEvent;
 import com.vonage.client.voice.ncco.ConversationAction;
@@ -51,10 +53,18 @@ public class VoiceHelper
   private final String privateKeyPath;
 
   /**
-   * Mapping operatore/cliente per hangup simultaneo
-   * operatorUuid/customerUuid.
+   * Mapping operatore/cliente per hangup simultaneo: operatorUuid → customerUuid.
    */
   private final Map<String, String> outgoingCalls = new ConcurrentHashMap<>();
+
+  /**
+   * Operatori per cui è stato richiesto hangup prima che {@link #callCustomer}
+   * completasse la registrazione in {@link #outgoingCalls}. Quando
+   * {@link #callCustomer} ottiene il customerUuid da Vonage, controlla questo
+   * set e termina immediatamente la chiamata cliente se presente.
+   */
+  private final java.util.Set<String> cancelledOperators =
+      java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
   /**
    * Inizializza il {@link VonageClient} con {@code applicationId}
@@ -183,7 +193,12 @@ public class VoiceHelper
     log.info("[CTI] callCustomer risposta Vonage: uuid={}, status={}",
              customerUuid, status);
 
-    outgoingCalls.put(operatorUuid, customerUuid);
+    if (cancelledOperators.remove(operatorUuid)) {
+      log.info("[CTI] callCustomer: operatore già annullato, termino chiamata cliente uuid={}", customerUuid);
+      vonageClient.getVoiceClient().terminateCall(customerUuid);
+    } else {
+      outgoingCalls.put(operatorUuid, customerUuid);
+    }
 
     dto = new CallDTO(
         null, customerUuid, conversationUuid, direction, status,
@@ -216,7 +231,8 @@ public class VoiceHelper
     if (customerUuid != null) {
       vonageClient.getVoiceClient().terminateCall(customerUuid);
     } else {
-      log.warn("[CTI] hangupCall: nessuna chiamata cliente per operatore={}",
+      cancelledOperators.add(operatorUuid);
+      log.warn("[CTI] hangupCall: chiamata cliente non ancora avviata per operatore={}, annullamento registrato",
                operatorUuid);
     }
   }
@@ -235,6 +251,33 @@ public class VoiceHelper
    * @param userId identificatore dell'operatore nel sistema Vonage
    * @return token JWT da passare a {@code VonageClient.createSession()}
    */
+  /**
+   * Crea un utente Vonage tramite {@code UsersClient} e lo registra nell'applicazione.
+   * Il {@code name} diventa il claim {@code sub} del JWT SDK e corrisponde
+   * al campo {@code vonage_user_id} in {@code cti_operatori}.
+   *
+   * @param name        nome univoco dell'utente Vonage (es. {@code operatore_01})
+   * @param displayName nome visualizzato, o {@code null}
+   * @return nome dell'utente creato (identico a {@code name} se accettato da Vonage)
+   * @throws UsersResponseException se Vonage rifiuta la creazione (es. nome duplicato)
+   */
+  public String createVonageUser(String name, String displayName) throws UsersResponseException
+  {
+    User.Builder builder;
+    User user;
+    User created;
+
+    builder = User.builder();
+    builder.name(name);
+    if (displayName != null && !displayName.isBlank()) {
+      builder.displayName(displayName);
+    }
+    user = builder.build();
+    created = vonageClient.getUsersClient().createUser(user);
+    log.info("[CTI] createVonageUser: name={}, vonageId={}", name, created.getId());
+    return created.getName();
+  }
+
   public String generateSdkJwt(String userId) throws Exception
   {
     HashMap<String, Object> aclPaths;
