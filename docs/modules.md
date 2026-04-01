@@ -225,23 +225,70 @@ All'avvio, `App.java` legge il manifest e logga `[warn]` per ogni dipendenza non
 ## CLI dei moduli
 
 Alcuni moduli espongono script di utilità nella cartella `module/<nome>/cli/`. Questi script possono essere eseguiti tramite:
-
 ```bash
 cmd module cli <nome_modulo> <script> [OPTIONS]
+cmd module cli <nome_modulo> list
 ```
 
 Il comando risolve `<script>` in `module/<nome_modulo>/cli/<script>.sh` e lo esegue passando `[OPTIONS]` invariato.
 
-**Esempio:**
+Il subcommand `list` mostra tutti i comandi CLI disponibili per il modulo specificato.
+
+**Esempi:**
 
 ```bash
-cmd module cli aes sign --file document.pdf
-# esegue: module/aes/cli/sign.sh --file document.pdf
+# Lista tutti i comandi CLI del modulo aes
+cmd module cli aes list
+# Output:
+# Available CLI commands for module aes:
+#   - savino_get_document
+#   - savino_list_documents
+#   - tablet_create
+#   - tablet_list
+#   ...
+
+# Esegui un comando CLI specifico
+cmd module cli aes tablet_list
+# esegue: module/aes/cli/tablet_list.sh
 ```
 
 **Note:**
 - Gli script vengono cercati nella cartella `module/` originale (non nel path di installazione `app/module/`).
 - `cmd module cli` non è disponibile in produzione — è uno strumento di sviluppo.
+- I moduli non sono obbligati ad avere script CLI; la cartella `cli/` è opzionale.
+## Test dei moduli
+
+Alcuni moduli forniscono script di test nella cartella `module/<nome>/test/`. Questi script possono essere eseguiti tramite:
+```bash
+cmd module test <nome_modulo> <script> [OPTIONS]
+cmd module test <nome_modulo> list
+```
+
+Il comando risolve `<script>` in `module/<nome_modulo>/test/<script>.sh` e lo esegue passando `[OPTIONS]` invariato.
+
+Il subcommand `list` mostra tutti gli script di test disponibili per il modulo specificato.
+
+**Esempi:**
+
+```bash
+# Lista tutti gli script di test del modulo user
+cmd module test user list
+# Output:
+# Available test scripts for module user:
+#   - account_list
+#   - auth_login
+#   - auth_session
+#   ...
+
+# Esegui uno script di test specifico
+cmd module test home hello
+# esegue: module/home/test/hello.sh
+```
+
+**Note:**
+- Gli script vengono cercati nella cartella `module/` originale (non nel path di installazione `app/module/`).
+- `cmd module test` non è disponibile in produzione — è uno strumento di sviluppo.
+- I moduli non sono obbligati ad avere script di test; la cartella `test/` è opzionale.
 - I moduli non sono obbligati ad avere script CLI; la cartella `cli/` è opzionale.
 
 ## Invarianti

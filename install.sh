@@ -10,12 +10,14 @@
 #   --postgres              Installa/ricrea il container PostgreSQL del progetto
 #   --mailpit               Installa/ricrea il container Mailpit del progetto
 #   --ngrok                 Installa ngrok nel container di sviluppo
+#   --claude                Installa Claude Code nel container di sviluppo
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
 #   ./install.sh             # Primo install o riavvio
 #   ./install.sh --postgres  # Installa/ricrea PostgreSQL
 #   ./install.sh --mailpit   # Installa/ricrea Mailpit
+#   ./install.sh --claude    # Installa Claude Code
 #   ./install.sh --ngrok     # Installa ngrok nel container
 #
 # -----------------------------------------------------------------------------
@@ -167,12 +169,14 @@ Options:
   (none)                  Create or restart the development environment
   --postgres              Install/recreate project PostgreSQL container
   --mailpit               Install/recreate project Mailpit container
+  --claude                Install Claude Code inside the dev container
   --ngrok                 Install ngrok inside the dev container
   --help, -h              Show this message
 
 Examples:
   ./install.sh             # First install or restart
   ./install.sh --postgres  # Install/recreate PostgreSQL (reads from .env)
+  ./install.sh --claude    # Install Claude Code in dev container
   ./install.sh --mailpit   # Install/recreate Mailpit (reads from .env)
   ./install.sh --ngrok     # Install ngrok in dev container
 EOF
@@ -433,6 +437,40 @@ install_mailpit() {
 }
 
 # =============================================================================
+
+# =============================================================================
+# install_claude — Claude Code CLI
+# =============================================================================
+# install_claude — Claude Code CLI
+# =============================================================================
+
+install_claude() {
+    if [ ! -f .env ]; then
+        echo "Generating .env..."
+        generate_env_file
+    fi
+    . ./.env
+
+    local DEV_CONTAINER="$PROJECT_NAME"
+
+    if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_CONTAINER}$"; then
+        echo "Dev container '$DEV_CONTAINER' is not running. Start it first with: ./install.sh"
+        exit 1
+    fi
+
+    echo "Installing Claude Code in container '$DEV_CONTAINER'..."
+    docker exec "$DEV_CONTAINER" bash -c "curl -fsSL https://claude.ai/install.sh | bash"
+
+    echo ""
+    echo "Done"
+    echo "Claude Code installed in container '$DEV_CONTAINER'"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Run: docker exec -it $DEV_CONTAINER bash"
+    echo "  2. Run: claude auth login"
+    echo "  3. Start using Claude Code with: claude"
+}
+
 # install_ngrok — ngrok dentro il container di sviluppo
 # =============================================================================
 
@@ -589,6 +627,9 @@ case "$1" in
         ;;
     --ngrok)
         install_ngrok
+        ;;
+    --claude)
+        install_claude
         ;;
     --help|-h)
         show_help

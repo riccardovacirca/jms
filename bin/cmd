@@ -2070,26 +2070,102 @@ print('OK')
 }
 
 # ============================================================================
-# module_cli — esegue uno script CLI di un modulo
+# module_cli — esegue uno script CLI di un modulo o lista gli script disponibili
 #
-# Formato: cmd module cli <module_name> <command> <file> <name> [OPTIONS]
-# Risolve in: module/<module_name>/<command>_<file>_<name>.sh [OPTIONS]
+# Formato: cmd module cli <module_name> <script> [OPTIONS]
+# Formato: cmd module cli <module_name> list
+# Risolve in: module/<module_name>/cli/<script>.sh [OPTIONS]
 # ============================================================================
 
 module_cli() {
     local MODULE_NAME="$1"
-    local SCRIPT_NAME="$2"
+    local COMMAND="$2"
     shift 2 2>/dev/null || true
 
-    [ -n "$MODULE_NAME" ]  || error "Usage: cmd module cli <module_name> <script> [OPTIONS]"
-    [ -n "$SCRIPT_NAME" ]  || error "Usage: cmd module cli <module_name> <script> [OPTIONS]"
+    [ -n "$MODULE_NAME" ]  || error "Usage: cmd module cli <module_name> <script|list> [OPTIONS]"
+    [ -n "$COMMAND" ]  || error "Usage: cmd module cli <module_name> <script|list> [OPTIONS]"
 
-    local SCRIPT="$WORKSPACE/module/${MODULE_NAME}/cli/${SCRIPT_NAME}.sh"
-    [ -f "$SCRIPT" ] || error "Script not found: module/${MODULE_NAME}/cli/${SCRIPT_NAME}.sh"
+    local CLI_DIR="$WORKSPACE/module/${MODULE_NAME}/cli"
+
+    # Subcommand: list
+    if [ "$COMMAND" = "list" ]; then
+        if [ ! -d "$CLI_DIR" ]; then
+            echo "No CLI commands available for module '$MODULE_NAME'"
+            return 0
+        fi
+
+        local SCRIPTS
+        SCRIPTS=$(find "$CLI_DIR" -maxdepth 1 -type f -name "*.sh" 2>/dev/null | sort)
+
+        if [ -z "$SCRIPTS" ]; then
+            echo "No CLI commands available for module '$MODULE_NAME'"
+            return 0
+        fi
+
+        echo "Available CLI commands for module '$MODULE_NAME':"
+        echo "$SCRIPTS" | while read -r SCRIPT; do
+            local BASENAME
+            BASENAME=$(basename "$SCRIPT" .sh)
+            echo "  - $BASENAME"
+        done
+        return 0
+    fi
+
+    # Comportamento originale: esegui lo script
+    local SCRIPT="$CLI_DIR/${COMMAND}.sh"
+    [ -f "$SCRIPT" ] || error "Script not found: module/${MODULE_NAME}/cli/${COMMAND}.sh"
 
     bash "$SCRIPT" "$@"
 }
 
+
+# module_test — esegue uno script di test di un modulo o lista gli script disponibili
+#
+# Formato: cmd module test <module_name> <script> [OPTIONS]
+# Formato: cmd module test <module_name> list
+# Risolve in: module/<module_name>/test/<script>.sh [OPTIONS]
+# ============================================================================
+
+module_test() {
+    local MODULE_NAME="$1"
+    local COMMAND="$2"
+    shift 2 2>/dev/null || true
+
+    [ -n "$MODULE_NAME" ]  || error "Usage: cmd module test <module_name> <script|list> [OPTIONS]"
+    [ -n "$COMMAND" ]  || error "Usage: cmd module test <module_name> <script|list> [OPTIONS]"
+
+    local TEST_DIR="$WORKSPACE/module/${MODULE_NAME}/test"
+
+    # Subcommand: list
+    if [ "$COMMAND" = "list" ]; then
+        if [ ! -d "$TEST_DIR" ]; then
+            echo "No test scripts available for module '$MODULE_NAME'"
+            return 0
+        fi
+
+        local SCRIPTS
+        SCRIPTS=$(find "$TEST_DIR" -maxdepth 1 -type f -name "*.sh" 2>/dev/null | sort)
+
+        if [ -z "$SCRIPTS" ]; then
+            echo "No test scripts available for module '$MODULE_NAME'"
+            return 0
+        fi
+
+        echo "Available test scripts for module '$MODULE_NAME':"
+        echo "$SCRIPTS" | while read -r SCRIPT; do
+            local BASENAME
+            BASENAME=$(basename "$SCRIPT" .sh)
+            echo "  - $BASENAME"
+        done
+        return 0
+    fi
+
+    # Comportamento originale: esegui lo script
+    local SCRIPT="$TEST_DIR/${COMMAND}.sh"
+    [ -f "$SCRIPT" ] || error "Script not found: module/${MODULE_NAME}/test/${COMMAND}.sh"
+
+    bash "$SCRIPT" "$@"
+}
 # Benchmark Operations
 # ============================================================================
 
@@ -2272,7 +2348,8 @@ case "$1" in
             dist)   shift 2; module_dist "$@" ;;
             remove) shift 2; module_remove "$@" ;;
             cli)    shift 2; module_cli "$@" ;;
-            *) error "Unknown module command: $2. Use: export, import, dist, remove, cli" ;;
+            test)   shift 2; module_test "$@" ;;
+            *) error "Unknown module command: $2. Use: export, import, dist, remove, cli, test" ;;
         esac
         ;;
     -h|--help|help|"")

@@ -3,6 +3,7 @@ package dev.jms.app.home.handler;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
+import dev.jms.util.Session;
 
 /**
  * Handler per il modulo home.
@@ -13,7 +14,7 @@ public class HelloHandler
   /**
    * GET /api/home/hello — messaggio di benvenuto.
    */
-  public void hello(HttpRequest req, HttpResponse res, DB db) throws Exception
+  public void hello(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     res.status(200)
        .contentType("application/json")

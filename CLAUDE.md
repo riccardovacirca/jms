@@ -32,6 +32,9 @@ cmd module import <path>                         # Installa modulo da path relat
 cmd module dist <path>                           # Pacchettizza modulo (path relativo a module/) → dist/<nome>-<vers>.tar.gz
 cmd module remove --name <nome>                  # Disinstalla modulo usando il tracker installato
 cmd module cli <module> <script> [OPTIONS]       # Esegue module/<module>/cli/<script>.sh (solo in sviluppo)
+cmd module cli <module> list                     # Lista tutti i comandi CLI disponibili per il modulo
+cmd module test <module> <script> [OPTIONS]      # Esegue module/<module>/test/<script>.sh (solo in sviluppo)
+cmd module test <module> list                    # Lista tutti gli script di test disponibili per il modulo
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
 
