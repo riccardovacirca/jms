@@ -1,0 +1,16 @@
+<profile>
+  <id>module-cti-vonage</id>
+  <activation>
+    <file>
+      <exists>src/main/resources/module/cti/vonage/module.json</exists>
+    </file>
+  </activation>
+  <dependencies>
+    <!-- Vonage Server SDK for Java -->
+    <dependency>
+      <groupId>com.vonage</groupId>
+      <artifactId>server-sdk</artifactId>
+      <version>9.10.2</version>
+    </dependency>
+  </dependencies>
+</profile>

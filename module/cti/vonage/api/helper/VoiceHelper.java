@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -90,6 +91,17 @@ public class VoiceHelper
     }
     if (keyPath == null || keyPath.isBlank()) {
       throw new IllegalStateException("cti.vonage.private_key is required");
+    }
+    // Vonage SDK 9.x richiede che application_id sia un UUID valido
+    try {
+      UUID.fromString(appId);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalStateException(
+          "cti.vonage.application_id must be a valid UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). "
+          + "Current value: \"" + appId + "\". "
+          + "Get your Application ID from Vonage Dashboard: https://dashboard.nexmo.com/applications",
+          e
+      );
     }
 
     this.applicationId = appId;
