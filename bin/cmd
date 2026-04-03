@@ -72,6 +72,10 @@ Usage: cmd COMMAND [OPTIONS]
   ngrok stop                       Stop ngrok tunnel
   ngrok status                     Show ngrok status and public URL
 
+  snapshot create [--label <n>]    Capture current config + modules → snapshots/<id>.tar.gz
+  snapshot restore <file>          Extract snapshot and run its install.sh
+  snapshot list                    List available snapshots
+
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
                                      Default: -c 10 -r 100 (10 concurrent users, 100 reps each)
                                      -u <url>         Target URL
@@ -2197,6 +2201,188 @@ module_test() {
 
     bash "$SCRIPT" "$@"
 }
+# ============================================================================
+# Snapshot Operations
+# ============================================================================
+
+# _snapshot_module_order — legge installed.json e restituisce i moduli in ordine
+# topologico (ogni modulo dopo le sue dipendenze), uno per riga.
+_snapshot_module_order() {
+    local INSTALLED_JSON="$WORKSPACE/src/main/resources/module/installed.json"
+    [ -f "$INSTALLED_JSON" ] || return 0
+    python3 - "$INSTALLED_JSON" << 'PYEOF'
+import json, sys
+
+with open(sys.argv[1]) as f:
+    modules = json.load(f)
+
+ordered = []
+visited = set()
+
+def visit(key):
+    if key in visited:
+        return
+    visited.add(key)
+    for dep in modules.get(key, {}).get('dependencies', {}).keys():
+        if dep in modules:
+            visit(dep)
+    ordered.append(key)
+
+for key in modules:
+    visit(key)
+
+for key in ordered:
+    print(key)
+PYEOF
+}
+
+snapshot_create() {
+    load_env
+
+    local LABEL=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --label) LABEL="$2"; shift 2 ;;
+            *) error "Opzione sconosciuta: $1. Usage: cmd snapshot create [--label <name>]" ;;
+        esac
+    done
+
+    local TIMESTAMP
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    local SNAP_ID="$TIMESTAMP"
+    [ -n "$LABEL" ] && SNAP_ID="${TIMESTAMP}-${LABEL}"
+
+    local SNAP_DIR="$WORKSPACE/snapshots"
+    local SNAP_TMP="$SNAP_DIR/${SNAP_ID}"
+    local SNAP_OUT="$SNAP_DIR/${SNAP_ID}.tar.gz"
+
+    [ -f "$SNAP_OUT" ] && error "Snapshot già esistente: ${SNAP_ID}.tar.gz"
+
+    mkdir -p "$SNAP_DIR" "$SNAP_TMP"
+
+    info "[snapshot] Creo snapshot: $SNAP_ID"
+    printf '\n'
+
+    # .env
+    if [ -f "$WORKSPACE/.env" ]; then
+        cp "$WORKSPACE/.env" "$SNAP_TMP/env"
+        success "  .env"
+    fi
+
+    # config/
+    if [ -d "$WORKSPACE/config" ]; then
+        cp -r "$WORKSPACE/config" "$SNAP_TMP/config"
+        success "  config/"
+    fi
+
+    # gui/package.json + package-lock.json
+    if [ -f "$WORKSPACE/gui/package.json" ]; then
+        cp "$WORKSPACE/gui/package.json" "$SNAP_TMP/gui_package.json"
+        success "  gui/package.json"
+    fi
+    if [ -f "$WORKSPACE/gui/package-lock.json" ]; then
+        cp "$WORKSPACE/gui/package-lock.json" "$SNAP_TMP/gui_package_lock.json"
+        success "  gui/package-lock.json"
+    fi
+
+    # Genera install.sh con sequenza moduli in ordine topologico
+    local MODULE_CMDS=""
+    while IFS= read -r key; do
+        MODULE_CMDS="${MODULE_CMDS}cmd module import ${key}"$'\n'
+    done < <(_snapshot_module_order)
+
+    cat > "$SNAP_TMP/install.sh" << INSTALLEOF
+#!/bin/bash
+set -e
+WORKSPACE="\${1:-/workspace}"
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+
+echo "[snapshot] Ripristino .env..."
+cp "\$SCRIPT_DIR/env" "\$WORKSPACE/.env"
+
+echo "[snapshot] Ripristino config/application.properties..."
+cp "\$SCRIPT_DIR/config/application.properties" "\$WORKSPACE/config/application.properties"
+
+echo "[snapshot] Ripristino gui/package.json e package-lock.json..."
+cp "\$SCRIPT_DIR/gui_package.json" "\$WORKSPACE/gui/package.json"
+cp "\$SCRIPT_DIR/gui_package_lock.json" "\$WORKSPACE/gui/package-lock.json"
+
+echo "[snapshot] npm install..."
+cd "\$WORKSPACE/gui" && npm install
+
+echo "[snapshot] Installazione moduli..."
+cd "\$WORKSPACE"
+${MODULE_CMDS}
+echo "[snapshot] Restore completato."
+INSTALLEOF
+    chmod +x "$SNAP_TMP/install.sh"
+    success "  install.sh (moduli: $(echo "$MODULE_CMDS" | grep -c 'cmd module' || true))"
+
+    # Comprimi
+    printf '\n'
+    info "[snapshot] Comprimo → snapshots/${SNAP_ID}.tar.gz ..."
+    tar -czf "$SNAP_OUT" -C "$SNAP_DIR" "$SNAP_ID"
+    rm -rf "$SNAP_TMP"
+
+    printf '\n'
+    success "Snapshot creato: snapshots/${SNAP_ID}.tar.gz"
+    printf '\n'
+}
+
+snapshot_restore() {
+    load_env
+
+    local SNAP_FILE="$1"
+    [ -n "$SNAP_FILE" ] || error "Usage: cmd snapshot restore <file.tar.gz>"
+
+    # Accetta path assoluto o relativo a WORKSPACE/snapshots/
+    if [ ! -f "$SNAP_FILE" ]; then
+        SNAP_FILE="$WORKSPACE/snapshots/$1"
+    fi
+    [ -f "$SNAP_FILE" ] || error "Snapshot non trovato: $1"
+
+    local SNAP_NAME
+    SNAP_NAME=$(basename "$SNAP_FILE" .tar.gz)
+    local EXTRACT_DIR="$WORKSPACE/snapshots/${SNAP_NAME}"
+
+    [ -d "$EXTRACT_DIR" ] && rm -rf "$EXTRACT_DIR"
+
+    info "[snapshot] Estraggo: $(basename "$SNAP_FILE") ..."
+    tar -xzf "$SNAP_FILE" -C "$WORKSPACE/snapshots/"
+
+    [ -f "$EXTRACT_DIR/install.sh" ] || error "install.sh non trovato nello snapshot"
+
+    printf '\n'
+    info "[snapshot] Eseguo install.sh..."
+    printf '\n'
+    bash "$EXTRACT_DIR/install.sh" "$WORKSPACE"
+
+    rm -rf "$EXTRACT_DIR"
+    printf '\n'
+    success "Restore completato da: $(basename "$SNAP_FILE")"
+    printf '\n'
+}
+
+snapshot_list() {
+    local SNAP_DIR="$WORKSPACE/snapshots"
+    if [ ! -d "$SNAP_DIR" ] || [ -z "$(ls "$SNAP_DIR"/*.tar.gz 2>/dev/null)" ]; then
+        info "Nessuno snapshot disponibile in snapshots/"
+        return 0
+    fi
+
+    printf '\n'
+    printf '%-45s  %s\n' "SNAPSHOT" "SIZE"
+    printf '%-45s  %s\n' "--------" "----"
+    for f in "$SNAP_DIR"/*.tar.gz; do
+        local name size
+        name=$(basename "$f")
+        size=$(du -sh "$f" 2>/dev/null | cut -f1)
+        printf '%-45s  %s\n' "$name" "$size"
+    done
+    printf '\n'
+}
+
+# ============================================================================
 # Benchmark Operations
 # ============================================================================
 
@@ -2381,6 +2567,14 @@ case "$1" in
             cli)    shift 2; module_cli "$@" ;;
             test)   shift 2; module_test "$@" ;;
             *) error "Unknown module command: $2. Use: export, import, dist, remove, cli, test" ;;
+        esac
+        ;;
+    snapshot)
+        case "$2" in
+            create)  shift 2; snapshot_create "$@" ;;
+            restore) shift 2; snapshot_restore "$@" ;;
+            list)    snapshot_list ;;
+            *) error "Unknown snapshot command: $2. Use: create, restore, list" ;;
         esac
         ;;
     -h|--help|help|"")
