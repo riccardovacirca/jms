@@ -24,7 +24,7 @@ public class ImportSessionDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT * FROM import_sessions WHERE id = ?";
+    sql = "SELECT * FROM jms_import_sessions WHERE id = ?";
     rows = db.select(sql, id);
     return rows.isEmpty() ? null : toDTO(rows.get(0));
   }
@@ -36,7 +36,7 @@ public class ImportSessionDAO
     String sql;
 
     sql =
-      "INSERT INTO import_sessions (id, filename, file_path, row_count, headers, preview, status) " +
+      "INSERT INTO jms_import_sessions (id, filename, file_path, row_count, headers, preview, status) " +
       "VALUES (?, ?, ?, ?, ?, ?, 'uploaded')";
     db.query(sql, id, filename, filePath, rowCount, headers, preview);
   }
@@ -46,7 +46,7 @@ public class ImportSessionDAO
   {
     String sql;
 
-    sql = "UPDATE import_sessions SET column_mapping = ?, status = 'mapped', updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_import_sessions SET column_mapping = ?, status = 'mapped', updated_at = NOW() WHERE id = ?";
     db.query(sql, columnMapping, id);
   }
 
@@ -55,7 +55,7 @@ public class ImportSessionDAO
   {
     String sql;
 
-    sql = "UPDATE import_sessions SET status = ?, error_message = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_import_sessions SET status = ?, error_message = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, status, errorMessage, id);
   }
 
@@ -64,7 +64,7 @@ public class ImportSessionDAO
   {
     String sql;
 
-    sql = "UPDATE import_sessions SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_import_sessions SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = ?";
     db.query(sql, id);
   }
 

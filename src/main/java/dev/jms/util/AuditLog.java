@@ -3,7 +3,7 @@ package dev.jms.util;
 import java.util.Map;
 
 /**
- * Utility per il logging strutturato degli eventi in tabella audit_log.
+ * Utility per il logging strutturato degli eventi in tabella jms_audit_log.
  * Disponibile a tutti i moduli per la registrazione di eventi significativi
  * (login, logout, modifiche dati, accessi non autorizzati, ecc.).
  *
@@ -32,7 +32,7 @@ public class AuditLog
     String sql;
 
     detailsJson = details != null ? Json.encode(details) : null;
-    sql = "INSERT INTO audit_log (event, user_id, username, ip_address, user_agent, details) "
+    sql = "INSERT INTO jms_audit_log (event, user_id, username, ip_address, user_agent, details) "
         + "VALUES (?, ?, ?, ?, ?, ?::jsonb)";
 
     try {

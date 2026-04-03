@@ -2,7 +2,7 @@
 -- MODULO CONTATTI
 -- ============================================================================
 
-CREATE TABLE contatti (
+CREATE TABLE jms_contatti (
     id              SERIAL PRIMARY KEY,
     nome            VARCHAR(100),
     cognome         VARCHAR(100),
@@ -21,17 +21,17 @@ CREATE TABLE contatti (
     updated_at      TIMESTAMP
 );
 
-CREATE INDEX idx_contatti_telefono  ON contatti(telefono);
-CREATE INDEX idx_contatti_email     ON contatti(email);
-CREATE INDEX idx_contatti_stato     ON contatti(stato);
-CREATE INDEX idx_contatti_blacklist ON contatti(blacklist);
-CREATE INDEX idx_contatti_cognome   ON contatti(cognome);
+CREATE INDEX idx_jms_contatti_telefono  ON jms_contatti(telefono);
+CREATE INDEX idx_jms_contatti_email     ON jms_contatti(email);
+CREATE INDEX idx_jms_contatti_stato     ON jms_contatti(stato);
+CREATE INDEX idx_jms_contatti_blacklist ON jms_contatti(blacklist);
+CREATE INDEX idx_jms_contatti_cognome   ON jms_contatti(cognome);
 
 -- ============================================================================
 -- LISTE (raggruppamento contatti / campagne)
 -- ============================================================================
 
-CREATE TABLE liste (
+CREATE TABLE jms_liste (
     id          SERIAL PRIMARY KEY,
     nome        VARCHAR(100) NOT NULL UNIQUE,
     descrizione TEXT,
@@ -43,30 +43,30 @@ CREATE TABLE liste (
     updated_at  TIMESTAMP
 );
 
-CREATE INDEX idx_liste_stato      ON liste(stato);
-CREATE INDEX idx_liste_scadenza   ON liste(scadenza);
-CREATE INDEX idx_liste_deleted_at ON liste(deleted_at);
+CREATE INDEX idx_jms_liste_stato      ON jms_liste(stato);
+CREATE INDEX idx_jms_liste_scadenza   ON jms_liste(scadenza);
+CREATE INDEX idx_jms_liste_deleted_at ON jms_liste(deleted_at);
 
 -- ============================================================================
 -- RELAZIONE LISTE-CONTATTI (Many-to-Many)
 -- ============================================================================
 
-CREATE TABLE lista_contatti (
+CREATE TABLE jms_lista_contatti (
     id          SERIAL PRIMARY KEY,
-    lista_id    INTEGER NOT NULL REFERENCES liste(id)    ON DELETE CASCADE,
-    contatto_id INTEGER NOT NULL REFERENCES contatti(id) ON DELETE CASCADE,
+    lista_id    INTEGER NOT NULL REFERENCES jms_liste(id)    ON DELETE CASCADE,
+    contatto_id INTEGER NOT NULL REFERENCES jms_contatti(id) ON DELETE CASCADE,
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(lista_id, contatto_id)
 );
 
-CREATE INDEX idx_lista_contatti_lista    ON lista_contatti(lista_id);
-CREATE INDEX idx_lista_contatti_contatto ON lista_contatti(contatto_id);
+CREATE INDEX idx_jms_lista_contatti_lista    ON jms_lista_contatti(lista_id);
+CREATE INDEX idx_jms_lista_contatti_contatto ON jms_lista_contatti(contatto_id);
 
 -- ============================================================================
 -- SESSIONI DI IMPORTAZIONE
 -- ============================================================================
 
-CREATE TABLE import_sessions (
+CREATE TABLE jms_import_sessions (
     id             VARCHAR(36)  PRIMARY KEY,
     filename       VARCHAR(255) NOT NULL,
     file_path      VARCHAR(500),
@@ -81,5 +81,5 @@ CREATE TABLE import_sessions (
     completed_at   TIMESTAMP
 );
 
-CREATE INDEX idx_import_sessions_status  ON import_sessions(status);
-CREATE INDEX idx_import_sessions_created ON import_sessions(created_at);
+CREATE INDEX idx_jms_import_sessions_status  ON jms_import_sessions(status);
+CREATE INDEX idx_jms_import_sessions_created ON jms_import_sessions(created_at);

@@ -3,6 +3,7 @@ package dev.jms.app.contatti;
 import dev.jms.app.contatti.handler.ContattiHandler;
 import dev.jms.app.contatti.handler.ImporterHandler;
 import dev.jms.app.contatti.handler.ListeHandler;
+import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
 
@@ -15,8 +16,9 @@ public class Routes
    * Aggiunge le rotte del modulo al router.
    *
    * @param router router dell'applicazione
+   * @param config configurazione applicazione
    */
-  public static void register(Router router)
+  public static void register(Router router, Config config)
   {
     ContattiHandler contatti;
     ListeHandler liste;
@@ -24,7 +26,7 @@ public class Routes
 
     contatti = new ContattiHandler();
     liste = new ListeHandler();
-    importer = new ImporterHandler();
+    importer = new ImporterHandler(config);
 
     router.route(HttpMethod.GET,    "/api/contatti",                  contatti::list);
     router.route(HttpMethod.POST,   "/api/contatti",                  contatti::create);

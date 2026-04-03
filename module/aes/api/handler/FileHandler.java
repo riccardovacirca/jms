@@ -1,5 +1,6 @@
 package dev.jms.app.module.aes.handler;
 
+import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.File;
 import dev.jms.util.HttpRequest;
@@ -12,19 +13,28 @@ import java.util.HashMap;
 /**
  * Handler per gestione file temporanei: upload, download, delete.
  * <p>
- * Directory strutturata: {@code /tmp/aes/YYYY/MM/}<br>
- * Naming: {@code hash(filename)-timestamp.ext}
+ * La directory base è configurabile tramite la property {@code aes.resources.tmp}
+ * (default: {@code /app/storage/aes/tmp}). I file sono organizzati in sottocartelle
+ * {@code YYYY/MM/} con naming {@code hash(filename)-timestamp.ext}.
  * </p>
  */
 public class FileHandler
 {
-  private static final String BASE_DIR = "/tmp/aes";
+  private static final String DEFAULT_TMP_DIR = "/app/storage/aes/tmp";
+
+  private final String tmpDir;
+
+  /** Costruttore. Legge il path di storage temporaneo dalla configurazione. */
+  public FileHandler(Config config)
+  {
+    this.tmpDir = config.get("aes.resources.tmp", DEFAULT_TMP_DIR);
+  }
 
   /**
    * POST /api/aes/file/upload — carica file multipart in storage temporaneo.
    * <p>
    * Parametri multipart: {@code file}<br>
-   * Risposta: {@code {"path": "/tmp/aes/YYYY/MM/..."}}
+   * Risposta: {@code {"path": "/app/storage/aes/tmp/YYYY/MM/..."}}
    * </p>
    */
   public void upload(HttpRequest req, HttpResponse res, DB db) throws Exception
@@ -170,7 +180,7 @@ public class FileHandler
 
     now = LocalDateTime.now();
     yearMonth = now.format(DateTimeFormatter.ofPattern("yyyy/MM"));
-    dir = BASE_DIR + "/" + yearMonth;
+    dir = tmpDir + "/" + yearMonth;
 
     File.createDirectory(dir);
 

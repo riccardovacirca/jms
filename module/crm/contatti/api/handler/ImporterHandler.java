@@ -5,6 +5,7 @@ import dev.jms.app.contatti.dao.ImportSessionDAO;
 import dev.jms.app.contatti.dao.ListaDAO;
 import dev.jms.app.contatti.dto.ContattoDTO;
 import dev.jms.app.contatti.dto.ImportSessionDTO;
+import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Excel;
 import dev.jms.util.HttpRequest;
@@ -35,6 +36,15 @@ import java.util.UUID;
 public class ImporterHandler
 {
   private static final Log log = Log.get(ImporterHandler.class);
+  private static final String DEFAULT_TMP_DIR = "/app/storage/crm/contatti/tmp";
+
+  private final String tmpDir;
+
+  /** Costruttore. Legge il path di storage temporaneo dalla configurazione. */
+  public ImporterHandler(Config config)
+  {
+    this.tmpDir = config.get("crm.contatti.resources.tmp", DEFAULT_TMP_DIR);
+  }
 
   /**
    * GET /api/import/campi — elenco dei campi importabili del sistema.
@@ -444,7 +454,7 @@ public class ImporterHandler
     Path file;
 
     ext  = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : ".xlsx";
-    dir  = Path.of(System.getProperty("java.io.tmpdir"), "hola_import");
+    dir  = Path.of(tmpDir);
     Files.createDirectories(dir);
     file = Files.createTempFile(dir, "import_", ext);
     Files.write(file, bytes);

@@ -15,13 +15,14 @@ import java.util.stream.Stream;
 /**
  * Job schedulato per la pulizia automatica dei file temporanei del modulo aes.
  * <p>
- * Elimina file più vecchi di {@code aes.temp.retention.days} giorni dalla directory {@code /tmp/aes/}.
+ * Elimina file più vecchi di {@code aes.temp.retention.days} giorni dalla directory
+ * configurata tramite {@code aes.resources.tmp} (default: {@code /app/storage/aes/tmp}).
  * </p>
  */
 public class CleanupJob
 {
   private static final Log log = Log.get(CleanupJob.class);
-  private static final String BASE_DIR = "/tmp/aes";
+  private static final String DEFAULT_TMP_DIR = "/app/storage/aes/tmp";
 
   /**
    * Esegue la pulizia dei file temporanei.
@@ -30,23 +31,25 @@ public class CleanupJob
   public static void run()
   {
     Config config;
+    String tmpDir;
     int retentionDays;
     Instant cutoff;
     int deleted;
 
     try {
       config = new Config();
+      tmpDir = config.get("aes.resources.tmp", DEFAULT_TMP_DIR);
       retentionDays = config.getInt("aes.temp.retention.days", 7);
       cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
 
       log.info("[AES Cleanup] Started - retention: {} days, cutoff: {}", retentionDays, cutoff);
 
-      if (!File.exists(BASE_DIR)) {
-        log.info("[AES Cleanup] Directory {} does not exist, skipping", BASE_DIR);
+      if (!File.exists(tmpDir)) {
+        log.info("[AES Cleanup] Directory {} does not exist, skipping", tmpDir);
         return;
       }
 
-      deleted = cleanupDirectory(BASE_DIR, cutoff);
+      deleted = cleanupDirectory(tmpDir, cutoff);
 
       log.info("[AES Cleanup] Completed - deleted {} files", deleted);
 

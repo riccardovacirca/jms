@@ -21,7 +21,7 @@ public class ProfileSettingsDAO
   {
     String sql;
 
-    sql = "SELECT chiave, valore FROM user_settings WHERE user_id = ? ORDER BY chiave";
+    sql = "SELECT chiave, valore FROM jms_user_settings WHERE user_id = ? ORDER BY chiave";
     return db.select(sql, userId);
   }
 
@@ -31,7 +31,7 @@ public class ProfileSettingsDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql  = "SELECT chiave, valore FROM user_settings WHERE user_id = ? AND chiave = ?";
+    sql  = "SELECT chiave, valore FROM jms_user_settings WHERE user_id = ? AND chiave = ?";
     rows = db.select(sql, userId, chiave);
     return rows.isEmpty() ? null : rows.get(0);
   }
@@ -42,7 +42,7 @@ public class ProfileSettingsDAO
     String sql;
 
     sql =
-      "INSERT INTO user_settings (user_id, chiave, valore) VALUES (?, ?, ?) " +
+      "INSERT INTO jms_user_settings (user_id, chiave, valore) VALUES (?, ?, ?) " +
       "ON CONFLICT (user_id, chiave) DO UPDATE SET valore = EXCLUDED.valore";
     db.query(sql, userId, chiave, valore);
   }
@@ -52,7 +52,7 @@ public class ProfileSettingsDAO
   {
     String sql;
 
-    sql = "DELETE FROM user_settings WHERE user_id = ? AND chiave = ?";
+    sql = "DELETE FROM jms_user_settings WHERE user_id = ? AND chiave = ?";
     db.query(sql, userId, chiave);
   }
 }

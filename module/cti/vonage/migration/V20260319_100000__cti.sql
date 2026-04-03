@@ -1,4 +1,4 @@
-CREATE TABLE chiamate (
+CREATE TABLE jms_chiamate (
   id                  BIGSERIAL     PRIMARY KEY,
   uuid                VARCHAR(64),
   conversazione_uuid  VARCHAR(64),
@@ -24,7 +24,7 @@ CREATE TABLE chiamate (
   data_aggiornamento  TIMESTAMP
 );
 
-CREATE TABLE cti_operatori (
+CREATE TABLE jms_cti_operatori (
   id                  SERIAL       PRIMARY KEY,
   vonage_user_id      VARCHAR(100) NOT NULL UNIQUE,
   account_id          INTEGER,
@@ -34,8 +34,8 @@ CREATE TABLE cti_operatori (
   data_creazione      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE cti_operatori ADD COLUMN sessione_ttl TIMESTAMP;
+ALTER TABLE jms_cti_operatori ADD COLUMN sessione_ttl TIMESTAMP;
 
-CREATE UNIQUE INDEX idx_cti_operatori_sessione
-    ON cti_operatori(sessione_account_id)
+CREATE UNIQUE INDEX idx_jms_cti_operatori_sessione
+    ON jms_cti_operatori(sessione_account_id)
     WHERE sessione_account_id IS NOT NULL;

@@ -20,7 +20,7 @@ public class RefreshTokenDAO
   {
     String sql;
 
-    sql = "INSERT INTO refresh_tokens (token, account_id, expires_at) VALUES (?, ?, ?)";
+    sql = "INSERT INTO jms_refresh_tokens (token, account_id, expires_at) VALUES (?, ?, ?)";
     db.query(sql, token, accountId, DB.toSqlTimestamp(expiresAt));
   }
 
@@ -29,7 +29,7 @@ public class RefreshTokenDAO
   {
     String sql;
 
-    sql = "DELETE FROM refresh_tokens WHERE token = ?";
+    sql = "DELETE FROM jms_refresh_tokens WHERE token = ?";
     db.query(sql, token);
   }
 }

@@ -41,9 +41,9 @@ public final class Routes
     SavinoHandler savino;
     TabletHandler tablet;
 
-    sign = new SignHandler();
-    htmlSign = new HtmlSignHandler();
-    file = new FileHandler();
+    sign = new SignHandler(config);
+    htmlSign = new HtmlSignHandler(config);
+    file = new FileHandler(config);
     namirial = new NamirialHandler(config);
     savino = new SavinoHandler();
     tablet = new TabletHandler();

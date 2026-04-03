@@ -25,7 +25,7 @@ public class ProfileDAO
     sql =
       "SELECT u.id, u.account_id, u.nome, u.cognome, u.nickname, u.immagine, " +
       "       u.flags, u.attivo, u.created_at, a.username " +
-      "FROM users u JOIN accounts a ON a.id = u.account_id " +
+      "FROM jms_users u JOIN jms_accounts a ON a.id = u.account_id " +
       "WHERE u.account_id = ?";
     rows = db.select(sql, accountId);
     return rows.isEmpty() ? null : rows.get(0);
@@ -37,7 +37,7 @@ public class ProfileDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql  = "SELECT id FROM users WHERE account_id = ?";
+    sql  = "SELECT id FROM jms_users WHERE account_id = ?";
     rows = db.select(sql, accountId);
     return !rows.isEmpty();
   }
@@ -52,10 +52,10 @@ public class ProfileDAO
       return false;
     }
     if (excludeId != null) {
-      sql  = "SELECT id FROM users WHERE nickname = ? AND id != ?";
+      sql  = "SELECT id FROM jms_users WHERE nickname = ? AND id != ?";
       rows = db.select(sql, nickname, excludeId);
     } else {
-      sql  = "SELECT id FROM users WHERE nickname = ?";
+      sql  = "SELECT id FROM jms_users WHERE nickname = ?";
       rows = db.select(sql, nickname);
     }
     return !rows.isEmpty();
@@ -73,7 +73,7 @@ public class ProfileDAO
     nicknameVal = (nickname == null || nickname.isBlank()) ? null : nickname;
     immagineVal = (immagine == null || immagine.isBlank()) ? null : immagine;
     sql =
-      "INSERT INTO users (account_id, nome, cognome, nickname, immagine, flags) " +
+      "INSERT INTO jms_users (account_id, nome, cognome, nickname, immagine, flags) " +
       "VALUES (?, ?, ?, ?, ?, ?) RETURNING id";
     rows = db.select(sql, accountId, nome, cognome, nicknameVal, immagineVal, flags);
     return DB.toLong(rows.get(0).get("id"));
@@ -90,7 +90,7 @@ public class ProfileDAO
     nicknameVal = (nickname == null || nickname.isBlank()) ? null : nickname;
     immagineVal = (immagine == null || immagine.isBlank()) ? null : immagine;
     sql =
-      "UPDATE users SET nome = ?, cognome = ?, nickname = ?, immagine = ?, " +
+      "UPDATE jms_users SET nome = ?, cognome = ?, nickname = ?, immagine = ?, " +
       "                 flags = ?, attivo = ? WHERE id = ?";
     db.query(sql, nome, cognome, nicknameVal, immagineVal, flags, attivo, id);
   }
@@ -100,7 +100,7 @@ public class ProfileDAO
   {
     String sql;
 
-    sql = "UPDATE users SET attivo = false WHERE id = ?";
+    sql = "UPDATE jms_users SET attivo = false WHERE id = ?";
     db.query(sql, id);
   }
 }

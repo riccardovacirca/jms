@@ -1,6 +1,7 @@
 package dev.jms.app.module.aes.handler;
 
 import dev.jms.app.module.aes.helper.SignHelper;
+import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;
@@ -15,9 +16,9 @@ public class SignHandler
   private final SignHelper signHelper;
 
   /** Crea un'istanza con il proprio helper di elaborazione PDF. */
-  public SignHandler()
+  public SignHandler(Config config)
   {
-    this.signHelper = new SignHelper();
+    this.signHelper = new SignHelper(config);
   }
 
   /**

@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * DAO per la persistenza delle chiamate Vonage.
- * Accede alla tabella chiamate tramite il wrapper JDBC {@link DB}.
+ * Accede alla tabella jms_chiamate tramite il wrapper JDBC {@link DB}.
  */
 public class CallDAO
 {
@@ -33,7 +33,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "INSERT INTO chiamate "
+    sql = "INSERT INTO jms_chiamate "
         + "(uuid, conversazione_uuid, direzione, stato, "
         + "tipo_mittente, numero_mittente, tipo_destinatario, numero_destinatario, "
         + "answer_url, event_url, operatore_id, contatto_id, data_creazione) "
@@ -58,7 +58,7 @@ public class CallDAO
     ArrayList<HashMap<String, Object>> rows;
     List<CallDTO> result;
 
-    sql = "SELECT * FROM chiamate ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
+    sql = "SELECT * FROM jms_chiamate ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
     rows = db.select(sql, size, (page - 1) * size);
     result = new ArrayList<>();
     for (HashMap<String, Object> r : rows) {
@@ -77,7 +77,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM chiamate";
+    sql = "SELECT COUNT(*) AS n FROM jms_chiamate";
     rows = db.select(sql);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -92,7 +92,7 @@ public class CallDAO
   {
     String sql;
 
-    sql = "UPDATE chiamate SET stato = ?, data_aggiornamento = NOW() WHERE uuid = ?";
+    sql = "UPDATE jms_chiamate SET stato = ?, data_aggiornamento = NOW() WHERE uuid = ?";
     db.query(sql, stato, uuid);
   }
 

@@ -19,7 +19,8 @@ Copiare la chiave privata Vonage in /app/config/private.key.
 
 DIPENDENZA FRONTEND
 
-Dalla cartella gui/ eseguire:
+Installata automaticamente dallo script di post-install (install.sh) durante cmd module import.
+Per reinstallare manualmente dalla cartella gui/:
 
     npm install @vonage/client-sdk
 
@@ -34,7 +35,8 @@ L'Answer URL e obbligatoria: Vonage la chiama quando l'operatore avvia serverCal
 
 CREDENZIALI VONAGE - PROCEDURA DI SETUP
 
-Prerequisito: installare la Vonage CLI.
+Prerequisito: la Vonage CLI viene installata automaticamente dallo script di post-install.
+Per reinstallarla manualmente:
 
     npm install -g @vonage/cli
 

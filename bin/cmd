@@ -1305,13 +1305,16 @@ with open('$CONFIG_JS', 'w') as f:
         info "[module] Aggiungo Maven profile al pom.xml..."
 
         local POM="$WORKSPACE/pom.xml"
+        local PROFILE_MARKER="${MODULE_KEY//\//-}"
         local PROFILE_XML
         PROFILE_XML=$(cat "$MODULE_DIR/profile.xml")
 
-        awk -v profile="$PROFILE_XML" '
+        awk -v profile="$PROFILE_XML" -v marker="$PROFILE_MARKER" '
             /<!-- \[MODULE_PROFILES\] -->/ {
                 print
+                print "<!-- [MODULE:" marker "] -->"
                 print profile
+                print "<!-- [/MODULE:" marker "] -->"
                 next
             }
             {print}

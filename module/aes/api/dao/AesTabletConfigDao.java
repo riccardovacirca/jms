@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * DAO per accesso alla tabella {@code aes_tablet_config}.
+ * DAO per accesso alla tabella {@code jms_aes_tablet_config}.
  * <p>
  * Gestisce le configurazioni tablet per firma remota Savino/Namirial.
  * Ogni tablet ha credenziali dedicate per autenticazione dm7auth.
@@ -35,7 +35,7 @@ public final class AesTabletConfigDao
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "SELECT * FROM aes_tablet_config WHERE tablet_id = ? AND enabled = true";
+    sql = "SELECT * FROM jms_aes_tablet_config WHERE tablet_id = ? AND enabled = true";
     rows = db.select(sql, tabletId);
 
     if (rows.isEmpty()) {
@@ -58,7 +58,7 @@ public final class AesTabletConfigDao
     List<HashMap<String, Object>> rows;
     List<AesTabletConfig> result;
 
-    sql = "SELECT * FROM aes_tablet_config WHERE account_id = ? AND enabled = true ORDER BY tablet_name";
+    sql = "SELECT * FROM jms_aes_tablet_config WHERE account_id = ? AND enabled = true ORDER BY tablet_name";
     rows = db.select(sql, accountId);
 
     result = new ArrayList<>();
@@ -82,7 +82,7 @@ public final class AesTabletConfigDao
     List<HashMap<String, Object>> rows;
     List<AesTabletConfig> result;
 
-    sql = "SELECT * FROM aes_tablet_config WHERE provider = ? AND enabled = true ORDER BY tablet_name";
+    sql = "SELECT * FROM jms_aes_tablet_config WHERE provider = ? AND enabled = true ORDER BY tablet_name";
     rows = db.select(sql, provider);
 
     result = new ArrayList<>();
@@ -105,7 +105,7 @@ public final class AesTabletConfigDao
     List<HashMap<String, Object>> rows;
     List<AesTabletConfig> result;
 
-    sql = "SELECT * FROM aes_tablet_config WHERE enabled = true ORDER BY tablet_name";
+    sql = "SELECT * FROM jms_aes_tablet_config WHERE enabled = true ORDER BY tablet_name";
     rows = db.select(sql);
 
     result = new ArrayList<>();
@@ -147,7 +147,7 @@ public final class AesTabletConfigDao
     List<HashMap<String, Object>> rows;
     Long id;
 
-    sql = "INSERT INTO aes_tablet_config " +
+    sql = "INSERT INTO jms_aes_tablet_config " +
           "(account_id, tablet_id, tablet_name, tablet_app, tablet_department, " +
           "provider, endpoint, username, password, enabled) " +
           "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, true) " +
@@ -196,7 +196,7 @@ public final class AesTabletConfigDao
     String sql;
     int rows;
 
-    sql = "UPDATE aes_tablet_config SET " +
+    sql = "UPDATE jms_aes_tablet_config SET " +
           "tablet_name = ?, tablet_app = ?, tablet_department = ?, " +
           "endpoint = ?, username = ?, password = ?, " +
           "updated_at = CURRENT_TIMESTAMP " +
@@ -228,7 +228,7 @@ public final class AesTabletConfigDao
     String sql;
     int rows;
 
-    sql = "UPDATE aes_tablet_config SET enabled = false, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    sql = "UPDATE jms_aes_tablet_config SET enabled = false, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     rows = db.query(sql, id);
 
     return rows;
@@ -249,7 +249,7 @@ public final class AesTabletConfigDao
     String sql;
     int rows;
 
-    sql = "DELETE FROM aes_tablet_config WHERE id = ?";
+    sql = "DELETE FROM jms_aes_tablet_config WHERE id = ?";
     rows = db.query(sql, id);
 
     return rows;

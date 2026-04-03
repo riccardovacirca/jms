@@ -27,9 +27,9 @@ public class ContattoDAO
     if (listaId != null) {
       sql =
         "SELECT c.*, COUNT(lc.lista_id) AS liste_count " +
-        "FROM contatti c " +
-        "LEFT JOIN lista_contatti lc ON lc.contatto_id = c.id " +
-        "WHERE c.id IN (SELECT contatto_id FROM lista_contatti WHERE lista_id = ?) " +
+        "FROM jms_contatti c " +
+        "LEFT JOIN jms_lista_contatti lc ON lc.contatto_id = c.id " +
+        "WHERE c.id IN (SELECT contatto_id FROM jms_lista_contatti WHERE lista_id = ?) " +
         "GROUP BY c.id " +
         "ORDER BY c.cognome, c.nome " +
         "LIMIT ? OFFSET ?";
@@ -37,8 +37,8 @@ public class ContattoDAO
     } else {
       sql =
         "SELECT c.*, COUNT(lc.lista_id) AS liste_count " +
-        "FROM contatti c " +
-        "LEFT JOIN lista_contatti lc ON lc.contatto_id = c.id " +
+        "FROM jms_contatti c " +
+        "LEFT JOIN jms_lista_contatti lc ON lc.contatto_id = c.id " +
         "GROUP BY c.id " +
         "ORDER BY c.cognome, c.nome " +
         "LIMIT ? OFFSET ?";
@@ -54,10 +54,10 @@ public class ContattoDAO
     ArrayList<HashMap<String, Object>> rows;
 
     if (listaId != null) {
-      sql = "SELECT COUNT(*) AS n FROM contatti WHERE id IN (SELECT contatto_id FROM lista_contatti WHERE lista_id = ?)";
+      sql = "SELECT COUNT(*) AS n FROM jms_contatti WHERE id IN (SELECT contatto_id FROM jms_lista_contatti WHERE lista_id = ?)";
       rows = db.select(sql, listaId);
     } else {
-      sql = "SELECT COUNT(*) AS n FROM contatti";
+      sql = "SELECT COUNT(*) AS n FROM jms_contatti";
       rows = db.select(sql);
     }
     return DB.toInteger(rows.get(0).get("n"));
@@ -71,8 +71,8 @@ public class ContattoDAO
 
     sql =
       "SELECT c.*, COUNT(lc.lista_id) AS liste_count " +
-      "FROM contatti c " +
-      "LEFT JOIN lista_contatti lc ON lc.contatto_id = c.id " +
+      "FROM jms_contatti c " +
+      "LEFT JOIN jms_lista_contatti lc ON lc.contatto_id = c.id " +
       "WHERE c.id = ? " +
       "GROUP BY c.id";
     rows = db.select(sql, id);
@@ -89,8 +89,8 @@ public class ContattoDAO
     pattern = "%" + query.toLowerCase() + "%";
     sql =
       "SELECT c.*, COUNT(lc.lista_id) AS liste_count " +
-      "FROM contatti c " +
-      "LEFT JOIN lista_contatti lc ON lc.contatto_id = c.id " +
+      "FROM jms_contatti c " +
+      "LEFT JOIN jms_lista_contatti lc ON lc.contatto_id = c.id " +
       "WHERE LOWER(c.nome) LIKE ? OR LOWER(c.cognome) LIKE ? " +
       "   OR LOWER(c.ragione_sociale) LIKE ? OR LOWER(c.telefono) LIKE ? OR LOWER(c.email) LIKE ? " +
       "GROUP BY c.id " +
@@ -109,7 +109,7 @@ public class ContattoDAO
 
     pattern = "%" + query.toLowerCase() + "%";
     sql =
-      "SELECT COUNT(DISTINCT c.id) AS n FROM contatti c " +
+      "SELECT COUNT(DISTINCT c.id) AS n FROM jms_contatti c " +
       "WHERE LOWER(c.nome) LIKE ? OR LOWER(c.cognome) LIKE ? " +
       "   OR LOWER(c.ragione_sociale) LIKE ? OR LOWER(c.telefono) LIKE ? OR LOWER(c.email) LIKE ?";
     rows = db.select(sql, pattern, pattern, pattern, pattern, pattern);
@@ -123,7 +123,7 @@ public class ContattoDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql =
-      "INSERT INTO contatti " +
+      "INSERT INTO jms_contatti " +
       "(nome, cognome, ragione_sociale, telefono, email, indirizzo, citta, cap, provincia, note, stato, consenso, blacklist) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "RETURNING id";
@@ -141,7 +141,7 @@ public class ContattoDAO
     String sql;
 
     sql =
-      "UPDATE contatti " +
+      "UPDATE jms_contatti " +
       "SET nome = ?, cognome = ?, ragione_sociale = ?, telefono = ?, email = ?, " +
       "    indirizzo = ?, citta = ?, cap = ?, provincia = ?, note = ?, " +
       "    stato = ?, consenso = ?, blacklist = ?, updated_at = NOW() " +
@@ -158,7 +158,7 @@ public class ContattoDAO
   {
     String sql;
 
-    sql = "DELETE FROM contatti WHERE id = ?";
+    sql = "DELETE FROM jms_contatti WHERE id = ?";
     db.query(sql, id);
   }
 
@@ -167,7 +167,7 @@ public class ContattoDAO
   {
     String sql;
 
-    sql = "UPDATE contatti SET stato = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_contatti SET stato = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, stato, id);
   }
 
@@ -176,7 +176,7 @@ public class ContattoDAO
   {
     String sql;
 
-    sql = "UPDATE contatti SET blacklist = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_contatti SET blacklist = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, blacklist, id);
   }
 
@@ -187,10 +187,10 @@ public class ContattoDAO
     ArrayList<HashMap<String, Object>> rows;
 
     if (excludeId != null) {
-      sql = "SELECT COUNT(*) AS n FROM contatti WHERE telefono = ? AND id != ?";
+      sql = "SELECT COUNT(*) AS n FROM jms_contatti WHERE telefono = ? AND id != ?";
       rows = db.select(sql, telefono, excludeId);
     } else {
-      sql = "SELECT COUNT(*) AS n FROM contatti WHERE telefono = ?";
+      sql = "SELECT COUNT(*) AS n FROM jms_contatti WHERE telefono = ?";
       rows = db.select(sql, telefono);
     }
     return DB.toInteger(rows.get(0).get("n")) > 0;

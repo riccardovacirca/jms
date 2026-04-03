@@ -83,6 +83,25 @@
 #                     oppure: docker exec <project>-production ls /app/logs/
 #
 # -----------------------------------------------------------------------------
+# POLICY STORAGE
+# -----------------------------------------------------------------------------
+#
+# Lo storage applicativo (upload, file temporanei, documenti) è in /app/storage/
+# dentro il container. Ogni modulo che scrive file usa una sottocartella dedicata
+# (es. /app/storage/aes/tmp, /app/storage/crm/contatti/tmp).
+#
+# Sviluppo:
+#   - /app/storage/ è montato via bind mount su ./storage/ nella cartella progetto
+#   - La cartella ./storage/ è in git con .gitkeep; i contenuti sono esclusi
+#     tramite storage/.gitignore (pattern: *)
+#
+# Produzione:
+#   - /app/storage/ è montato su un Docker named volume: <project>-storage
+#   - Il volume è gestito da Docker, non richiede directory di sistema
+#   - Sopravvive ai restart e agli aggiornamenti del container
+#   - Accesso: docker exec <project>-production ls /app/storage/
+#
+# -----------------------------------------------------------------------------
 # POLICY NETWORK
 # -----------------------------------------------------------------------------
 #
@@ -299,8 +318,8 @@ RUN groupadd -g ${RELEASE_APP_USER_GID} ${RELEASE_APP_USER} && \\
 # Copy application JAR
 COPY app.jar /app/app.jar
 
-# Create log and config directories
-RUN mkdir -p /app/logs /app/config && \\
+# Create log, config and storage directories
+RUN mkdir -p /app/logs /app/config /app/storage && \\
     chown -R ${RELEASE_APP_USER}:${RELEASE_APP_USER} /app
 
 # Switch to non-root user
@@ -423,6 +442,7 @@ success() { printf '\\033[0;32m✓ SUCCESS: %s\\033[0m\\n' "\$1"; }
 CONTAINER_NAME="${PROJECT_NAME}-${VERSION}"
 IMAGE_TAR="${TAR_NAME}"
 LOG_VOLUME="${PROJECT_NAME}-logs"
+STORAGE_VOLUME="${PROJECT_NAME}-storage"
 NETWORK="${DEV_NETWORK}"
 APP_PORT="${RELEASE_PORT}"
 APP_USER_UID="${RELEASE_APP_USER_UID}"
@@ -492,6 +512,7 @@ docker run -d \\
     --cpu-shares=512 \\
     -p "\${APP_PORT}:${RELEASE_PORT}" \\
     -v "\${LOG_VOLUME}:/app/logs" \\
+    -v "\${STORAGE_VOLUME}:/app/storage" \\
     --mount type=bind,source=\$(pwd)/application.properties,target=/app/config/application.properties,readonly \\
     ${IMAGE_NAME}:latest || error "Failed to start container"
 
@@ -522,7 +543,8 @@ info "Application Details:"
 info "  Container: \$CONTAINER_NAME"
 info "  Status: \$(docker inspect -f '{{.State.Status}}' \$CONTAINER_NAME)"
 info "  URL: http://localhost:\${APP_PORT}"
-info "  Log volume: \$LOG_VOLUME"
+info "  Log volume:     \$LOG_VOLUME"
+info "  Storage volume: \$STORAGE_VOLUME"
 echo ""
 info "Useful commands:"
 info "  View logs:    docker logs -f \$CONTAINER_NAME"

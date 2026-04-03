@@ -1,6 +1,7 @@
 package dev.jms.app.module.aes.handler;
 
 import dev.jms.app.module.aes.helper.SignHelper;
+import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.HTML2PDF;
 import dev.jms.util.HttpRequest;
@@ -22,9 +23,9 @@ public class HtmlSignHandler
 {
   private final SignHelper signHelper;
 
-  public HtmlSignHandler()
+  public HtmlSignHandler(Config config)
   {
-    this.signHelper = new SignHelper();
+    this.signHelper = new SignHelper(config);
   }
 
   /**

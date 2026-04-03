@@ -5,8 +5,10 @@
         "user": "^1.0.0"
     },
     "api": {
-        "routes": "dev.jms.app.module.crm.contatti.Routes.register(router);",
-        "config": {}
+        "routes": "dev.jms.app.module.crm.contatti.Routes.register(router, config);",
+        "config": {
+            "crm.contatti.resources.tmp": "/app/storage/crm/contatti/tmp"
+        }
     },
     "gui": {
         "config": {

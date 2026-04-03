@@ -38,6 +38,7 @@
 #                               - bind mount PWD → /workspace (sorgenti)
 #                               - bind mount ./logs/ → /app/logs (log applicazione)
 #                               - bind mount ./config/ → /app/config (configurazione)
+#                               - bind mount ./storage/ → /app/storage (storage upload/documenti)
 #                               - porte API e Vite esposte sull'host
 #   6. Scaffolding          — genera la struttura del progetto solo se pom.xml
 #                             non esiste: pom.xml, App.java skeleton, logback.xml,
@@ -134,6 +135,7 @@
 #   ./              ──bind mount──►   /workspace      (sorgenti)
 #   ./logs/         ──bind mount──►   /app/logs/      (log applicazione)
 #   ./config/       ──bind mount──►   /app/config/    (configurazione runtime)
+#   ./storage/      ──bind mount──►   /app/storage/   (storage upload/documenti)
 #   localhost:2310  ◄─port mapping─   :8080           (Undertow API)
 #   localhost:2350  ◄─port mapping─   :5173           (Vite dev server)
 #   localhost:5005  ◄─port mapping─   :5005           (JDWP debugger)
@@ -544,13 +546,14 @@ install_dev() {
         echo "Building development image..."
         docker build -t "$PROJECT_NAME-image" -f docker/Dockerfile.dev .
 
-        mkdir -p logs
+        mkdir -p logs storage
         echo "Starting development container..."
         docker run -it -d \
             --name "$DEV_CONTAINER" \
             -v "$PWD":/workspace \
             -v "$PWD/logs":/app/logs \
             -v "$PWD/config":/app/config \
+            -v "$PWD/storage":/app/storage \
             -w /workspace \
             -p "$API_PORT_HOST:$API_PORT" \
             -p "$VITE_PORT_HOST:$VITE_PORT" \

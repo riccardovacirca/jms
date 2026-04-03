@@ -1,7 +1,7 @@
--- Migration audit: crea la tabella audit_log
+-- Migration audit: crea la tabella jms_audit_log
 -- Utilizzabile da tutti i moduli per il logging strutturato degli eventi
 
-CREATE TABLE audit_log
+CREATE TABLE jms_audit_log
 (
   id         BIGSERIAL                PRIMARY KEY,
   timestamp  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -13,7 +13,7 @@ CREATE TABLE audit_log
   details    JSONB
 );
 
-CREATE INDEX idx_audit_log_user      ON audit_log (user_id, timestamp DESC);
-CREATE INDEX idx_audit_log_event     ON audit_log (event, timestamp DESC);
-CREATE INDEX idx_audit_log_timestamp ON audit_log (timestamp DESC);
-CREATE INDEX idx_audit_log_ip        ON audit_log (ip_address, timestamp DESC);
+CREATE INDEX idx_jms_audit_log_user      ON jms_audit_log (user_id, timestamp DESC);
+CREATE INDEX idx_jms_audit_log_event     ON jms_audit_log (event, timestamp DESC);
+CREATE INDEX idx_jms_audit_log_timestamp ON jms_audit_log (timestamp DESC);
+CREATE INDEX idx_jms_audit_log_ip        ON jms_audit_log (ip_address, timestamp DESC);

@@ -1,5 +1,6 @@
 package dev.jms.app.module.aes.helper;
 
+import dev.jms.util.Config;
 import dev.jms.util.PDF;
 import dev.jms.util.Validator;
 import java.io.ByteArrayInputStream;
@@ -13,6 +14,15 @@ import java.util.UUID;
  */
 public class SignHelper
 {
+  private static final String DEFAULT_TMP_DIR = "/app/storage/aes/tmp";
+
+  private final String tmpDir;
+
+  /** Costruttore. Legge il path di storage temporaneo dalla configurazione. */
+  public SignHelper(Config config)
+  {
+    this.tmpDir = config.get("aes.resources.tmp", DEFAULT_TMP_DIR);
+  }
   /**
    * Risultato dell'operazione di firma: occorrenze sostituite e path del file output.
    */
@@ -93,7 +103,7 @@ public class SignHelper
     Path dir;
     Path file;
 
-    dir = Path.of(System.getProperty("java.io.tmpdir"), "aes");
+    dir = Path.of(tmpDir);
     Files.createDirectories(dir);
     file = dir.resolve("firma_" + UUID.randomUUID() + ".pdf");
     try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
