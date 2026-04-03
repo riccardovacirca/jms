@@ -1284,20 +1284,34 @@ with open('$CONFIG_JS', 'w') as f:
         fi
     fi
 
-    # Append module config/application.properties to project config
+    # Append module config/application.properties to project config (idempotent via markers)
     if [ -f "$MODULE_DIR/config/application.properties" ]; then
-        info "[module] Aggiorno config/application.properties..."
-        printf '\n' >> "$WORKSPACE/config/application.properties"
-        cat "$MODULE_DIR/config/application.properties" >> "$WORKSPACE/config/application.properties"
-        success "  Proprietà aggiunte a config/application.properties"
+        local APP_PROPS="$WORKSPACE/config/application.properties"
+        local PROP_MARKER="${MODULE_KEY//\//-}"
+        if grep -qF "# [MODULE:${PROP_MARKER}]" "$APP_PROPS" 2>/dev/null; then
+            info "[module] Proprietà già presenti in config/application.properties, skip"
+        else
+            info "[module] Aggiorno config/application.properties..."
+            printf '\n# [MODULE:%s]\n' "$PROP_MARKER" >> "$APP_PROPS"
+            cat "$MODULE_DIR/config/application.properties" >> "$APP_PROPS"
+            printf '# [/MODULE:%s]\n' "$PROP_MARKER" >> "$APP_PROPS"
+            success "  Proprietà aggiunte a config/application.properties"
+        fi
     fi
 
-    # Append module config/.env to project .env
+    # Append module config/.env to project .env (idempotent via markers)
     if [ -f "$MODULE_DIR/config/.env" ]; then
-        info "[module] Aggiorno .env..."
-        printf '\n' >> "$WORKSPACE/.env"
-        cat "$MODULE_DIR/config/.env" >> "$WORKSPACE/.env"
-        success "  Variabili aggiunte a .env"
+        local ENV_FILE="$WORKSPACE/.env"
+        local ENV_MARKER="${MODULE_KEY//\//-}"
+        if grep -qF "# [MODULE:${ENV_MARKER}]" "$ENV_FILE" 2>/dev/null; then
+            info "[module] Variabili .env già presenti, skip"
+        else
+            info "[module] Aggiorno .env..."
+            printf '\n# [MODULE:%s]\n' "$ENV_MARKER" >> "$ENV_FILE"
+            cat "$MODULE_DIR/config/.env" >> "$ENV_FILE"
+            printf '# [/MODULE:%s]\n' "$ENV_MARKER" >> "$ENV_FILE"
+            success "  Variabili aggiunte a .env"
+        fi
     fi
 
     # Maven profile installation
@@ -2047,13 +2061,27 @@ print('OK')
         warn "  Esegui 'cmd db reset' se vuoi ripristinare il database da zero"
     fi
 
-    # Config properties: warn only (may have been customized by the user)
-    if [ -d "$WORKSPACE/module/$MODULE_KEY/config" ]; then
-        if [ -f "$WORKSPACE/module/$MODULE_KEY/config/application.properties" ] || \
-           [ -f "$WORKSPACE/module/$MODULE_KEY/config/.env" ]; then
-            warn "  Le proprietà di configurazione NON vengono rimosse automaticamente:"
-            warn "  Rimuovi manualmente le sezioni del modulo da config/application.properties e .env"
-        fi
+    # Remove module config properties from application.properties and .env
+    local PROP_MARKER="${MODULE_KEY//\//-}"
+    local APP_PROPS="$WORKSPACE/config/application.properties"
+    if grep -qF "# [MODULE:${PROP_MARKER}]" "$APP_PROPS" 2>/dev/null; then
+        python3 -c "
+import re, sys
+content = open('$APP_PROPS').read()
+content = re.sub(r'\n?# \[MODULE:${PROP_MARKER}\].*?# \[/MODULE:${PROP_MARKER}\]\n?', '\n', content, flags=re.DOTALL)
+open('$APP_PROPS', 'w').write(content)
+"
+        success "  Proprietà rimosse da config/application.properties"
+    fi
+    local ENV_FILE="$WORKSPACE/.env"
+    if grep -qF "# [MODULE:${PROP_MARKER}]" "$ENV_FILE" 2>/dev/null; then
+        python3 -c "
+import re, sys
+content = open('$ENV_FILE').read()
+content = re.sub(r'\n?# \[MODULE:${PROP_MARKER}\].*?# \[/MODULE:${PROP_MARKER}\]\n?', '\n', content, flags=re.DOTALL)
+open('$ENV_FILE', 'w').write(content)
+"
+        success "  Variabili rimosse da .env"
     fi
 
     # Remove tracker
