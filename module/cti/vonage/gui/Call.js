@@ -8,7 +8,7 @@
  *   import '<path>/module/cti/vonage/Call.js';
  *   import { targetNumber } from '<path>/module/cti/vonage/store.js';
  *   // Imposta il numero prima che l'operatore prema Chiama:
- *   targetNumber.set('+39XXXXXXXXXX');
+ *   targetNumber.set('12345678901');
  *   // Aggiungi al template:
  *   <cti-bar></cti-bar>
  *

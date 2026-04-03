@@ -429,7 +429,7 @@ Questo dovrebbe:
 curl -X POST http://localhost:8080/api/voice/calls \
   -H "Content-Type: application/json" \
   -d '{
-    "toNumber": "+39XXXXXXXXXX",
+    "toNumber": "12345678901",
     "operatorType": "phone",
     "operatorId": "+39YYYYYYYYYY"
   }'
@@ -441,7 +441,7 @@ curl -X POST http://localhost:8080/api/voice/calls \
 curl -X POST http://localhost:8080/api/voice/calls \
   -H "Content-Type: application/json" \
   -d '{
-    "toNumber": "+39XXXXXXXXXX",
+    "toNumber": "12345678901",
     "operatorType": "app",
     "operatorId": "operatore_01"
   }'
@@ -475,7 +475,7 @@ curl -X POST http://localhost:8080/api/voice/webhook/event \
   -d '{
     "uuid": "test-uuid-123",
     "status": "answered",
-    "from": "+39XXXXXXXXXX",
+    "from": "12345678901",
     "to": "+39YYYYYYYYYY",
     "timestamp": "2026-02-06T12:00:00.000Z"
   }'

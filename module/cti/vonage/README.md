@@ -10,7 +10,7 @@ Aggiungere in config/application.properties:
 
     cti.vonage.application_id=<APPLICATION_ID>
     cti.vonage.private_key=/app/config/private.key
-    cti.vonage.from_number=+39XXXXXXXXXX
+    cti.vonage.from_number=12345678901
     cti.vonage.event_url=https://your-domain.com/api/cti/vonage/answer
     cti.vonage.music_on_hold_url=https://nexmo-community.github.io/ncco-examples/assets/voice_api_audio_streaming.mp3
 
@@ -79,7 +79,7 @@ Passo 6 - Abilita la capability RTC (per operatori WebRTC nel browser):
 Passo 7 - (Opzionale) Acquista un numero Vonage, necessario solo per operatori PSTN:
 
     vonage numbers search IT
-    vonage numbers buy IT +39XXXXXXXXXX
+    vonage numbers buy IT 12345678901
 
 Il collegamento numero-applicazione si fa dal Dashboard: Numbers > Your numbers > Edit > Forward to Application.
 

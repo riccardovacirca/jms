@@ -89,7 +89,7 @@ Più volte durante il ciclo di vita della chiamata, in modo asincrono.
   "conversation_uuid": "conv-123",
   "status": "answered",
   "direction": "outbound",
-  "from": "+39XXXXXXXXXX",
+  "from": "12345678901",
   "to": "+39YYYYYYYYYY",
   "timestamp": "2026-02-06T12:34:56.000Z"
 }

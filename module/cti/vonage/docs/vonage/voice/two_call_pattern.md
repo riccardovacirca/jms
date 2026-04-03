@@ -36,7 +36,7 @@ Campi aggiunti a `voice_calls`:
 voice_calls (operator leg)
   id: 1
   call_leg_type: "operator"
-  customer_number: "+39XXXXXXXXXX"
+  customer_number: "12345678901"
   conversation_uuid: "CON-abc123"
        │
        └─► voice_calls (customer leg)
@@ -55,7 +55,7 @@ voice_calls (operator leg)
 ```javascript
 POST /api/voice/calls
 {
-  "toNumber": "+39XXXXXXXXXX",      // numero cliente
+  "toNumber": "12345678901",      // numero cliente
   "operatorType": "app",             // o "phone"
   "operatorId": "operatore_01"       // user SDK o numero telefono
 }
@@ -87,7 +87,7 @@ POST /v1/calls (Vonage)
 voice_calls:
   uuid: "CALL-op-123"
   call_leg_type: "operator"
-  customer_number: "+39XXXXXXXXXX"  // salvato per step 4
+  customer_number: "12345678901"  // salvato per step 4
   conversation_uuid: "CON-abc123"
   status: "started"
 ```
@@ -255,7 +255,7 @@ bin/cmd gui run
 curl -X POST http://localhost:8080/api/voice/calls \
   -H "Content-Type: application/json" \
   -d '{
-    "toNumber": "+39XXXXXXXXXX",
+    "toNumber": "12345678901",
     "operatorType": "app",
     "operatorId": "operatore_01"
   }'
@@ -277,7 +277,7 @@ LIMIT 2;
 # Output atteso:
 # id | uuid          | call_leg_type | parent_call_id | customer_number | status
 # 2  | CALL-cust-456 | customer      | 1              | NULL            | answered
-# 1  | CALL-op-123   | operator      | NULL           | +39XXXXXXXXXX   | answered
+# 1  | CALL-op-123   | operator      | NULL           | 12345678901   | answered
 ```
 
 ### Test riagganciare

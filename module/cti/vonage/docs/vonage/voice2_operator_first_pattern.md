@@ -49,7 +49,7 @@ Operatore inserisce numero cliente e clicca "Pronto per chiamata":
 
 ```javascript
 // Frontend
-const callId = await client.serverCall({ customerNumber: "+39XXXXXXXXXX" })
+const callId = await client.serverCall({ customerNumber: "12345678901" })
 ```
 
 **Cosa succede:**
@@ -63,7 +63,7 @@ Backend riceve webhook e restituisce NCCO:
 
 ```java
 // Backend: VoiceController2.handleAnswerWebhook()
-POST /api/voice2/answer?customerNumber=+39XXXXXXXXXX
+POST /api/voice2/answer?customerNumber=12345678901
 
 // Response NCCO:
 [
@@ -96,7 +96,7 @@ voiceService.callCustomer(customerNumber, conversationName);
 // VoiceService2.callCustomer()
 POST /v1/calls (Vonage API)
 {
-  "to": [{"type": "phone", "number": "+39XXXXXXXXXX"}],
+  "to": [{"type": "phone", "number": "12345678901"}],
   "from": {"type": "phone", "number": "YOUR_VONAGE_NUMBER"},
   "ncco": [
     {
@@ -142,7 +142,7 @@ Hold music stops when customer joins (startOnEnter: true)  ────┘
 
 Entrambi in chiamata attiva:
 
-- Frontend mostra: "📞 In chiamata con +39XXXXXXXXXX"
+- Frontend mostra: "📞 In chiamata con 12345678901"
 - Operatore può riagganciare con pulsante "Riaggancia"
 - Pulsante chiama: `PUT /api/voice2/calls/{uuid}/hangup`
 
@@ -264,7 +264,7 @@ Apri browser: `http://localhost:2350/voice2`
 
 ### 4. Initiate Call
 
-- Inserisci numero cliente: `+39XXXXXXXXXX`
+- Inserisci numero cliente: `12345678901`
 - Click "Pronto per Chiamata"
 - Verifica: "🎵 In attesa cliente..."
 - Senti musica di attesa nel browser
