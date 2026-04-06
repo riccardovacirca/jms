@@ -27,6 +27,7 @@ public record CallDTO(
   String        erroreTitolo,
   String        erroreDettaglio,
   Long          operatoreId,
+  Long          chiamanteAccountId,
   Long          contattoId,
   LocalDateTime dataCreazione,
   LocalDateTime dataAggiornamento

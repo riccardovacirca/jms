@@ -1,6 +1,7 @@
 package dev.jms.app.module.cti.vonage.helper;
 
 import com.vonage.client.VonageClient;
+import com.vonage.client.users.BaseUser;
 import com.vonage.client.users.User;
 import com.vonage.client.users.UsersResponseException;
 import com.vonage.client.voice.Call;
@@ -14,6 +15,9 @@ import dev.jms.util.DB;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
 import java.nio.file.Paths;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -164,11 +168,27 @@ public class VoiceHelper
    * @param operatorUuid     UUID della chiamata dell'operatore
    * @param db               connessione DB per persistenza
    */
+  /**
+   * Chiama il cliente tramite il Vonage Java SDK.
+   * Il cliente entra nella stessa conversazione dell'operatore con
+   * {@code startOnEnter: true} (default), avviando la conversazione.
+   *
+   * <p>Registra la relazione operatorUuid → customerUuid nella mappa in-memory
+   * e persiste il record nel database.</p>
+   *
+   * @param customerNumber   numero telefonico del cliente
+   * @param conversationName nome della conversazione (condiviso con l'operatore)
+   * @param operatorUuid     UUID della chiamata dell'operatore
+   * @param operatoreId      id locale dell'operatore in {@code jms_cti_operatori}, o null
+   * @param db               connessione DB per persistenza
+   */
   public void callCustomer(String customerNumber, String conversationName,
-                           String operatorUuid, DB db)
+                           String operatorUuid, Long operatoreId,
+                           Long chiamanteAccountId, DB db)
                            throws Exception
   {
     String fromNumber;
+    String answerUrl;
     String eventUrl;
     ConversationAction conversationAction;
     Call call;
@@ -184,7 +204,8 @@ public class VoiceHelper
              customerNumber, conversationName);
 
     fromNumber = config.get("cti.vonage.from_number", "");
-    eventUrl = config.get("cti.vonage.event_url", "");
+    answerUrl  = config.get("cti.vonage.answer_url", "");
+    eventUrl   = config.get("cti.vonage.event_url", "");
 
     conversationAction = ConversationAction.builder(conversationName).build();
     call = new Call(customerNumber, fromNumber, List.of(conversationAction));
@@ -217,11 +238,126 @@ public class VoiceHelper
         "phone", fromNumber,
         "phone", customerNumber,
         null, null, null, null, null, null,
-        null, eventUrl,
-        null, null, null, null, null, null);
+        answerUrl, eventUrl,
+        null, null, operatoreId, chiamanteAccountId, null, null, null);
 
     dao = new CallDAO(db);
     dao.insert(dto);
+  }
+
+  /**
+   * Processa un evento Vonage Voice e aggiorna il record corrispondente
+   * in {@code jms_chiamate}.
+   *
+   * <p>Gestisce i seguenti stati:
+   * <ul>
+   *   <li>{@code answered} — imposta {@code ora_inizio} e {@code stato}</li>
+   *   <li>{@code completed} — imposta {@code ora_fine}, {@code durata},
+   *       dati di billing ({@code tariffa}, {@code costo}, {@code rete})</li>
+   *   <li>stati di errore — aggiorna solo {@code stato}</li>
+   * </ul>
+   * Gli eventi RTC privi di {@code uuid} o {@code status} vocale vengono ignorati.
+   * </p>
+   *
+   * @param body corpo del webhook decodificato
+   * @param db   connessione DB per l'aggiornamento
+   */
+  public void processEvent(HashMap<String, Object> body, DB db) throws Exception
+  {
+    String uuid;
+    String status;
+    String timestamp;
+    String startTime;
+    String endTime;
+    String durationStr;
+    String rate;
+    String price;
+    String network;
+    String fromUser;
+    CallDAO dao;
+    dev.jms.app.module.cti.vonage.dao.OperatorDAO opDao;
+    dev.jms.app.module.cti.vonage.dto.OperatorDTO op;
+    dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO sessioneDao;
+    LocalDateTime oraInizio;
+    LocalDateTime oraFine;
+    Integer durata;
+
+    uuid        = DB.toString(body.get("uuid"));
+    status      = DB.toString(body.get("status"));
+    timestamp   = DB.toString(body.get("timestamp"));
+    startTime   = DB.toString(body.get("start_time"));
+    endTime     = DB.toString(body.get("end_time"));
+    durationStr = DB.toString(body.get("duration"));
+    rate        = DB.toString(body.get("rate"));
+    price       = DB.toString(body.get("price"));
+    network     = DB.toString(body.get("network"));
+    fromUser    = DB.toString(body.get("from_user"));
+
+    if (uuid == null || uuid.isBlank() || status == null || status.isBlank()) {
+      return;
+    }
+
+    dao = new CallDAO(db);
+
+    if ("answered".equals(status)) {
+      oraInizio = parseTimestamp(timestamp);
+      dao.updateOnAnswer(uuid, oraInizio);
+      if (fromUser != null && !fromUser.isBlank()) {
+        opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
+        op    = opDao.findByVonageUserId(fromUser);
+        if (op != null) {
+          sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
+          sessioneDao.setInChiamata(op.id());
+        }
+      }
+    } else if ("completed".equals(status)) {
+      oraInizio = parseTimestamp(startTime != null && !startTime.isBlank() ? startTime : timestamp);
+      oraFine   = parseTimestamp(endTime   != null && !endTime.isBlank()   ? endTime   : timestamp);
+      durata    = null;
+      if (durationStr != null && !durationStr.isBlank()) {
+        try {
+          durata = Integer.parseInt(durationStr.trim());
+        } catch (NumberFormatException e) {
+          log.warn("[CTI] processEvent: durata non parsabile: {}", durationStr);
+        }
+      }
+      dao.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network);
+      if (fromUser != null && !fromUser.isBlank()) {
+        opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
+        op    = opDao.findByVonageUserId(fromUser);
+        if (op != null) {
+          sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
+          sessioneDao.registraFineChiamata(op.id(), durata != null ? durata : 0);
+        }
+      }
+    } else if ("failed".equals(status)    || "rejected".equals(status)
+            || "busy".equals(status)      || "timeout".equals(status)
+            || "cancelled".equals(status) || "unanswered".equals(status)
+            || "machine".equals(status)) {
+      dao.updateStatus(uuid, status);
+    }
+  }
+
+  /**
+   * Converte una stringa timestamp ISO 8601 in {@link LocalDateTime} UTC.
+   * Restituisce {@code null} se la stringa è null, vuota o non parsabile.
+   *
+   * @param ts timestamp in formato ISO 8601 (es. {@code 2026-01-15T10:30:00.000Z})
+   * @return LocalDateTime UTC corrispondente, o {@code null}
+   */
+  private LocalDateTime parseTimestamp(String ts)
+  {
+    LocalDateTime result;
+
+    result = null;
+    if (ts != null && !ts.isBlank()) {
+      try {
+        result = Instant.parse(ts).atZone(ZoneOffset.UTC).toLocalDateTime();
+      } catch (Exception e) {
+        log.warn("[CTI] parseTimestamp: impossibile parsare '{}': {}", ts, e.getMessage());
+      }
+    }
+    return result;
   }
 
   /**
@@ -250,20 +386,6 @@ public class VoiceHelper
   }
 
   /**
-   * Genera il JWT SDK per autenticare l'operatore nel
-   * Vonage Client SDK lato browser.
-   * Firmato RS256 con la private key Vonage; scadenza 1 ora.
-   * Include i claims ACL necessari per le Vonage Conversations API.
-   *
-   * <p>I path ACL (Access Control List) sono i percorsi standard richiesti dal
-   * Vonage Client SDK per autenticare un utente alla Conversations API tramite
-   * JWT, documentati nella sezione "Generate a JWT" della Vonage Client SDK
-   * documentation.</p>
-   *
-   * @param userId identificatore dell'operatore nel sistema Vonage
-   * @return token JWT da passare a {@code VonageClient.createSession()}
-   */
-  /**
    * Crea un utente Vonage tramite {@code UsersClient} e lo registra nell'applicazione.
    * Il {@code name} diventa il claim {@code sub} del JWT SDK e corrisponde
    * al campo {@code vonage_user_id} in {@code cti_operatori}.
@@ -288,6 +410,64 @@ public class VoiceHelper
     created = vonageClient.getUsersClient().createUser(user);
     log.info("[CTI] createVonageUser: name={}, vonageId={}", name, created.getId());
     return created.getName();
+  }
+
+  /**
+   * Restituisce tutti gli utenti registrati sull'applicazione Vonage.
+   * Ogni elemento contiene {@code vonageId} (ID interno USR-xxx),
+   * {@code name} (il campo {@code vonage_user_id} locale) e {@code displayName}.
+   *
+   * @return lista di utenti Vonage
+   */
+  public List<HashMap<String, Object>> listVonageUsers()
+  {
+    List<BaseUser> users;
+    List<HashMap<String, Object>> result;
+    HashMap<String, Object> entry;
+
+    result = new ArrayList<>();
+    users = vonageClient.getUsersClient().listUsers();
+    if (users == null) {
+      return result;
+    }
+    for (BaseUser user : users) {
+      entry = new HashMap<>();
+      entry.put("vonageId", user.getId());
+      entry.put("name", user.getName());
+      entry.put("displayName", user instanceof User ? ((User) user).getDisplayName() : null);
+      result.add(entry);
+    }
+    return result;
+  }
+
+  /**
+   * Elimina un utente Vonage cercandolo per nome.
+   * Effettua una listUsers per recuperare l'ID interno (USR-xxx) necessario
+   * alla chiamata deleteUser.
+   *
+   * @param name nome dell'utente Vonage (corrisponde a {@code vonage_user_id} locale)
+   */
+  public void deleteVonageUser(String name)
+  {
+    List<BaseUser> users;
+    String vonageId;
+
+    vonageId = null;
+    users = vonageClient.getUsersClient().listUsers();
+    if (users != null) {
+      for (BaseUser user : users) {
+        if (name.equals(user.getName())) {
+          vonageId = user.getId();
+          break;
+        }
+      }
+    }
+    if (vonageId != null) {
+      vonageClient.getUsersClient().deleteUser(vonageId);
+      log.info("[CTI] deleteVonageUser: name={}, vonageId={}", name, vonageId);
+    } else {
+      log.warn("[CTI] deleteVonageUser: utente non trovato su Vonage: {}", name);
+    }
   }
 
   public String generateSdkJwt(String userId) throws Exception

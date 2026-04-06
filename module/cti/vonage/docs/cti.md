@@ -8,7 +8,7 @@ Un sistema CTI (Computer Telephony Integration) integra la telefonia con l'appli
 
 ### Operatore
 
-Utente umano autenticato nell'applicazione. Utilizza il frontend CTI nel browser per avviare chiamate outbound. Lato Vonage è rappresentato da un **Vonage User** (identificato da un `name` univoco, es. `operatore_01`). I Vonage User non sono gestibili dalla dashboard Vonage: appartengono alla Conversations API e devono essere creati tramite CLI o API REST prima di poter essere usati. Una volta creati, i loro `name` vengono inseriti manualmente nella tabella `cti_operatori` del database locale. A ogni sessione operativa viene assegnato dinamicamente un operatore libero dal pool tramite claim atomico. Interagisce con la piattaforma Vonage tramite il **Vonage Client SDK** usando un JWT RS256 emesso dal backend.
+Utente umano autenticato nell'applicazione. Utilizza il frontend CTI nel browser per avviare chiamate outbound. Lato Vonage è rappresentato da un **Vonage User** (identificato da un `name` univoco, es. `operatore_01`). Gli operatori vengono gestiti tramite l'interfaccia amministrativa della barra CTI (accessibile agli utenti con ruolo ADMIN o superiore): è possibile creare nuovi operatori Vonage direttamente dall'applicazione, oppure importare quelli già esistenti su Vonage tramite la funzione di sincronizzazione. A ogni sessione operativa viene assegnato dinamicamente un operatore libero dal pool tramite claim atomico. Interagisce con la piattaforma Vonage tramite il **Vonage Client SDK** usando un JWT RS256 emesso dal backend.
 
 ### Cliente
 
@@ -21,11 +21,13 @@ Componente server che orchestra l'intero flusso CTI. Responsabile di:
 - rispondere al webhook Vonage `answer` con l'NCCO operatore
 - avviare la chiamata verso il cliente tramite Vonage Voice API
 - gestire il hangup simultaneo di entrambe le legs
-- persistere i record delle chiamate sul database
+- ricevere e processare gli eventi Vonage (`answered`, `completed`, errori)
+- persistere i record delle chiamate sul database con dati di billing
+- gestire il CRUD degli operatori e la sincronizzazione con Vonage
 
 ### Frontend (browser)
 
-Componente web eseguito nel browser dell'operatore. Utilizza il **Vonage Client SDK** (`@vonage/client-sdk`) per stabilire la connessione WebRTC con la piattaforma Vonage. Richiede il JWT SDK al backend, avvia la chiamata tramite `client.serverCall()` e gestisce gli eventi della chiamata.
+Componente web eseguito nel browser dell'operatore. Utilizza il **Vonage Client SDK** (`@vonage/client-sdk`) per stabilire la connessione WebRTC con la piattaforma Vonage. Richiede il JWT SDK al backend, avvia la chiamata tramite `client.serverCall()` e gestisce gli eventi della chiamata. È implementato come web component Lit persistente (`<cti-bar>`) montato nel container `footer`, visibile su tutte le pagine. Si nasconde automaticamente quando l'utente non è autenticato.
 
 ### Vonage Platform
 
@@ -37,7 +39,7 @@ Sistema esterno che fornisce l'infrastruttura telefonica. Gestisce:
 
 ### Database
 
-Persiste il pool degli operatori (`cti_operatori`) e lo storico delle chiamate (`chiamate`). Gestisce l'assegnazione atomica degli operatori tramite `SELECT FOR UPDATE SKIP LOCKED` e traccia quale account ha in uso quale operatore tramite la colonna `sessione_account_id`.
+Persiste il pool degli operatori (`jms_cti_operatori`) e lo storico delle chiamate (`jms_chiamate`). Gestisce l'assegnazione atomica degli operatori tramite `SELECT FOR UPDATE SKIP LOCKED` e traccia quale account ha in uso quale operatore tramite la colonna `sessione_account_id`.
 
 ---
 
@@ -47,7 +49,7 @@ Dopo l'installazione del modulo CTI è necessario configurare l'ambiente di svil
 
 ### 2.1 Vonage CLI
 
-La Vonage CLI è necessaria per creare l'applicazione Vonage, abilitare le capabilities e registrare gli operatori. Va installata nel container di sviluppo:
+La Vonage CLI è necessaria per creare l'applicazione Vonage e abilitare le capabilities. Va installata nel container di sviluppo:
 
 ```bash
 npm install -g @vonage/cli
@@ -74,7 +76,6 @@ Vonage deve poter raggiungere i webhook del backend (`/api/cti/vonage/answer`, `
 
 Installazione nel container:
 ```bash
-# Scarica e installa ngrok
 curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
   | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
   && echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' \
@@ -92,35 +93,32 @@ Avvio del tunnel sulla porta del backend:
 ngrok http 8080
 ```
 
-ngrok restituisce un URL pubblico del tipo `https://<id>.ngrok-free.app` che va configurato in `application.properties` come base URL per i webhook Vonage:
+ngrok restituisce un URL pubblico del tipo `https://<id>.ngrok-free.app` che va configurato in `application.properties`:
 
 ```properties
+cti.vonage.answer_url=https://<id>.ngrok-free.app/api/cti/vonage/answer
 cti.vonage.event_url=https://<id>.ngrok-free.app/api/cti/vonage/event
 ```
 
-> **Nota:** L'URL ngrok cambia a ogni riavvio del tunnel (piano gratuito). Ogni volta va aggiornato in `application.properties` e nella configurazione dell'applicazione Vonage (capability voice/RTC answer URL).
+Aggiornare anche i webhook nel Dashboard Vonage (capability Voice e RTC) con gli stessi URL.
+
+> **Nota:** L'URL ngrok cambia a ogni riavvio del tunnel (piano gratuito). Ogni volta va aggiornato in `application.properties` e nella configurazione dell'applicazione Vonage.
 
 ### 2.4 Registrazione operatori
 
-I Vonage User non sono gestibili dalla dashboard Vonage. Vanno creati tramite CLI:
+Gli operatori si gestiscono tramite l'interfaccia amministrativa: accedere con un account ADMIN, aprire il menu contestuale della barra CTI (icona ingranaggio) e selezionare **Lista operatori**.
 
-```bash
-vonage users create --name='operatore_01'
-vonage users create --name='operatore_02'
-```
+**Creare un nuovo operatore direttamente dall'applicazione:**
 
-Output:
-```
-User ID: USR-00000000-0000-0000-0000-000000000000
-Name: operatore_01
-```
+Cliccare **Nuovo...** nel footer della modal. Compilare:
+- **Nome utente Vonage** (obbligatorio): identificatore univoco su Vonage, es. `operatore_01`. Deve essere univoco nell'intera applicazione Vonage.
+- **Nome visualizzato** (facoltativo): nome leggibile, es. `Mario Rossi`.
 
-Dopo la creazione, inserire i `name` nella tabella `cti_operatori`:
+Il backend crea l'utente su Vonage e inserisce il record in `jms_cti_operatori` in un unico passaggio.
 
-```sql
-INSERT INTO cti_operatori (vonage_user_id, nome, attivo)
-VALUES ('operatore_01', 'Mario Rossi', true);
-```
+**Importare operatori già esistenti su Vonage:**
+
+Se gli operatori sono stati creati in precedenza tramite CLI o Dashboard Vonage, cliccare **Sincronizza...** per importare automaticamente quelli non ancora presenti nel database locale. La sincronizzazione è unidirezionale (Vonage → locale) e non elimina né modifica operatori già presenti.
 
 ---
 
@@ -132,14 +130,59 @@ VALUES ('operatore_01', 'Mario Rossi', true);
 
 3. **Avvio chiamata** — L'operatore seleziona il numero del cliente e avvia la chiamata tramite `client.serverCall({ customerNumber })`. Il Client SDK trasmette la richiesta alla piattaforma Vonage.
 
-4. **Webhook answer** — Vonage riceve la richiesta e chiama il backend sul webhook `POST /api/cti/vonage/answer`, passando l'identità dell'operatore (`from_user`), il suo UUID di chiamata (`uuid`) e il numero del cliente (`customerNumber`).
+4. **Webhook answer** — Vonage riceve la richiesta e chiama il backend sul webhook `POST /api/cti/vonage/answer`, passando l'identità dell'operatore (`from_user`), il suo UUID di chiamata (`uuid`) e il numero del cliente (`customerNumber` nel campo `custom_data`).
 
-5. **NCCO operatore** — Il backend risponde immediatamente con un NCCO che fa entrare l'operatore in una nuova Conversation con `startOnEnter: false`. L'operatore sente la musica di attesa e la conversazione non è ancora attiva.
+5. **NCCO operatore** — Il backend risponde immediatamente con un NCCO che fa entrare l'operatore in una nuova Conversation con `startOnEnter: false`. L'operatore sente la musica di attesa e la conversazione non è ancora attiva. Il record della chiamata viene inserito in `jms_chiamate` con stato `ringing`.
 
 6. **Chiamata al cliente** — Con un ritardo di 1 secondo, il backend chiama il cliente tramite Vonage Voice API (`POST /v1/calls`), passando un NCCO che fa entrare il cliente nella stessa Conversation con `startOnEnter: true`.
 
-7. **Conversazione attiva** — Il cliente risponde al telefono ed entra nella Conversation. Essendo il primo partecipante con `startOnEnter: true`, la conversazione si avvia: operatore e cliente si sentono in modo bidirezionale.
+7. **Conversazione attiva** — Il cliente risponde al telefono ed entra nella Conversation. Essendo il primo partecipante con `startOnEnter: true`, la conversazione si avvia: operatore e cliente si sentono in modo bidirezionale. Vonage invia l'evento `answered` al webhook event URL: il backend aggiorna `jms_chiamate` con `ora_inizio` e stato `answered`.
 
-8. **Fine chiamata** — L'operatore termina la chiamata dal frontend (`PUT /api/cti/vonage/call/{uuid}/hangup`). Il backend invia `action: hangup` a entrambe le legs — quella dell'operatore e quella del cliente — terminando la conversazione su entrambi i lati.
+8. **Fine chiamata** — L'operatore termina la chiamata dal frontend (`PUT /api/cti/vonage/call/{uuid}/hangup`). Il backend invia `action: hangup` a entrambe le legs. Vonage invia l'evento `completed` con i dati di billing: il backend aggiorna `jms_chiamate` con `ora_fine`, `durata`, `tariffa`, `costo`, `rete` e stato `completed`.
 
 9. **Rilascio operatore** — Al disconnect del componente frontend, il browser chiama `DELETE /api/cti/vonage/sdk/auth`. Il backend rilascia l'operatore riportando `sessione_account_id` a `NULL` e rendendolo disponibile per una nuova sessione.
+
+---
+
+## 4. Storico chiamate
+
+Ogni chiamata viene tracciata nella tabella `jms_chiamate`. I campi principali:
+
+| Campo | Descrizione |
+|---|---|
+| `uuid` | UUID Vonage della leg operatore |
+| `conversazione_uuid` | Nome della Conversation Vonage |
+| `stato` | `ringing` → `answered` → `completed` (o stati di errore) |
+| `numero_destinatario` | Numero telefonico del cliente |
+| `operatore_id` | FK verso `jms_cti_operatori` |
+| `chiamante_account_id` | FK verso l'account applicativo che ha avviato la chiamata |
+| `ora_inizio` | Timestamp risposta cliente (da evento `answered`) |
+| `ora_fine` | Timestamp fine chiamata (da evento `completed`) |
+| `durata` | Durata in secondi (da Vonage) |
+| `tariffa` / `costo` | Dati di billing (da Vonage) |
+
+Lo storico è accessibile dalla barra CTI (menu contestuale → **Storico chiamate**):
+- Gli utenti con ruolo **ADMIN o superiore** vedono tutte le chiamate.
+- Gli utenti con ruolo **USER** vedono solo le proprie chiamate (`chiamante_account_id`).
+
+---
+
+## 5. Gestione sessioni e cleanup
+
+Il TTL della sessione operatore è di 30 minuti, rinnovato a ogni chiamata `claimOrRenew()`. Il frontend esegue un refresh automatico ogni 13 minuti per mantenere la sessione attiva.
+
+Un job schedulato (`cti-session-cleanup`, ogni minuto) rilascia automaticamente le sessioni scadute nella tabella `jms_cti_operatori`, recuperando operatori da browser crashati o sessioni abbandonate entro 31 minuti massimi.
+
+---
+
+## 6. Accesso e autorizzazioni
+
+La barra CTI è un componente **persistente** montato nel container `footer` all'avvio dell'applicazione. Si nasconde automaticamente quando l'utente non è autenticato, sottoscrivendosi allo store `authorized`.
+
+| Funzione | Ruolo minimo |
+|---|---|
+| Connetti / avvia chiamata | USER |
+| Storico chiamate (solo proprie) | USER |
+| Storico chiamate (tutte) | ADMIN |
+| Lista operatori | ADMIN |
+| Crea / sincronizza operatori | ADMIN |

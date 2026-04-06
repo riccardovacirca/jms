@@ -1,7 +1,7 @@
 #!/bin/bash
 # POST /api/cti/vonage/admin/operator - Crea utente Vonage e registra operatore CTI
 #
-# Richiede sessione ADMIN attiva. Esegui prima: cmd module cli user auth_login
+# Richiede sessione ADMIN attiva. Esegui prima: cmd module cli user auth-login
 #
 # Usage:
 #   ./operator-create.sh NAME [DISPLAY_NAME]
@@ -25,7 +25,7 @@ Argomenti:
   DISPLAY_NAME   Nome visualizzato (opzionale, default: NAME)
 
 Prerequisiti:
-  - Sessione ADMIN attiva (esegui prima: cmd module cli user auth_login)
+  - Sessione ADMIN attiva (esegui prima: cmd module cli user auth-login)
 
 Esempi:
   cmd module cli cti/vonage operator-create operatore_01
@@ -45,7 +45,7 @@ API_BASE="${API_BASE:-http://localhost:8080}"
 SESSION_FILE="${SESSION_FILE:-/tmp/jms-session}"
 
 if [ ! -f "$SESSION_FILE" ]; then
-  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth_login"
+  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth-login"
   exit 1
 fi
 

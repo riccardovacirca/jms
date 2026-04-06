@@ -91,4 +91,4 @@ CREATE TABLE jms_user_settings
   CONSTRAINT fk_jms_user_settings FOREIGN KEY (user_id) REFERENCES jms_users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_jms_users_account_id ON jms_users(account_id);
+CREATE INDEX jms_idx_users_account_id ON jms_users(account_id);

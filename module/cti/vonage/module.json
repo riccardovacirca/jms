@@ -10,12 +10,12 @@
   },
   "gui": {
     "config": {
-      "route": "/vonage",
+      "route": null,
       "path": "cti/vonage",
-      "container": "main",
+      "container": "footer",
       "authorization": { "redirectTo": "/user" },
-      "persistent": false,
-      "priority": 999,
+      "persistent": true,
+      "priority": 2,
       "init": null
     }
   },

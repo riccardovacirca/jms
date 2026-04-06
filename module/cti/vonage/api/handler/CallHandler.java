@@ -1,9 +1,11 @@
 package dev.jms.app.module.cti.vonage.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vonage.client.users.UsersResponseException;
+import dev.jms.app.module.cti.vonage.dao.CallDAO;
 import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
+import dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO;
 import dev.jms.app.module.cti.vonage.dto.OperatorDTO;
+import dev.jms.app.module.cti.vonage.dto.SessioneOperatoreDTO;
 import dev.jms.app.module.cti.vonage.helper.VoiceHelper;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
@@ -13,9 +15,8 @@ import dev.jms.util.Log;
 import dev.jms.util.Permission;
 import dev.jms.util.Role;
 import dev.jms.util.Session;
-import dev.jms.util.ValidationException;
-import dev.jms.util.Validator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -55,6 +56,8 @@ public class CallHandler
     HashMap<String, Object> out;
     OperatorDAO dao;
     OperatorDTO operator;
+    SessioneOperatoreDAO sessioneDao;
+    SessioneOperatoreDTO turno;
 
     session.require(Role.USER, Permission.READ);
     accountId = (int) session.sub();
@@ -74,6 +77,11 @@ public class CallHandler
          .out(null)
          .send();
     } else {
+      sessioneDao = new SessioneOperatoreDAO(db);
+      turno = sessioneDao.findCorrente(operator.id());
+      if (turno != null) {
+        sessioneDao.registraConnessione(turno.id(), accountId);
+      }
       sdkToken = voiceHelper.generateSdkJwt(userId);
       out = new HashMap<>();
       out.put("token", sdkToken);
@@ -95,11 +103,30 @@ public class CallHandler
   {
     int accountId;
     OperatorDAO dao;
+    OperatorDTO operator;
+    SessioneOperatoreDAO sessioneDao;
+    SessioneOperatoreDTO turno;
 
     if (session.isAuthenticated()) {
       accountId = (int) session.sub();
       if (accountId > 0) {
-        dao = new OperatorDAO(db);
+        dao      = new OperatorDAO(db);
+        operator = dao.findByClaimAccountId(accountId);
+        if (operator != null) {
+          sessioneDao = new SessioneOperatoreDAO(db);
+          turno       = sessioneDao.findCorrente(operator.id());
+          if (turno != null) {
+            if (java.time.LocalDateTime.now().isBefore(turno.turnoFine())) {
+              int durataPausa = turno.ultimaConnessione() != null
+                  ? (int) java.time.Duration.between(
+                      turno.ultimaConnessione(), java.time.LocalDateTime.now()).getSeconds()
+                  : 0;
+              sessioneDao.registraPausa(turno.id(), durataPausa, accountId);
+            } else {
+              sessioneDao.chiudiTurno(turno.id(), accountId);
+            }
+          }
+        }
         dao.releaseSession(accountId);
         log.info("[CTI] releaseSession: accountId={}", accountId);
       }
@@ -142,6 +169,10 @@ public class CallHandler
     String customDataStr;
     HashMap customData;
     ObjectMapper mapper;
+    OperatorDAO opDao;
+    OperatorDTO op;
+    Long operatoreId;
+    Long chiamanteAccountId;
 
     body = req.body();
     fromUser = DB.toString(body.get("from_user"));
@@ -158,11 +189,23 @@ public class CallHandler
       }
     }
 
+    operatoreId = null;
+    chiamanteAccountId = null;
+    if (fromUser != null && !fromUser.isBlank()) {
+      opDao = new OperatorDAO(db);
+      op = opDao.findByVonageUserId(fromUser);
+      if (op != null) {
+        operatoreId = op.id();
+        chiamanteAccountId = opDao.findSessionAccountId(operatoreId);
+      }
+    }
+
     conversationName = "call-" + UUID.randomUUID().toString();
     musicOnHoldUrl = config.get("cti.vonage.music_on_hold_url", "");
     nccoJson = voiceHelper.buildOperatorNccoJson(conversationName, musicOnHoldUrl);
 
-    log.info("[CTI] answer: fromUser={}, operatorUuid={}, customerNumber={}", fromUser, operatorUuid, customerNumber);
+    log.info("[CTI] answer: fromUser={}, operatoreId={}, operatorUuid={}, customerNumber={}",
+             fromUser, operatoreId, operatorUuid, customerNumber);
 
     res.status(200)
        .contentType("application/json")
@@ -177,64 +220,10 @@ public class CallHandler
     } else {
       try {
         Thread.sleep(1000);
-        voiceHelper.callCustomer(customerNumber, conversationName, operatorUuid, db);
+        voiceHelper.callCustomer(customerNumber, conversationName, operatorUuid, operatoreId, chiamanteAccountId, db);
       } catch (Exception e) {
         log.error("[CTI] Errore avvio chiamata cliente: {}", e.getMessage(), e);
       }
-    }
-  }
-
-  /**
-   * POST /api/cti/vonage/admin/operator — crea un utente Vonage e lo registra come operatore.
-   *
-   * <p>Crea l'utente nell'applicazione Vonage tramite {@code UsersClient} e inserisce
-   * la riga corrispondente in {@code cti_operatori}. Il campo {@code name} diventa
-   * il {@code vonage_user_id} (claim {@code sub} del JWT SDK).</p>
-   *
-   * <p>Richiede autenticazione con ruolo ADMIN.</p>
-   *
-   * <p>Body JSON: {@code {"name": "operatore_01", "displayName": "Operatore 01"}}
-   * — {@code displayName} è opzionale.</p>
-   *
-   * <p>Risposta: {@code {"vonageUserId": "...", "nome": "...", "attivo": true}}.</p>
-   */
-  public void createOperator(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
-  {
-    HashMap<String, Object> body;
-    String name;
-    String displayName;
-    String vonageUserId;
-    OperatorDAO operatorDao;
-    HashMap<String, Object> out;
-
-    session.require(Role.ADMIN, Permission.WRITE);
-    body = req.body();
-    name = DB.toString(body.get("name"));
-    displayName = DB.toString(body.get("displayName"));
-
-    try {
-      Validator.required(name, "name");
-      vonageUserId = voiceHelper.createVonageUser(name, displayName);
-      operatorDao = new OperatorDAO(db);
-      operatorDao.insert(vonageUserId, displayName);
-      out = new HashMap<>();
-      out.put("vonageUserId", vonageUserId);
-      out.put("nome", displayName);
-      out.put("attivo", true);
-      res.status(200)
-         .contentType("application/json")
-         .err(false)
-         .log(null)
-         .out(out)
-         .send();
-    } catch (ValidationException | UsersResponseException e) {
-      log.warn("[CTI] createOperator: {}", e.getMessage());
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log(e.getMessage())
-         .out(null)
-         .send();
     }
   }
 
@@ -263,6 +252,14 @@ public class CallHandler
    * Non richiede autenticazione: è un endpoint webhook raggiungibile solo da Vonage.
    * </p>
    */
+  /**
+   * POST /api/cti/vonage/event — webhook Vonage (event URL).
+   * <p>
+   * Riceve eventi Voice e RTC da Vonage. Aggiorna {@code jms_chiamate} in base
+   * allo stato ricevuto (answered, completed, errori).
+   * Non richiede autenticazione: è un endpoint webhook raggiungibile solo da Vonage.
+   * </p>
+   */
   public void event(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     HashMap<String, Object> body;
@@ -275,11 +272,66 @@ public class CallHandler
 
     log.info("[CTI] event: uuid={}, status={}", uuid, status);
 
+    try {
+      voiceHelper.processEvent(body, db);
+    } catch (Exception e) {
+      log.error("[CTI] Errore processEvent: {}", e.getMessage(), e);
+    }
+
     res.status(200)
        .contentType("application/json")
        .err(false)
        .log(null)
        .out(null)
+       .send();
+  }
+
+  /**
+   * GET /api/cti/vonage/call — lista paginata delle chiamate.
+   *
+   * <p>Query params: {@code page} (default 1), {@code size} (default 20).</p>
+   * <p>Risposta: {@code {"total": n, "page": p, "size": s, "items": [...]}}.</p>
+   */
+  public void list(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    String pageParam;
+    String sizeParam;
+    int page;
+    int size;
+    int total;
+    List<HashMap<String, Object>> items;
+    HashMap<String, Object> out;
+    CallDAO dao;
+    boolean isAdmin;
+    long accountId;
+
+    session.require(Role.USER, Permission.READ);
+    pageParam = req.queryParam("page");
+    sizeParam = req.queryParam("size");
+    page     = (pageParam != null && !pageParam.isBlank()) ? Integer.parseInt(pageParam) : 1;
+    size     = (sizeParam != null && !sizeParam.isBlank()) ? Integer.parseInt(sizeParam) : 20;
+    isAdmin  = session.ruoloLevel() >= Role.ADMIN.level();
+    dao      = new CallDAO(db);
+
+    if (isAdmin) {
+      total = dao.count();
+      items = dao.findAllForApi(page, size);
+    } else {
+      accountId = session.sub();
+      total     = dao.countByAccount(accountId);
+      items     = dao.findByAccountForApi(page, size, accountId);
+    }
+
+    out = new HashMap<>();
+    out.put("total", total);
+    out.put("page",  page);
+    out.put("size",  size);
+    out.put("items", items);
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(out)
        .send();
   }
 }

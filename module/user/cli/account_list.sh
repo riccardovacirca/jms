@@ -13,7 +13,7 @@ API_BASE="${API_BASE:-http://localhost:8080}"
 SESSION_FILE="${SESSION_FILE:-/tmp/jms-session}"
 
 if [ ! -f "$SESSION_FILE" ]; then
-  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth_login"
+  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth-login"
   exit 1
 fi
 

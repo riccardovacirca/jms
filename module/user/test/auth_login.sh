@@ -18,7 +18,7 @@ echo ""
 
 # Esegui CLI script
 CLI_DIR="$(dirname "$0")/../cli"
-"$CLI_DIR/auth_login.sh" "$USERNAME" "$PASSWORD"
+"$CLI_DIR/auth-login.sh" "$USERNAME" "$PASSWORD"
 
 echo ""
 echo "=========================================="

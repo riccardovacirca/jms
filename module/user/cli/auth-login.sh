@@ -5,10 +5,10 @@
 # Esegui questo comando prima di qualsiasi altro che richieda autenticazione.
 #
 # Usage:
-#   ./auth_login.sh USERNAME PASSWORD
+#   ./auth-login.sh USERNAME PASSWORD
 #
 # Example:
-#   ./auth_login.sh admin@example.com password123
+#   ./auth-login.sh admin@example.com password123
 
 set -e
 

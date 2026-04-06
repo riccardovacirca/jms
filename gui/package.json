@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.13.1",
     "lit": "^3.3.2",
     "nanostores": "^1.1.1"
   },

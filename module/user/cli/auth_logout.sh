@@ -1,7 +1,7 @@
 #!/bin/bash
 # POST /api/user/auth/logout - Logout e rimozione sessione
 #
-# Usa la sessione salvata da auth_login.sh, chiama il logout e rimuove il file.
+# Usa la sessione salvata da auth-login.sh, chiama il logout e rimuove il file.
 #
 # Usage:
 #   ./auth_logout.sh
@@ -15,7 +15,7 @@ API_BASE="${API_BASE:-http://localhost:8080}"
 SESSION_FILE="${SESSION_FILE:-/tmp/jms-session}"
 
 if [ ! -f "$SESSION_FILE" ]; then
-  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth_login"
+  echo "[!] Sessione non trovata ($SESSION_FILE). Esegui prima: cmd module cli user auth-login"
   exit 1
 fi
 

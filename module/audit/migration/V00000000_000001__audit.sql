@@ -13,7 +13,7 @@ CREATE TABLE jms_audit_log
   details    JSONB
 );
 
-CREATE INDEX idx_jms_audit_log_user      ON jms_audit_log (user_id, timestamp DESC);
-CREATE INDEX idx_jms_audit_log_event     ON jms_audit_log (event, timestamp DESC);
-CREATE INDEX idx_jms_audit_log_timestamp ON jms_audit_log (timestamp DESC);
-CREATE INDEX idx_jms_audit_log_ip        ON jms_audit_log (ip_address, timestamp DESC);
+CREATE INDEX jms_idx_audit_log_user      ON jms_audit_log (user_id, timestamp DESC);
+CREATE INDEX jms_idx_audit_log_event     ON jms_audit_log (event, timestamp DESC);
+CREATE INDEX jms_idx_audit_log_timestamp ON jms_audit_log (timestamp DESC);
+CREATE INDEX jms_idx_audit_log_ip        ON jms_audit_log (ip_address, timestamp DESC);

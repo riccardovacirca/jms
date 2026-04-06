@@ -11,7 +11,8 @@ Aggiungere in config/application.properties:
     cti.vonage.application_id=<APPLICATION_ID>
     cti.vonage.private_key=/app/config/private.key
     cti.vonage.from_number=12345678901
-    cti.vonage.event_url=https://your-domain.com/api/cti/vonage/answer
+    cti.vonage.answer_url=https://your-domain.com/api/cti/vonage/answer
+    cti.vonage.event_url=https://your-domain.com/api/cti/vonage/event
     cti.vonage.music_on_hold_url=https://nexmo-community.github.io/ncco-examples/assets/voice_api_audio_streaming.mp3
 
 Copiare la chiave privata Vonage in /app/config/private.key.
@@ -28,9 +29,11 @@ Per reinstallare manualmente dalla cartella gui/:
 WEBHOOK NEL VONAGE DASHBOARD
 
 Answer URL:  https://your-domain.com/api/cti/vonage/answer
-Event URL:   https://your-domain.com/api/cti/vonage/answer
+Event URL:   https://your-domain.com/api/cti/vonage/event
 
+Entrambi gli URL vanno configurati per Voice e RTC nel Dashboard Vonage.
 L'Answer URL e obbligatoria: Vonage la chiama quando l'operatore avvia serverCall() dal browser.
+L'Event URL riceve gli aggiornamenti di stato delle chiamate (answered, completed, errori).
 
 
 CREDENZIALI VONAGE - PROCEDURA DI SETUP
@@ -69,25 +72,38 @@ Passo 5 - Abilita la capability Voice (obbligatoria):
 
     vonage apps capabilities update <APPLICATION_ID> voice \
       --voice-answer-url='https://your-domain.com/api/cti/vonage/answer' \
-      --voice-event-url='https://your-domain.com/api/cti/vonage/answer'
+      --voice-event-url='https://your-domain.com/api/cti/vonage/event'
 
 Passo 6 - Abilita la capability RTC (per operatori WebRTC nel browser):
 
     vonage apps capabilities update <APPLICATION_ID> rtc \
-      --rtc-event-url='https://your-domain.com/api/cti/vonage/answer'
+      --rtc-event-url='https://your-domain.com/api/cti/vonage/event'
 
-Passo 7 - (Opzionale) Acquista un numero Vonage, necessario solo per operatori PSTN:
+Passo 7 - (Opzionale) Acquista un numero Vonage, necessario per chiamate outbound PSTN:
 
     vonage numbers search IT
     vonage numbers buy IT 12345678901
 
 Il collegamento numero-applicazione si fa dal Dashboard: Numbers > Your numbers > Edit > Forward to Application.
 
-Passo 8 - Crea utenti Vonage per operatori WebRTC, necessario solo per operatorType "app":
+Passo 8 - Crea operatori Vonage tramite l'interfaccia amministrativa:
 
-    vonage users create --name='operatore_01'
+Accedere all'applicazione con un account ADMIN, aprire il menu contestuale della barra CTI
+e selezionare "Lista operatori". Da qui e possibile:
 
-Il name deve corrispondere all'userId passato al frontend.
+- Nuovo...: crea un utente Vonage e lo registra localmente in un unico passaggio.
+  Il "Nome utente Vonage" (es. operatore_01) diventa l'identificatore univoco su Vonage.
+  Il "Nome visualizzato" e facoltativo (es. Mario Rossi).
+
+- Sincronizza...: importa dal Dashboard Vonage tutti gli utenti gia esistenti
+  che non sono ancora presenti nel database locale. Utile dopo aver creato
+  utenti manualmente via CLI o Dashboard.
+
+In alternativa, gli operatori possono essere creati via CLI:
+
+    vonage users create --name='operatore_01' --display_name='Mario Rossi'
+
+Dopo la creazione via CLI, usare "Sincronizza..." dalla GUI per importarli localmente.
 
 
 SVILUPPO LOCALE
@@ -107,7 +123,8 @@ Registrare il token (disponibile su dashboard.ngrok.com) e avviare il tunnel:
     ngrok config add-authtoken <NGROK_TOKEN>
     ngrok http 8080
 
-Usare l'URL https generato come base per cti.vonage.event_url e per i webhook nel Dashboard.
+Usare l'URL https generato come base per cti.vonage.answer_url, cti.vonage.event_url
+e per i webhook nel Dashboard Vonage. L'URL cambia a ogni riavvio del tunnel (piano gratuito).
 
 
 RIFERIMENTI
