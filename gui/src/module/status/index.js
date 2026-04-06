@@ -24,8 +24,8 @@ class StatusView extends LitElement
 
   render() {
     return html`
-      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh">
-        <p style="color:#888;font-family:sans-serif">${this._message ?? '...'}</p>
+      <div class="d-flex align-items-center justify-content-center min-vh-100">
+        <p class="text-muted">${this._message ?? '...'}</p>
       </div>
     `;
   }

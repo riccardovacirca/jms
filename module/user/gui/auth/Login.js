@@ -79,8 +79,8 @@ class Login extends LitElement {
   render() {
     if (this._twoFactor) {
       return html`
-        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-          <div style="width:100%;max-width:360px">
+        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+          <div class="w-max-360">
             <h4 class="mb-2">Verifica in due passaggi</h4>
             <p class="text-muted small mb-4">Inserisci il PIN inviato alla tua email.</p>
             ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
@@ -99,8 +99,8 @@ class Login extends LitElement {
       `;
     }
     return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+        <div class="w-max-360">
           <h4 class="mb-4">Accedi</h4>
           ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
           <div class="mb-3">

@@ -1028,23 +1028,23 @@ class Bar extends LitElement
       <style>
         .cti-bar {
           position: fixed; bottom: 0; left: 0; right: 0; z-index: 1050;
-          background: #ffffff;
-          border-top: 1px solid #e2e8f0;
+          background: var(--bs-body-bg);
+          border-top: 1px solid var(--bs-border-color);
           box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
           padding: 5px 18px;
           display: flex; align-items: center; gap: 6px;
-          font-size: 13px; color: #334155;
+          font-size: 13px; color: var(--bs-body-color);
           user-select: none;
         }
         .cti-sep {
           width: 1px; height: 20px;
-          background: #e2e8f0;
+          background: var(--bs-border-color);
           margin: 0 2px; flex-shrink: 0;
         }
         .cti-group {
           display: flex; align-items: center; gap: 4px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
+          background: var(--bs-tertiary-bg);
+          border: 1px solid var(--bs-border-color);
           border-radius: 8px;
           padding: 2px 6px;
         }
@@ -1052,9 +1052,9 @@ class Bar extends LitElement
           font-family: monospace; letter-spacing: 1.5px; min-width: 88px;
         }
         .cti-btn-timer:hover:not(:disabled) {
-          --bs-btn-hover-bg: #fee2e2;
-          --bs-btn-hover-border-color: #fca5a5;
-          --bs-btn-hover-color: #dc2626;
+          --bs-btn-hover-bg: var(--bs-danger-bg-subtle);
+          --bs-btn-hover-border-color: var(--bs-danger-border-subtle);
+          --bs-btn-hover-color: var(--bs-danger);
         }
         .cti-btn-vol { min-width: 22px; }
 
@@ -1064,49 +1064,49 @@ class Bar extends LitElement
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           letter-spacing: 0.3px;
         }
-        .cti-number-active { color: #16a34a; font-weight: 500; }
-        .cti-number-waiting { color: #d97706; font-weight: 500; }
-        .cti-number-idle { color: #94a3b8; }
+        .cti-number-active { color: var(--bs-success); font-weight: 500; }
+        .cti-number-waiting { color: var(--bs-warning); font-weight: 500; }
+        .cti-number-idle { color: var(--bs-secondary-color); }
         .cti-dot {
           width: 8px; height: 8px; border-radius: 50%;
           display: inline-block; flex-shrink: 0;
           transition: background 0.3s;
         }
-        .cti-dot-on { background: #22c55e; box-shadow: 0 0 5px rgba(34,197,94,0.5); }
-        .cti-dot-err { background: #ef4444; }
-        .cti-dot-off { background: #cbd5e1; }
+        .cti-dot-on { background: var(--bs-success); box-shadow: 0 0 5px color-mix(in srgb, var(--bs-success) 50%, transparent); }
+        .cti-dot-err { background: var(--bs-danger); }
+        .cti-dot-off { background: var(--bs-secondary-bg); }
         .cti-pulse {
           width: 8px; height: 8px; border-radius: 50%;
-          background: #22c55e;
-          box-shadow: 0 0 0 0 rgba(34,197,94,0.4);
+          background: var(--bs-success);
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent);
           animation: cti-pulse-anim 1.4s ease-out infinite;
           flex-shrink: 0;
         }
         @keyframes cti-pulse-anim {
-          0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
-          70%  { box-shadow: 0 0 0 7px rgba(34,197,94,0); }
-          100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent); }
+          70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--bs-success) 0%, transparent); }
+          100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 0%, transparent); }
         }
         .cti-stat { font-variant-numeric: tabular-nums; }
         .cti-error {
-          font-size: 11px; color: #dc2626;
+          font-size: 11px; color: var(--bs-danger);
           max-width: 180px;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
+          background: var(--bs-danger-bg-subtle);
+          border: 1px solid var(--bs-danger-border-subtle);
           border-radius: 5px;
           padding: 2px 7px;
           cursor: pointer;
           text-align: left;
         }
         .cti-error:hover {
-          background: #fee2e2;
-          border-color: #fca5a5;
+          background: var(--bs-danger-border-subtle);
+          border-color: var(--bs-danger);
         }
         .cti-dtmf-popup {
           position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
-          background: #ffffff;
-          border: 1px solid #e2e8f0;
+          background: var(--bs-body-bg);
+          border: 1px solid var(--bs-border-color);
           border-radius: 10px;
           padding: 10px;
           width: 210px;

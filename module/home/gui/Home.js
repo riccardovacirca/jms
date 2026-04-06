@@ -36,7 +36,7 @@ class Home extends LitElement {
 
   render() {
     return html`
-      <div class="min-vh-100 bg-light">
+      <div class="min-vh-100 bg-body">
         <main class="container py-5">
           <div class="text-center py-5">
             <h1 class="display-5">Benvenuto</h1>

@@ -12,7 +12,8 @@ class Header extends LitElement {
     _authorized:    { state: true },
     _user:          { state: true },
     _menuOpen:      { state: true },
-    _userMenuOpen:  { state: true }
+    _userMenuOpen:  { state: true },
+    _theme:         { state: true }
   };
 
   createRenderRoot() { return this; }
@@ -23,6 +24,7 @@ class Header extends LitElement {
     this._user         = user.get();
     this._menuOpen     = false;
     this._userMenuOpen = false;
+    this._theme        = 'light';
   }
 
   connectedCallback() {
@@ -31,6 +33,9 @@ class Header extends LitElement {
     this._unsubUser       = user.subscribe(v => { this._user = v; });
     this._onDocClick      = () => { this._userMenuOpen = false; };
     document.addEventListener('click', this._onDocClick);
+    const saved = localStorage.getItem('bs-theme') || 'light';
+    this._theme = saved;
+    document.documentElement.dataset.bsTheme = saved;
   }
 
   disconnectedCallback() {
@@ -69,9 +74,20 @@ class Header extends LitElement {
     this._userMenuOpen = !this._userMenuOpen;
   }
 
+  /**
+   * Alterna il tema chiaro/scuro, aggiorna data-bs-theme su <html>
+   * e persiste la scelta in localStorage.
+   */
+  _toggleTheme() {
+    const next = this._theme === 'dark' ? 'light' : 'dark';
+    this._theme = next;
+    document.documentElement.dataset.bsTheme = next;
+    localStorage.setItem('bs-theme', next);
+  }
+
   render() {
     return html`
-      <nav class="navbar navbar-expand-md bg-white border-bottom px-3">
+      <nav class="navbar navbar-expand-md bg-body border-bottom px-3">
         <a class="navbar-brand fw-bold" href="/" @click=${this._closeMenu}>App</a>
         <button class="navbar-toggler" type="button" @click=${this._toggleMenu}
                 aria-label="Toggle navigation">
@@ -87,11 +103,15 @@ class Header extends LitElement {
               : ''
             }
           </ul>
-          <div class="d-flex align-items-center pb-2 pb-md-0">
+          <div class="d-flex align-items-center gap-1 pb-2 pb-md-0">
+            <button class="btn btn-link p-1 text-body" @click=${this._toggleTheme}
+                    title="${this._theme === 'dark' ? 'Tema chiaro' : 'Tema scuro'}">
+              <i class="bi ${this._theme === 'dark' ? 'bi-sun' : 'bi-moon'}"></i>
+            </button>
             ${this._authorized
               ? html`
                   <div class="position-relative">
-                    <button class="btn btn-link d-flex align-items-center gap-2 text-decoration-none text-dark p-1"
+                    <button class="btn btn-link d-flex align-items-center gap-2 text-decoration-none text-body p-1"
                             @click=${this._toggleUserMenu}>
                       <i class="bi bi-person-circle fs-5"></i>
                       <span class="small">${this._user?.username}</span>

@@ -51,8 +51,8 @@ class ChangePassword extends LitElement {
 
   render() {
     return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+        <div class="w-max-360">
           <h4 class="mb-1">Imposta nuova password</h4>
           <p class="text-muted small mb-4">La password temporanea deve essere modificata prima di continuare.</p>
           ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}

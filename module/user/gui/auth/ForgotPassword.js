@@ -46,8 +46,8 @@ class ForgotPassword extends LitElement {
 
   render() {
     return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+        <div class="w-max-360">
           <h4 class="mb-4">Recupera password</h4>
           ${this._error   ? html`<div class="alert alert-danger  py-2">${this._error}</div>`   : ''}
           ${this._success ? html`<div class="alert alert-success py-2">${this._success}</div>` : ''}

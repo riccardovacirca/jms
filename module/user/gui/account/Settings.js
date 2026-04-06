@@ -89,7 +89,7 @@ class Settings extends LitElement {
 
   render() {
     return html`
-      <div class="container py-4" style="max-width:480px">
+      <div class="container py-4 w-max-480">
         <h4 class="mb-4">Il mio account</h4>
         ${this._error ? html`<div class="alert alert-danger">${this._error}</div>` : ''}
         ${this._loading ? html`<div class="text-muted">Caricamento...</div>` : html`

@@ -52,8 +52,8 @@ class ResetPassword extends LitElement {
   render() {
     if (!this._token) {
       return html`
-        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-          <div style="width:100%;max-width:360px">
+        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+          <div class="w-max-360">
             <div class="alert alert-danger">Link di reset non valido o mancante.</div>
             <button class="btn btn-link p-0"
                     @click=${() => { window.location.hash = '/user/auth/login'; }}>
@@ -64,8 +64,8 @@ class ResetPassword extends LitElement {
       `;
     }
     return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+        <div class="w-max-360">
           <h4 class="mb-4">Nuova password</h4>
           ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
           <div class="mb-3">

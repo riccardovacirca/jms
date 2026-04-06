@@ -224,7 +224,7 @@ class Profile extends LitElement {
 
   render() {
     return html`
-      <div class="container py-4" style="max-width:600px">
+      <div class="container py-4 w-max-600">
         <h4 class="mb-4">${this._isNew ? 'Crea profilo' : 'Il mio profilo'}</h4>
         ${this._error ? html`<div class="alert alert-danger">${this._error}</div>` : ''}
         ${this._loading ? html`<div class="text-muted">Caricamento...</div>` : html`

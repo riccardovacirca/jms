@@ -53,8 +53,8 @@ class Register extends LitElement {
   render() {
     if (this._success) {
       return html`
-        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-          <div style="width:100%;max-width:360px">
+        <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+          <div class="w-max-360">
             <div class="alert alert-success">Account creato con successo.</div>
             <button class="btn btn-primary w-100"
                     @click=${() => { window.location.hash = '/user/auth/login'; }}>
@@ -65,8 +65,8 @@ class Register extends LitElement {
       `;
     }
     return html`
-      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
-        <div style="width:100%;max-width:360px">
+      <div class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+        <div class="w-max-360">
           <h4 class="mb-4">Registrazione</h4>
           ${this._error ? html`<div class="alert alert-danger py-2">${this._error}</div>` : ''}
           <div class="mb-3">
