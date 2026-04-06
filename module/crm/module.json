@@ -1,19 +1,20 @@
 {
-    "name": "contatti",
+    "name": "crm",
     "version": "1.0.0",
     "dependencies": {
-        "user": "^1.0.0"
+        "user": "^1.0.0",
+        "vonage": "*"
     },
     "api": {
-        "routes": "dev.jms.app.module.crm.contatti.Routes.register(router, config);",
+        "routes": "dev.jms.app.module.crm.Routes.register(router, config);",
         "config": {
-            "crm.contatti.resources.tmp": "/app/storage/crm/contatti/tmp"
+            "crm.resources.tmp": "/app/storage/crm/tmp"
         }
     },
     "gui": {
         "config": {
-            "route": "/contatti",
-            "path": "crm/contatti",
+            "route": "/crm",
+            "path": "crm",
             "container": "main",
             "authorization": {
                 "redirectTo": "/user"

@@ -21,6 +21,7 @@ CREATE TABLE jms_chiamate (
   operatore_id          BIGINT,
   chiamante_account_id  INTEGER,
   contatto_id           BIGINT,
+  callback_url          VARCHAR(500),
   data_creazione        TIMESTAMP DEFAULT NOW(),
   data_aggiornamento    TIMESTAMP
 );
@@ -45,16 +46,12 @@ CREATE TABLE jms_sessione_operatore (
   id                   BIGSERIAL    PRIMARY KEY,
   operatore_id         INTEGER      NOT NULL,
 
-  -- Turno pianificato (definito dall'admin)
-  turno_inizio         TIMESTAMP    NOT NULL,
-  turno_fine           TIMESTAMP    NOT NULL,
-
   -- Connessione effettiva
   connessione_inizio   TIMESTAMP,
   connessione_fine     TIMESTAMP,
   durata_totale        INTEGER,
 
-  -- Pause (disconnessioni dentro l'orario del turno)
+  -- Pause (disconnessioni dentro la sessione)
   numero_pause         INTEGER      NOT NULL DEFAULT 0,
   durata_pause         INTEGER      NOT NULL DEFAULT 0,
 
@@ -68,9 +65,6 @@ CREATE TABLE jms_sessione_operatore (
   -- Stato corrente: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata
   stato                SMALLINT     NOT NULL DEFAULT 0,
 
-  -- Note admin
-  note                 TEXT,
-
   -- Audit
   creato_da            INTEGER      NOT NULL,
   data_creazione       TIMESTAMP    NOT NULL DEFAULT NOW(),
@@ -79,7 +73,6 @@ CREATE TABLE jms_sessione_operatore (
 );
 
 CREATE INDEX jms_idx_sessione_operatore_operatore ON jms_sessione_operatore(operatore_id);
-CREATE INDEX jms_idx_sessione_operatore_turno     ON jms_sessione_operatore(turno_inizio, turno_fine);
 CREATE INDEX jms_idx_sessione_operatore_stato     ON jms_sessione_operatore(stato);
 
 CREATE TABLE prefissi_internazionali (

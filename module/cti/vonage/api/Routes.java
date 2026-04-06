@@ -58,12 +58,9 @@ public class Routes
     // prefissi telefonici internazionali
     router.route(HttpMethod.GET, "/api/cti/vonage/prefissi", prefissi::list);
 
-    // gestione turni operatore (admin)
-    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/turno",      turni::list);
-    router.route(HttpMethod.POST,   "/api/cti/vonage/admin/turno",      turni::create);
-    router.route(HttpMethod.PUT,    "/api/cti/vonage/admin/turno/{id}", turni::update);
-    router.route(HttpMethod.DELETE, "/api/cti/vonage/admin/turno/{id}", turni::delete);
-    // turno corrente dell'operatore autenticato
+    // lista sessioni tecniche (admin)
+    router.route(HttpMethod.GET, "/api/cti/vonage/admin/sessioni",    turni::list);
+    // sessione tecnica corrente dell'operatore autenticato
     router.route(HttpMethod.GET, "/api/cti/vonage/sessione/corrente", turni::corrente);
 
     // cleanup sessioni operatori scadute (ogni minuto)

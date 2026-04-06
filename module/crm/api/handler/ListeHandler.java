@@ -1,9 +1,9 @@
-package dev.jms.app.contatti.handler;
+package dev.jms.app.crm.handler;
 
-import dev.jms.app.contatti.adapter.ListaAdapter;
-import dev.jms.app.contatti.dao.ListaDAO;
-import dev.jms.app.contatti.dto.ListaContattoDTO;
-import dev.jms.app.contatti.dto.ListaDTO;
+import dev.jms.app.crm.adapter.ListaAdapter;
+import dev.jms.app.crm.dao.ListaDAO;
+import dev.jms.app.crm.dto.ListaContattoDTO;
+import dev.jms.app.crm.dto.ListaDTO;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;

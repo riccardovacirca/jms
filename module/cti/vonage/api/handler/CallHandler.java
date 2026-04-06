@@ -57,7 +57,8 @@ public class CallHandler
     OperatorDAO dao;
     OperatorDTO operator;
     SessioneOperatoreDAO sessioneDao;
-    SessioneOperatoreDTO turno;
+    SessioneOperatoreDTO sessione;
+    long sessioneId;
 
     session.require(Role.USER, Permission.READ);
     accountId = (int) session.sub();
@@ -78,10 +79,13 @@ public class CallHandler
          .send();
     } else {
       sessioneDao = new SessioneOperatoreDAO(db);
-      turno = sessioneDao.findCorrente(operator.id());
-      if (turno != null) {
-        sessioneDao.registraConnessione(turno.id(), accountId);
+      sessione = sessioneDao.findActive(operator.id());
+      if (sessione != null) {
+        sessioneId = sessione.id();
+      } else {
+        sessioneId = sessioneDao.openSession(operator.id(), accountId);
       }
+      sessioneDao.registraConnessione(sessioneId, accountId);
       sdkToken = voiceHelper.generateSdkJwt(userId);
       out = new HashMap<>();
       out.put("token", sdkToken);
@@ -105,7 +109,8 @@ public class CallHandler
     OperatorDAO dao;
     OperatorDTO operator;
     SessioneOperatoreDAO sessioneDao;
-    SessioneOperatoreDTO turno;
+    SessioneOperatoreDTO sessione;
+    int durataPausa;
 
     if (session.isAuthenticated()) {
       accountId = (int) session.sub();
@@ -114,17 +119,13 @@ public class CallHandler
         operator = dao.findByClaimAccountId(accountId);
         if (operator != null) {
           sessioneDao = new SessioneOperatoreDAO(db);
-          turno       = sessioneDao.findCorrente(operator.id());
-          if (turno != null) {
-            if (java.time.LocalDateTime.now().isBefore(turno.turnoFine())) {
-              int durataPausa = turno.ultimaConnessione() != null
-                  ? (int) java.time.Duration.between(
-                      turno.ultimaConnessione(), java.time.LocalDateTime.now()).getSeconds()
-                  : 0;
-              sessioneDao.registraPausa(turno.id(), durataPausa, accountId);
-            } else {
-              sessioneDao.chiudiTurno(turno.id(), accountId);
-            }
+          sessione    = sessioneDao.findActive(operator.id());
+          if (sessione != null) {
+            durataPausa = sessione.ultimaConnessione() != null
+                ? (int) java.time.Duration.between(
+                    sessione.ultimaConnessione(), java.time.LocalDateTime.now()).getSeconds()
+                : 0;
+            sessioneDao.registraPausa(sessione.id(), durataPausa, accountId);
           }
         }
         dao.releaseSession(accountId);
@@ -173,17 +174,23 @@ public class CallHandler
     OperatorDTO op;
     Long operatoreId;
     Long chiamanteAccountId;
+    Long contattoId;
+    String callbackUrl;
 
     body = req.body();
     fromUser = DB.toString(body.get("from_user"));
     operatorUuid = DB.toString(body.get("uuid"));
     customDataStr = DB.toString(body.get("custom_data"));
     customerNumber = null;
+    contattoId = null;
+    callbackUrl = null;
     if (customDataStr != null && !customDataStr.isBlank()) {
       try {
         mapper = new ObjectMapper();
         customData = mapper.readValue(customDataStr, HashMap.class);
         customerNumber = DB.toString(customData.get("customerNumber"));
+        contattoId = customData.get("contactId") != null ? DB.toLong(customData.get("contactId")) : null;
+        callbackUrl = DB.toString(customData.get("callbackUrl"));
       } catch (Exception e) {
         log.warn("[CTI] answer: impossibile parsare custom_data: {}", customDataStr);
       }
@@ -220,7 +227,8 @@ public class CallHandler
     } else {
       try {
         Thread.sleep(1000);
-        voiceHelper.callCustomer(customerNumber, conversationName, operatorUuid, operatoreId, chiamanteAccountId, db);
+        voiceHelper.callCustomer(customerNumber, conversationName, operatorUuid,
+                                 operatoreId, chiamanteAccountId, contattoId, callbackUrl, db);
       } catch (Exception e) {
         log.error("[CTI] Errore avvio chiamata cliente: {}", e.getMessage(), e);
       }

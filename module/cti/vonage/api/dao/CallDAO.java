@@ -36,13 +36,14 @@ public class CallDAO
     sql = "INSERT INTO jms_chiamate "
         + "(uuid, conversazione_uuid, direzione, stato, "
         + "tipo_mittente, numero_mittente, tipo_destinatario, numero_destinatario, "
-        + "answer_url, event_url, operatore_id, chiamante_account_id, contatto_id, data_creazione) "
-        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) "
+        + "answer_url, event_url, operatore_id, chiamante_account_id, contatto_id, callback_url, data_creazione) "
+        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) "
         + "RETURNING id";
     rows = db.select(sql,
         dto.uuid(), dto.conversazioneUuid(), dto.direzione(), dto.stato(),
         dto.tipoMittente(), dto.numeroMittente(), dto.tipoDestinatario(), dto.numeroDestinatario(),
-        dto.answerUrl(), dto.eventUrl(), dto.operatoreId(), dto.chiamanteAccountId(), dto.contattoId());
+        dto.answerUrl(), dto.eventUrl(), dto.operatoreId(), dto.chiamanteAccountId(),
+        dto.contattoId(), dto.callbackUrl());
     return DB.toLong(rows.get(0).get("id"));
   }
 
@@ -206,6 +207,25 @@ public class CallDAO
     return DB.toInteger(rows.get(0).get("n"));
   }
 
+  /**
+   * Restituisce la chiamata identificata dall'uuid Vonage, o {@code null} se non trovata.
+   *
+   * @param uuid UUID Vonage della chiamata
+   * @return DTO della chiamata, o null
+   */
+  public CallDTO findByUuid(String uuid) throws Exception
+  {
+    String sql;
+    ArrayList<HashMap<String, Object>> rows;
+
+    sql = "SELECT * FROM jms_chiamate WHERE uuid = ?";
+    rows = db.select(sql, uuid);
+    if (rows.isEmpty()) {
+      return null;
+    }
+    return toDTO(rows.get(0));
+  }
+
   /** Mappa un record del ResultSet nel DTO corrispondente. */
   private CallDTO toDTO(HashMap<String, Object> r)
   {
@@ -232,6 +252,7 @@ public class CallDAO
         DB.toLong(r.get("operatore_id")),
         DB.toLong(r.get("chiamante_account_id")),
         DB.toLong(r.get("contatto_id")),
+        DB.toString(r.get("callback_url")),
         DB.toLocalDateTime(r.get("data_creazione")),
         DB.toLocalDateTime(r.get("data_aggiornamento")));
   }

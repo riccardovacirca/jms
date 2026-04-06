@@ -14,6 +14,9 @@ import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Json;
 import dev.jms.util.Log;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -180,11 +183,15 @@ public class VoiceHelper
    * @param conversationName nome della conversazione (condiviso con l'operatore)
    * @param operatorUuid     UUID della chiamata dell'operatore
    * @param operatoreId      id locale dell'operatore in {@code jms_cti_operatori}, o null
+   * @param chiamanteAccountId id account dell'operatore chiamante, o null
+   * @param contattoId       id del contatto CRM di origine, o null
+   * @param callbackUrl      URL da notificare per eventi di chiamata, o null
    * @param db               connessione DB per persistenza
    */
   public void callCustomer(String customerNumber, String conversationName,
                            String operatorUuid, Long operatoreId,
-                           Long chiamanteAccountId, DB db)
+                           Long chiamanteAccountId, Long contattoId,
+                           String callbackUrl, DB db)
                            throws Exception
   {
     String fromNumber;
@@ -239,7 +246,7 @@ public class VoiceHelper
         "phone", customerNumber,
         null, null, null, null, null, null,
         answerUrl, eventUrl,
-        null, null, operatoreId, chiamanteAccountId, null, null, null);
+        null, null, operatoreId, chiamanteAccountId, contattoId, callbackUrl, null, null);
 
     dao = new CallDAO(db);
     dao.insert(dto);
@@ -275,6 +282,8 @@ public class VoiceHelper
     String network;
     String fromUser;
     CallDAO dao;
+    CallDTO call;
+    HashMap<String, Object> cbData;
     dev.jms.app.module.cti.vonage.dao.OperatorDAO opDao;
     dev.jms.app.module.cti.vonage.dto.OperatorDTO op;
     dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO sessioneDao;
@@ -302,6 +311,10 @@ public class VoiceHelper
     if ("answered".equals(status)) {
       oraInizio = parseTimestamp(timestamp);
       dao.updateOnAnswer(uuid, oraInizio);
+      call = dao.findByUuid(uuid);
+      if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
+        fireCallback(call.callbackUrl(), call.contattoId(), "call_answered", new HashMap<>());
+      }
       if (fromUser != null && !fromUser.isBlank()) {
         opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
         op    = opDao.findByVonageUserId(fromUser);
@@ -322,6 +335,12 @@ public class VoiceHelper
         }
       }
       dao.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network);
+      call = dao.findByUuid(uuid);
+      if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
+        cbData = new HashMap<>();
+        cbData.put("duration", durata);
+        fireCallback(call.callbackUrl(), call.contattoId(), "call_ended", cbData);
+      }
       if (fromUser != null && !fromUser.isBlank()) {
         opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
         op    = opDao.findByVonageUserId(fromUser);
@@ -336,6 +355,50 @@ public class VoiceHelper
             || "machine".equals(status)) {
       dao.updateStatus(uuid, status);
     }
+  }
+
+  /**
+   * Invia una notifica HTTP POST all'endpoint di callback in modo asincrono (fire-and-forget).
+   * Il body è {@code {"id": contattoId, "type": type, "data": data}}.
+   * Gli errori vengono loggati ma non propagati.
+   *
+   * @param callbackUrl URL del destinatario della notifica
+   * @param contattoId  id del contatto CRM, inoltrato come-is al destinatario
+   * @param type        tipo di evento (es. {@code call_answered}, {@code call_ended})
+   * @param data        dati aggiuntivi specifici dell'evento
+   */
+  private void fireCallback(String callbackUrl, Long contattoId,
+                            String type, HashMap<String, Object> data)
+  {
+    Thread t;
+    String body;
+    HashMap<String, Object> payload;
+
+    payload = new HashMap<>();
+    payload.put("id", contattoId);
+    payload.put("type", type);
+    payload.put("data", data);
+    body = Json.encode(payload);
+
+    t = new Thread(() -> {
+      HttpClient client;
+      java.net.http.HttpRequest httpReq;
+
+      try {
+        client = HttpClient.newHttpClient();
+        httpReq = java.net.http.HttpRequest.newBuilder()
+            .uri(URI.create(callbackUrl))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+            .build();
+        client.send(httpReq, HttpResponse.BodyHandlers.discarding());
+        log.info("[CTI] fireCallback: url={}, type={}, contattoId={}", callbackUrl, type, contattoId);
+      } catch (Exception e) {
+        log.warn("[CTI] fireCallback: errore notifica url={}: {}", callbackUrl, e.getMessage());
+      }
+    });
+    t.setDaemon(true);
+    t.start();
   }
 
   /**

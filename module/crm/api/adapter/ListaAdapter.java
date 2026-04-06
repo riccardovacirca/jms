@@ -1,6 +1,6 @@
-package dev.jms.app.contatti.adapter;
+package dev.jms.app.crm.adapter;
 
-import dev.jms.app.contatti.dto.ListaDTO;
+import dev.jms.app.crm.dto.ListaDTO;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.Json;
 import dev.jms.util.Validator;

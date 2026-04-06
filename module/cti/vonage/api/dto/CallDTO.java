@@ -29,6 +29,7 @@ public record CallDTO(
   Long          operatoreId,
   Long          chiamanteAccountId,
   Long          contattoId,
+  String        callbackUrl,
   LocalDateTime dataCreazione,
   LocalDateTime dataAggiornamento
 ) {}

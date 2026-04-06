@@ -104,7 +104,7 @@ class Bar extends LitElement
     this._connecting         = false;
     this._dtmfInput          = '';
     this._showAddModal       = false;
-    this._addFormData        = { nome: '', cognome: '', telefono: '', note: '' };
+    this._addFormData        = { nome: '', cognome: '', phone: '', note: '' };
     this._showCallLog        = false;
     this._callLog            = [];
     this._callLogLoading     = false;
@@ -299,7 +299,7 @@ class Bar extends LitElement
    * Recupera il prossimo contatto dal modulo dialer esterno.
    * Se l'endpoint non è configurato o risponde 404, restituisce il contatto mock.
    *
-   * @returns {Promise<object>} contatto con almeno i campi {@code nome} e {@code telefono}
+   * @returns {Promise<object>} contatto con il campo {@code phone} e opzionalmente {@code data}
    */
   async _fetchNextContact()
   {
@@ -336,12 +336,14 @@ class Bar extends LitElement
   _mockContact()
   {
     return {
-      id:      null,
-      nome:    'Mario',
-      cognome: 'Rossi',
-      telefono: '12345678901',
-      email:   'mario.rossi@example.com',
-      note:    '[mock — modulo dialer non configurato]'
+      id:       null,
+      phone:    '12345678901',
+      callback: null,
+      data:     [
+        { key: 'Nome',    value: 'Mario Rossi',                    type: 'string' },
+        { key: 'Email',   value: 'mario.rossi@example.com',        type: 'string' },
+        { key: 'Note',    value: '[mock — modulo dialer non configurato]', type: 'text' },
+      ]
     };
   }
 
@@ -353,20 +355,29 @@ class Bar extends LitElement
   {
     let number;
     let callId;
+    let contactId;
+    let callbackUrl;
 
     this._showContactModal = false;
-    number = this._pendingContact ? this._pendingContact.telefono : null;
+    number = this._pendingContact ? this._pendingContact.phone : null;
 
     if (!number || number.trim() === '') {
       this._sessionError = 'Numero non disponibile per questo contatto';
       return;
     }
 
+    contactId   = this._pendingContact ? (this._pendingContact.id       ?? null) : null;
+    callbackUrl = this._pendingContact ? (this._pendingContact.callback ?? null) : null;
+
     targetNumber.set(number.trim());
     this._sessionError = null;
 
     try {
-      callId = await this._client.serverCall({ customerNumber: number.trim() });
+      callId = await this._client.serverCall({
+        customerNumber: number.trim(),
+        contactId:      contactId,
+        callbackUrl:    callbackUrl,
+      });
       callState.set({
         active: true,
         callId: callId,
@@ -377,6 +388,37 @@ class Bar extends LitElement
       this._sessionError = 'Errore avvio chiamata: ' + e.message;
       callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
     }
+  }
+
+  /**
+   * Renderizza una singola voce del campo {@code data} del contatto in base al tipo.
+   * - {@code string} — testo su singola riga
+   * - {@code number} — valore numerico, font monospace tabular
+   * - {@code text}   — testo multiriga (pre-wrap)
+   *
+   * @param {{ key: string, value: string, type: 'string'|'number'|'text' }} item
+   */
+  _renderContactDataItem(item)
+  {
+    if (item.type === 'text') {
+      return html`
+        <tr>
+          <th class="text-secondary fw-normal w-25 align-top small">${item.key}</th>
+          <td class="small" style="white-space:pre-wrap">${item.value}</td>
+        </tr>`;
+    }
+    if (item.type === 'number') {
+      return html`
+        <tr>
+          <th class="text-secondary fw-normal w-25 small">${item.key}</th>
+          <td class="font-monospace">${item.value}</td>
+        </tr>`;
+    }
+    return html`
+      <tr>
+        <th class="text-secondary fw-normal w-25 small">${item.key}</th>
+        <td>${item.value}</td>
+      </tr>`;
   }
 
   /** Annulla il dialog senza avviare la chiamata. */
@@ -862,7 +904,7 @@ class Bar extends LitElement
   _openAddModal()
   {
     this._showDtmf   = false;
-    this._addFormData = { nome: '', cognome: '', telefono: this._dtmfInput, note: '' };
+    this._addFormData = { nome: '', cognome: '', phone: this._dtmfInput, note: '' };
     this._showAddModal = true;
   }
 
@@ -879,20 +921,33 @@ class Bar extends LitElement
   async _confirmAdd()
   {
     let contact;
-    let telefono;
+    let phone;
+    let nome;
+    let cognome;
+    let note;
+    let data;
 
-    telefono = (this.querySelector('#cti-add-tel')?.value || '').trim();
-    if (!telefono) {
+    phone = (this.querySelector('#cti-add-tel')?.value || '').trim();
+    if (!phone) {
       this._sessionError = 'Numero di telefono obbligatorio';
       return;
     }
 
+    nome    = (this.querySelector('#cti-add-nome')?.value    || '').trim();
+    cognome = (this.querySelector('#cti-add-cognome')?.value || '').trim();
+    note    = (this.querySelector('#cti-add-note')?.value    || '').trim();
+
+    data = [
+      nome    ? { key: 'Nome',    value: nome,    type: 'string' } : null,
+      cognome ? { key: 'Cognome', value: cognome, type: 'string' } : null,
+      note    ? { key: 'Note',    value: note,    type: 'text'   } : null,
+    ].filter(Boolean);
+
     contact = {
       id:       null,
-      nome:     (this.querySelector('#cti-add-nome')?.value    || '').trim(),
-      cognome:  (this.querySelector('#cti-add-cognome')?.value || '').trim(),
-      telefono: telefono,
-      note:     (this.querySelector('#cti-add-note')?.value    || '').trim()
+      phone:    phone,
+      callback: null,
+      data:     data.length ? data : null,
     };
 
     this._showAddModal   = false;
@@ -1388,22 +1443,11 @@ class Bar extends LitElement
               <div class="modal-body">
                 <table class="table table-sm table-borderless mb-0">
                   <tbody>
-                    ${this._pendingContact.nome || this._pendingContact.cognome ? html`
-                      <tr>
-                        <th class="text-secondary fw-normal w-25">Nome</th>
-                        <td class="fw-semibold">${[this._pendingContact.nome, this._pendingContact.cognome].filter(Boolean).join(' ')}</td>
-                      </tr>
-                    ` : ''}
                     <tr>
-                      <th class="text-secondary fw-normal">Telefono</th>
-                      <td class="font-monospace fw-semibold">${this._pendingContact.telefono}</td>
+                      <th class="text-secondary fw-normal w-25 small">Telefono</th>
+                      <td class="font-monospace fw-semibold">${this._pendingContact.phone}</td>
                     </tr>
-                    ${this._pendingContact.note ? html`
-                      <tr>
-                        <th class="text-secondary fw-normal">Note</th>
-                        <td class="text-secondary small">${this._pendingContact.note}</td>
-                      </tr>
-                    ` : ''}
+                    ${(this._pendingContact.data || []).map(item => this._renderContactDataItem(item))}
                   </tbody>
                 </table>
               </div>
@@ -1438,7 +1482,7 @@ class Bar extends LitElement
                   </div>
                   <div class="col-12">
                     <label class="form-label text-secondary small mb-1">Telefono</label>
-                    <input id="cti-add-tel" class="form-control form-control-sm font-monospace" type="text" placeholder="Telefono" .value=${this._addFormData.telefono}>
+                    <input id="cti-add-tel" class="form-control form-control-sm font-monospace" type="text" placeholder="Telefono" .value=${this._addFormData.phone}>
                   </div>
                   <div class="col-12">
                     <label class="form-label text-secondary small mb-1">Note</label>

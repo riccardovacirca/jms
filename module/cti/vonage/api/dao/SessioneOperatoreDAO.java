@@ -2,7 +2,6 @@ package dev.jms.app.module.cti.vonage.dao;
 
 import dev.jms.app.module.cti.vonage.dto.SessioneOperatoreDTO;
 import dev.jms.util.DB;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,8 +9,8 @@ import java.util.List;
 /**
  * DAO per la tabella {@code jms_sessione_operatore}.
  *
- * <p>Gestisce il ciclo di vita dei turni operatore: creazione da parte dell'admin,
- * aggiornamento alla connessione/disconnessione dell'operatore e alle chiamate.</p>
+ * <p>Gestisce il ciclo di vita delle sessioni tecniche CTI: apertura automatica
+ * alla connessione dell'operatore, aggiornamento agli eventi di connessione/pausa/chiamata.</p>
  *
  * <p>Valori di {@code stato}: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata.</p>
  */
@@ -28,78 +27,39 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Inserisce un nuovo turno pianificato. Stato iniziale: 0 (disconnesso).
+   * Apre una nuova sessione tecnica per l'operatore. Stato iniziale: 0 (disconnesso).
+   * Chiamato automaticamente da {@code sdkToken} se non esiste già una sessione attiva.
    *
-   * @param operatoreId id operatore
-   * @param turnoInizio inizio turno pianificato
-   * @param turnoFine   fine turno pianificato
-   * @param note        note opzionali
-   * @param creatoDA    account_id dell'admin che crea il turno
+   * @param operatoreId id operatore in {@code jms_cti_operatori}
+   * @param creatoDA    account_id dell'operatore che apre la sessione
    * @return id del record inserito
    */
-  public long insert(long operatoreId, LocalDateTime turnoInizio, LocalDateTime turnoFine,
-                     String note, long creatoDA) throws Exception
+  public long openSession(long operatoreId, long creatoDA) throws Exception
   {
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "INSERT INTO jms_sessione_operatore "
-        + "(operatore_id, turno_inizio, turno_fine, note, creato_da) "
-        + "VALUES (?, ?, ?, ?, ?) RETURNING id";
-    rows = db.select(sql, operatoreId, turnoInizio, turnoFine, note, creatoDA);
+    sql = "INSERT INTO jms_sessione_operatore (operatore_id, creato_da) "
+        + "VALUES (?, ?) RETURNING id";
+    rows = db.select(sql, operatoreId, creatoDA);
     return DB.toLong(rows.get(0).get("id"));
   }
 
   /**
-   * Aggiorna turno_inizio, turno_fine e note di un turno esistente (solo admin).
-   *
-   * @param id          id del turno
-   * @param turnoInizio nuovo inizio turno
-   * @param turnoFine   nuova fine turno
-   * @param note        nuove note
-   * @param modificatoDA account_id dell'admin che modifica
-   */
-  public void update(long id, LocalDateTime turnoInizio, LocalDateTime turnoFine,
-                     String note, long modificatoDA) throws Exception
-  {
-    String sql;
-
-    sql = "UPDATE jms_sessione_operatore "
-        + "SET turno_inizio = ?, turno_fine = ?, note = ?, "
-        + "modificato_da = ?, data_modifica = NOW() "
-        + "WHERE id = ?";
-    db.query(sql, turnoInizio, turnoFine, note, modificatoDA, id);
-  }
-
-  /**
-   * Elimina un turno (solo se stato = 0, non ancora avviato).
-   *
-   * @param id id del turno
-   */
-  public void delete(long id) throws Exception
-  {
-    String sql;
-
-    sql = "DELETE FROM jms_sessione_operatore WHERE id = ? AND stato = 0";
-    db.query(sql, id);
-  }
-
-  /**
-   * Trova il turno attivo o pianificato per l'operatore nell'orario corrente.
-   * Un turno è candidato se {@code turno_inizio <= NOW() <= turno_fine}
-   * e lo stato è 0 (disconnesso) o 2 (in pausa).
+   * Trova la sessione tecnica attiva per l'operatore (stato 1=connesso, 2=in pausa, 3=in chiamata).
+   * Restituisce la più recente in caso di sessioni multiple.
    *
    * @param operatoreId id operatore
-   * @return turno trovato o {@code null}
+   * @return sessione trovata o {@code null}
    */
-  public SessioneOperatoreDTO findCorrente(long operatoreId) throws Exception
+  public SessioneOperatoreDTO findActive(long operatoreId) throws Exception
   {
     String sql;
     List<HashMap<String, Object>> rows;
 
     sql = "SELECT * FROM jms_sessione_operatore "
-        + "WHERE operatore_id = ? AND turno_inizio <= NOW() AND turno_fine >= NOW() "
-        + "AND stato IN (0, 2) ORDER BY turno_inizio DESC LIMIT 1";
+        + "WHERE operatore_id = ? AND stato IN (1, 2, 3) "
+        + "ORDER BY data_creazione DESC LIMIT 1";
     rows = db.select(sql, operatoreId);
     if (rows.isEmpty()) {
       return null;
@@ -108,10 +68,10 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Segna la connessione dell'operatore: imposta {@code connessione_inizio} (se prima connessione)
-   * e porta lo stato a 1 (connesso). Aggiorna {@code data_modifica}.
+   * Segna la connessione dell'operatore: imposta {@code connessione_inizio} (se prima connessione),
+   * aggiorna {@code ultima_connessione} e porta lo stato a 1 (connesso).
    *
-   * @param id          id del turno
+   * @param id           id della sessione
    * @param modificatoDA account_id dell'operatore/sistema che aggiorna
    */
   public void registraConnessione(long id, long modificatoDA) throws Exception
@@ -127,11 +87,10 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Segna la disconnessione dell'operatore durante il turno (pausa):
-   * incrementa {@code numero_pause}, aggiunge la durata della pausa corrente
-   * e porta lo stato a 2 (in pausa).
+   * Segna la disconnessione dell'operatore (pausa): incrementa {@code numero_pause},
+   * aggiunge la durata della pausa corrente e porta lo stato a 2 (in pausa).
    *
-   * @param id           id del turno
+   * @param id           id della sessione
    * @param durataPausa  durata della pausa in secondi
    * @param modificatoDA account_id dell'operatore/sistema che aggiorna
    */
@@ -148,28 +107,9 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Chiude il turno: imposta {@code connessione_fine}, calcola {@code durata_totale}
-   * e porta lo stato a 0 (disconnesso).
+   * Aggiorna lo stato a 3 (in chiamata) per la sessione attiva dell'operatore.
    *
-   * @param id           id del turno
-   * @param modificatoDA account_id dell'operatore/sistema che aggiorna
-   */
-  public void chiudiTurno(long id, long modificatoDA) throws Exception
-  {
-    String sql;
-
-    sql = "UPDATE jms_sessione_operatore "
-        + "SET connessione_fine = NOW(), "
-        + "durata_totale = EXTRACT(EPOCH FROM (NOW() - connessione_inizio))::INTEGER, "
-        + "stato = 0, modificato_da = ?, data_modifica = NOW() "
-        + "WHERE id = ?";
-    db.query(sql, modificatoDA, id);
-  }
-
-  /**
-   * Aggiorna lo stato a 3 (in chiamata).
-   *
-   * @param operatoreId id operatore (cerca il turno attivo con stato 1)
+   * @param operatoreId id operatore (cerca la sessione con stato 1)
    */
   public void setInChiamata(long operatoreId) throws Exception
   {
@@ -177,15 +117,15 @@ public class SessioneOperatoreDAO
 
     sql = "UPDATE jms_sessione_operatore SET stato = 3, data_modifica = NOW() "
         + "WHERE operatore_id = ? AND stato = 1 "
-        + "AND turno_inizio <= NOW() AND turno_fine >= NOW()";
+        + "ORDER BY data_creazione DESC LIMIT 1";
     db.query(sql, operatoreId);
   }
 
   /**
    * Riporta lo stato da 3 (in chiamata) a 1 (connesso) e aggiorna le statistiche chiamata.
    *
-   * @param operatoreId        id operatore
-   * @param durataChiamata     durata della chiamata in secondi
+   * @param operatoreId    id operatore
+   * @param durataChiamata durata della chiamata in secondi
    */
   public void registraFineChiamata(long operatoreId, int durataChiamata) throws Exception
   {
@@ -197,12 +137,12 @@ public class SessioneOperatoreDAO
         + "durata_conversazione = durata_conversazione + ?, "
         + "data_modifica = NOW() "
         + "WHERE operatore_id = ? AND stato = 3 "
-        + "AND turno_inizio <= NOW() AND turno_fine >= NOW()";
+        + "ORDER BY data_creazione DESC LIMIT 1";
     db.query(sql, durataChiamata, operatoreId);
   }
 
   /**
-   * Lista paginata dei turni, ordine decrescente per turno_inizio.
+   * Lista paginata delle sessioni, ordinate per data di creazione decrescente.
    *
    * @param page numero di pagina (da 1)
    * @param size elementi per pagina
@@ -214,7 +154,7 @@ public class SessioneOperatoreDAO
     List<HashMap<String, Object>> rows;
     List<SessioneOperatoreDTO> result;
 
-    sql = "SELECT * FROM jms_sessione_operatore ORDER BY turno_inizio DESC LIMIT ? OFFSET ?";
+    sql = "SELECT * FROM jms_sessione_operatore ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
     rows = db.select(sql, size, (page - 1) * size);
     result = new ArrayList<>();
     for (HashMap<String, Object> r : rows) {
@@ -224,7 +164,7 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Conta il totale dei turni.
+   * Conta il totale delle sessioni.
    */
   public int count() throws Exception
   {
@@ -237,7 +177,7 @@ public class SessioneOperatoreDAO
   }
 
   /**
-   * Trova un turno per id.
+   * Trova una sessione per id.
    *
    * @param id chiave primaria
    * @return DTO o {@code null}
@@ -261,8 +201,6 @@ public class SessioneOperatoreDAO
     return new SessioneOperatoreDTO(
         DB.toLong(r.get("id")),
         DB.toLong(r.get("operatore_id")),
-        DB.toLocalDateTime(r.get("turno_inizio")),
-        DB.toLocalDateTime(r.get("turno_fine")),
         DB.toLocalDateTime(r.get("connessione_inizio")),
         DB.toLocalDateTime(r.get("connessione_fine")),
         DB.toInteger(r.get("durata_totale")),
@@ -272,11 +210,9 @@ public class SessioneOperatoreDAO
         DB.toInteger(r.get("numero_chiamate")),
         DB.toInteger(r.get("durata_conversazione")),
         DB.toInteger(r.get("stato")),
-        DB.toString(r.get("note")),
         DB.toLong(r.get("creato_da")),
         DB.toLocalDateTime(r.get("data_creazione")),
         DB.toLong(r.get("modificato_da")),
-        DB.toLocalDateTime(r.get("data_modifica"))
-    );
+        DB.toLocalDateTime(r.get("data_modifica")));
   }
 }

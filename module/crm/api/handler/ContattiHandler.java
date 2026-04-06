@@ -1,8 +1,8 @@
-package dev.jms.app.contatti.handler;
+package dev.jms.app.crm.handler;
 
-import dev.jms.app.contatti.adapter.ContattoAdapter;
-import dev.jms.app.contatti.dao.ContattoDAO;
-import dev.jms.app.contatti.dto.ContattoDTO;
+import dev.jms.app.crm.adapter.ContattoAdapter;
+import dev.jms.app.crm.dao.ContattoDAO;
+import dev.jms.app.crm.dto.ContattoDTO;
 import dev.jms.util.DB;
 import dev.jms.util.HttpRequest;
 import dev.jms.util.HttpResponse;

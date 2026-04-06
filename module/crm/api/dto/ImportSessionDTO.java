@@ -1,4 +1,4 @@
-package dev.jms.app.contatti.dto;
+package dev.jms.app.crm.dto;
 
 public record ImportSessionDTO(
   String id,

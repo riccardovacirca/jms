@@ -1,8 +1,9 @@
-package dev.jms.app.contatti;
+package dev.jms.app.crm;
 
-import dev.jms.app.contatti.handler.ContattiHandler;
-import dev.jms.app.contatti.handler.ImporterHandler;
-import dev.jms.app.contatti.handler.ListeHandler;
+import dev.jms.app.crm.handler.ContattiHandler;
+import dev.jms.app.crm.handler.ImporterHandler;
+import dev.jms.app.crm.handler.ListeHandler;
+import dev.jms.app.crm.handler.TurnoHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
@@ -23,10 +24,12 @@ public class Routes
     ContattiHandler contatti;
     ListeHandler liste;
     ImporterHandler importer;
+    TurnoHandler turni;
 
     contatti = new ContattiHandler();
     liste = new ListeHandler();
     importer = new ImporterHandler(config);
+    turni = new TurnoHandler();
 
     router.route(HttpMethod.GET,    "/api/contatti",                  contatti::list);
     router.route(HttpMethod.POST,   "/api/contatti",                  contatti::create);
@@ -47,6 +50,12 @@ public class Routes
     router.route(HttpMethod.GET,    "/api/liste/{id}/contatti",       liste::listContatti);
     router.route(HttpMethod.POST,   "/api/liste/{id}/contatti",       liste::addContatto);
     router.route(HttpMethod.DELETE, "/api/liste/{id}/contatti/{cid}", liste::removeContatto);
+
+    router.route(HttpMethod.GET,    "/api/crm/operatori/turni",              turni::list);
+    router.route(HttpMethod.POST,   "/api/crm/operatori/turni",              turni::create);
+    router.route(HttpMethod.PUT,    "/api/crm/operatori/turni/{id}",         turni::update);
+    router.route(HttpMethod.DELETE, "/api/crm/operatori/turni/{id}",         turni::delete);
+    router.route(HttpMethod.GET,    "/api/crm/operatori/turni/corrente",     turni::corrente);
 
     router.route(HttpMethod.GET,    "/api/import/campi",              importer::campi);
     router.route(HttpMethod.POST,   "/api/import/analyze",            importer::analyze);

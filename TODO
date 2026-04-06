@@ -1,0 +1,1 @@
+- Le migrazioni dei moduli devono avere il prefisso jms_<nome_modulo>_

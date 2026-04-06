@@ -1,5 +1,5 @@
 -- ============================================================================
--- MODULO CONTATTI
+-- CONTATTI
 -- ============================================================================
 
 CREATE TABLE jms_contatti (
@@ -83,3 +83,23 @@ CREATE TABLE jms_import_sessions (
 
 CREATE INDEX idx_jms_import_sessions_status  ON jms_import_sessions(status);
 CREATE INDEX idx_jms_import_sessions_created ON jms_import_sessions(created_at);
+
+-- ============================================================================
+-- TURNI OPERATORE CTI
+-- operatore_id fa riferimento a jms_cti_operatori.id (dipendenza logica, no FK).
+-- ============================================================================
+
+CREATE TABLE jms_crm_turno (
+  id               BIGSERIAL  PRIMARY KEY,
+  operatore_id     BIGINT     NOT NULL,
+  turno_inizio     TIMESTAMP  NOT NULL,
+  turno_fine       TIMESTAMP  NOT NULL,
+  note             TEXT,
+  creato_da        BIGINT,
+  data_creazione   TIMESTAMP  NOT NULL DEFAULT NOW(),
+  modificato_da    BIGINT,
+  data_modifica    TIMESTAMP
+);
+
+CREATE INDEX jms_idx_crm_turno_operatore ON jms_crm_turno(operatore_id);
+CREATE INDEX jms_idx_crm_turno_periodo   ON jms_crm_turno(turno_inizio, turno_fine);

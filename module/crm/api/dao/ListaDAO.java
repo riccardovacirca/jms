@@ -1,7 +1,7 @@
-package dev.jms.app.contatti.dao;
+package dev.jms.app.crm.dao;
 
-import dev.jms.app.contatti.dto.ListaContattoDTO;
-import dev.jms.app.contatti.dto.ListaDTO;
+import dev.jms.app.crm.dto.ListaContattoDTO;
+import dev.jms.app.crm.dto.ListaDTO;
 import dev.jms.util.DB;
 
 import java.time.LocalDate;
