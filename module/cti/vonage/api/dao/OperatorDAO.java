@@ -295,4 +295,50 @@ public class OperatorDAO
         DB.toBoolean(row.get("attivo"))
     );
   }
+
+  /**
+   * Assegna il contatto corrente all'operatore.
+   *
+   * @param operatoreId id operatore
+   * @param contattoJson JSON serializzato del contatto
+   */
+  public void setContattoCorrente(long operatoreId, String contattoJson) throws Exception
+  {
+    String sql;
+
+    sql = "UPDATE jms_cti_operatori SET contatto_corrente = ?::jsonb, contatto_data_assegnazione = NOW() WHERE id = ?";
+    db.query(sql, contattoJson, operatoreId);
+  }
+
+  /**
+   * Recupera il contatto corrente assegnato all'operatore.
+   *
+   * @param operatoreId id operatore
+   * @return JSON del contatto o {@code null}
+   */
+  public String getContattoCorrente(long operatoreId) throws Exception
+  {
+    String sql;
+    List<HashMap<String, Object>> rows;
+
+    sql = "SELECT contatto_corrente::text FROM jms_cti_operatori WHERE id = ?";
+    rows = db.select(sql, operatoreId);
+    if (rows.isEmpty() || rows.get(0).get("contatto_corrente") == null) {
+      return null;
+    }
+    return DB.toString(rows.get(0).get("contatto_corrente"));
+  }
+
+  /**
+   * Cancella il contatto corrente dall'operatore.
+   *
+   * @param operatoreId id operatore
+   */
+  public void clearContattoCorrente(long operatoreId) throws Exception
+  {
+    String sql;
+
+    sql = "UPDATE jms_cti_operatori SET contatto_corrente = NULL, contatto_data_assegnazione = NULL WHERE id = ?";
+    db.query(sql, operatoreId);
+  }
 }

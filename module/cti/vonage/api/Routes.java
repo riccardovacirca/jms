@@ -5,6 +5,7 @@ import dev.jms.app.module.cti.vonage.handler.CallHandler;
 import dev.jms.app.module.cti.vonage.handler.OperatorHandler;
 import dev.jms.app.module.cti.vonage.handler.PrefissoHandler;
 import dev.jms.app.module.cti.vonage.handler.SessioneOperatoreHandler;
+import dev.jms.app.module.cti.vonage.handler.QueueHandler;
 import dev.jms.util.Config;
 import dev.jms.util.HttpMethod;
 import dev.jms.util.Router;
@@ -27,11 +28,13 @@ public class Routes
     OperatorHandler operators;
     PrefissoHandler prefissi;
     SessioneOperatoreHandler turni;
+    QueueHandler queue;
 
     calls    = new CallHandler(config);
     operators = new OperatorHandler(config);
     prefissi = new PrefissoHandler();
     turni    = new SessioneOperatoreHandler();
+    queue    = new QueueHandler();
 
     // assegna operatore e genera JWT SDK
     router.async(HttpMethod.POST, "/api/cti/vonage/sdk/auth", calls::sdkToken);
@@ -62,6 +65,12 @@ public class Routes
     router.route(HttpMethod.GET, "/api/cti/vonage/admin/sessioni",    turni::list);
     // sessione tecnica corrente dell'operatore autenticato
     router.route(HttpMethod.GET, "/api/cti/vonage/sessione/corrente", turni::corrente);
+
+    // Coda chiamate
+    router.route(HttpMethod.POST, "/api/cti/vonage/queue", queue::addToQueue);
+    router.route(HttpMethod.POST, "/api/cti/vonage/queue/bulk", queue::addBulkToQueue);
+    router.route(HttpMethod.GET,  "/api/cti/vonage/queue/next", queue::getNext);
+    router.route(HttpMethod.GET,  "/api/cti/vonage/queue/stats", queue::getStats);
 
     // cleanup sessioni operatori scadute (ogni minuto)
     Scheduler.register("cti-session-cleanup", "* * * * *", OperatorDAO::releaseExpired);

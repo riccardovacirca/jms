@@ -1,6 +1,91 @@
 - Le migrazioni dei moduli devono avere il prefisso jms_<nome_modulo>_
+
 - BUG - il post-install script dei moduli chiama l'API prima che l'app venga
   ricompilata e riavviata con il nuovo modulo
-- se l'installazione di un modulo prevede una installazione di un pacchtto npm
+
+- Se l'installazione di un modulo prevede una installazione di un pacchetto npm
   deve essere verificata la presenza di node e di npm e in caso di assenza deve
   essere dato un messaggio amichevola all'utente
+
+- Verificare che il modulo header consent a ogni modulo di aggiungere alla barra
+  header un proprio elemento ad esempio uno o più link o un menu dropdown.
+
+- Verificare a cosa è collegato l'attuale link Contatti
+
+- Ogni modulo potrebbe avere un file config.js con parametri di configurazione
+  custom importabili quando il modulo viene caricato.
+
+- Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
+  essere configurabile e potrebbe star enella config.js del modulo header
+
+- La barra CTI dovebbe avere un padding minimale max 2px.
+
+- Attualmente esiste una azione nel menu di contesto della barra CTI per
+  importare tutti gli operatori vonage disponibili e associarli a operatori CTI.
+  Vorrei capire il contesto ghenerale di questo comportamento.
+  Quando un utente esegue il login se il modulo cti è installato viene mostrata
+  la barra CTI. Un utente corrisponde a un operatore CTI e un operatore CTI
+  corrisponde a un operatore vonage. Il modulo CTI dovrebbe eseguire questo
+  controllo e creare questa associazione quando si clicca sul pulsante
+  Connetti... al termine della sessione di lavoro o se l'utente perde lo stato
+  di autenticazione dovrebbe avvenire una disconnessione anche dall'operatore
+  CTI e qundi Vonage. Il link elenco operatori visibile all'utente admin o root
+  dovrebbe mostrare lo stato di associazione tra operatore cti e operatore
+  vonage relativo a tutti gli operatori che hanno cliccato su Connetti...
+  pertanto lo stato di connessione dovrebbe essere persistente. Un utente admin
+  o root dovrebbe anche avere un proprio operatore associato sia CTI che vonage.
+  La voce elenco operatori non è presente nel menu di contesto di un operatore.
+  Al suo posto dovrebbe essere presente una voce 'Stato operatore' che mostra
+  statistiche di connessione dell'operatore corrente. Se per qualche ragione si
+  perde la connessione con l'operatore vonage bisogna interrompere anche lo
+  stato di connessione. La differenza tra operatore vonage e operatore CTI
+  consiste nel mantenimento della storia. Uno stesso operatore CTI potrebbe
+  essere connesso a operatori vonage diversi ad ogni sessione ma deve conservare
+  una storia relativa alla propria attività.
+
+- Attualmente il click sul pulsante chiama della barra CTI esegue una chaimata
+  a un endpoint del crm che fornisce il prossimo contatto da chiamare.
+  Voglio modificare questo comportamento. Il CTI dovrebbe avere una coda di
+  chiamata contenente contatti. La coda deve essere persistente. Il formato di
+  un contatto nella coda è lo stesso formato che attualmente viene inviato dal
+  crm al cti quando si esegue una chiamata. il cti espone un endpoint per
+  scrivere nella coda. Il crm usa l'endpoint per scrivere nella coda.
+  il crm può scrivere anche in modo massivo sulla coda.
+  il click sul pulsante chiama estrae il prossimo contatto dalla coda e lo mette
+  nella sessione dell'operatore, quindi il contatto viene letto dalla sessione
+  per eseguire la chiamata.
+  Il cti ha una funzione di chiamata alternativa al pulsante chiama ovvero una
+  chiamata continua che potrebbe essere implementata in una sezione
+  della barra cti con i simboli Play/Pause per prelevare dalla coda un contatto,
+  metterlo in sessione e avviare la chiamata a intervalli regolari ad esempio
+  uno ogni 20 secondi.
+  La coda a livello di database è condivisa tra gli operatori. Un contatto può
+  essare messo nella sessione di qualsiasi operatore.
+
+
+- Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
+  eventi. La politica generale è che se un modulo vuole accedere agli eventi
+  generati dal modulo CTI deve sottoscriversi come observer. il gestore di
+  eventi del modulo CTI notifica a tutti gli observer gli eventi generati
+  durante la propria operatività.
+
+- Deve esistere una tabella settings del cti e una tabella setting del crm che
+  sono gestite da admin e root per definire tutti gli aspetti configurabili
+  dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
+  funzione di chiamata continua). A questa tabella deve corrispondere una pagina
+  di gestione del crm e una pagina di gestione del cti.
+
+- Che cosa succede se è stata avviata una sessione cti e viene ricaricata
+  la pagina? cosa succede se l'operatore è in conversazione e viene ricaricata
+  la pagina? quale dovrebbe essere il comportamento più stabile e conservativo?
+
+- La cartella /workspace/jms/docs/core contiene un insieme di file che
+  documentano tutti i workflow che è possibile isolare dal flusso applicativo
+  della classe /workspace/jms/src/main/java/dev/jms/app/App.java.
+  Per ciascuno è definito anche un diagramma di sequenza UML con la sintassi
+  Marmaid.
+  Usa questi file come modello per documentare tutti i workflow che è possibile
+  isolare dal flusso applicativo del modulo CTI. Il livello di granularità di
+  questa analisi deve essere ragionevole ovvero non troppo grossolano ne troppo
+  fine. Tutti i workflow vanno numerati in modo da rendere esplicita la
+  timeline dell'intero processo.

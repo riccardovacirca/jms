@@ -6,15 +6,12 @@
  *
  * Utilizzo dal modulo ospitante (es. CRM):
  *   import '<path>/module/cti/vonage/Call.js';
- *   import { dialerEndpoint } from '<path>/module/cti/vonage/store.js';
- *   // Configura l'endpoint del dialer (opzionale — senza usa mock):
- *   dialerEndpoint.set('/api/crm/contatti/dialer/next');
  *   // Aggiungi al template:
  *   <cti-bar></cti-bar>
  *
  * Flusso:
  *   FASE 1 — Connessione: POST /api/cti/vonage/sdk/auth → assegna operatore e JWT SDK.
- *   FASE 2 — Dialer: GET dialerEndpoint → contatto → dialog conferma.
+ *   FASE 2 — Coda: GET /api/cti/vonage/queue/next → estrae contatto dalla coda → dialog conferma.
  *   FASE 3 — Chiamata: client.serverCall() → webhook answer → cliente chiamato in background.
  *   FASE 4 — Conversazione: callAnswered → timer e stats attivi.
  *   FASE 5 — Fine: callHangup o PUT /call/{uuid}/hangup → stato idle.
@@ -22,8 +19,9 @@
  */
 import { LitElement, html } from 'lit';
 import { VonageClient } from '@vonage/client-sdk';
-import { callState, targetNumber, currentContact, dialerEndpoint } from './store.js';
+import { callState, targetNumber, currentContact } from './store.js';
 import { authorized, user } from '../../../store.js';
+import './cti-bar.css';
 
 const REFRESH_DELAY_MS = 13 * 60 * 1000;
 const NET_STATS_INTERVAL_MS = 5000;
@@ -66,7 +64,8 @@ class Bar extends LitElement
     _callLogPage:        { state: true },
     _showErrorModal:     { state: true },
     _user:               { state: true },
-    _authorized:         { state: true }
+    _authorized:         { state: true },
+    _autoDialerActive:   { state: true },
   };
 
   createRenderRoot()
@@ -118,6 +117,8 @@ class Bar extends LitElement
     this._refreshTimer       = null;
     this._callTimer          = null;
     this._netStatsTimer      = null;
+    this._autoDialerActive  = false;
+    this._autoDialerTimer   = null;
     this._unsubCall          = null;
     this._unsubTarget        = null;
     this._unsubUser          = null;
@@ -273,8 +274,8 @@ class Bar extends LitElement
   }
 
   /**
-   * Avvia il flusso dialer: recupera il prossimo contatto e mostra il dialog di conferma.
-   * Se {@code dialerEndpoint} è null o risponde 404, usa il contatto mock.
+   * Avvia il flusso dialer: recupera il prossimo contatto dalla coda e mostra il dialog di conferma.
+   * Se la coda è vuota, mostra un messaggio di errore.
    */
   async _fetchAndShowContact()
   {
@@ -285,6 +286,13 @@ class Bar extends LitElement
 
     try {
       contact = await this._fetchNextContact();
+      
+      if (!contact) {
+        this._sessionError = 'Coda vuota: nessun contatto disponibile';
+        this._contactLoading = false;
+        return;
+      }
+      
       this._pendingContact   = contact;
       this._showContactModal = true;
       currentContact.set(contact);
@@ -296,36 +304,75 @@ class Bar extends LitElement
   }
 
   /**
-   * Recupera il prossimo contatto dal modulo dialer esterno.
-   * Se l'endpoint non è configurato o risponde 404, restituisce il contatto mock.
+   * Recupera il prossimo contatto dalla coda CTI.
+   * La coda è condivisa tra tutti gli operatori e gestita dal backend.
    *
-   * @returns {Promise<object>} contatto con il campo {@code phone} e opzionalmente {@code data}
+   * @returns {Promise<object|null>} contatto con il campo {@code phone} e opzionalmente {@code data}, o null se la coda è vuota
    */
   async _fetchNextContact()
   {
-    let endpoint;
     let response;
     let data;
 
-    endpoint = dialerEndpoint.get();
-
-    if (!endpoint) {
-      return this._mockContact();
-    }
-
-    response = await fetch(endpoint);
-
-    if (response.status === 404) {
-      return this._mockContact();
-    }
+    response = await fetch('/api/cti/vonage/queue/next');
 
     data = await response.json();
 
     if (data.err) {
-      throw new Error(data.log || 'Errore dialer');
+      throw new Error(data.log || 'Errore recupero dalla coda');
     }
 
-    return data.out;
+    if (!data.out) {
+      return null;
+    }
+
+    return data.out.contatto;
+  }
+
+  /**
+   * Toggle auto-dialer on/off.
+   * L'auto-dialer chiama automaticamente il prossimo contatto dalla coda ogni N secondi.
+   */
+  _toggleAutoDialer()
+  {
+    if (this._autoDialerActive) {
+      this._stopAutoDialer();
+    } else {
+      this._startAutoDialer();
+    }
+  }
+
+  /**
+   * Avvia l'auto-dialer con intervallo configurabile (default 20 secondi).
+   */
+  _startAutoDialer()
+  {
+    const intervalMs = 20 * 1000;
+    
+    this._autoDialerActive = true;
+    
+    // Prima chiamata immediata
+    this._fetchAndShowContact();
+    
+    // Successivamente ogni N secondi
+    this._autoDialerTimer = setInterval(() => {
+      if (!this._callState.active && this._sessionActive) {
+        this._fetchAndShowContact();
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * Ferma l'auto-dialer e pulisce il timer.
+   */
+  _stopAutoDialer()
+  {
+    this._autoDialerActive = false;
+    
+    if (this._autoDialerTimer) {
+      clearInterval(this._autoDialerTimer);
+      this._autoDialerTimer = null;
+    }
   }
 
   /**
@@ -667,6 +714,7 @@ class Bar extends LitElement
     }
     this._stopCallTimer();
     this._stopNetStatsPolling();
+    this._stopAutoDialer();
     if (this._sessionActive) {
       try {
         await fetch('/api/cti/vonage/sdk/auth', { method: 'DELETE' });
@@ -1080,108 +1128,6 @@ class Bar extends LitElement
     const waiting = cs.status === 'waiting_customer';
 
     return html`
-      <style>
-        .cti-bar {
-          position: fixed; bottom: 0; left: 0; right: 0; z-index: 1050;
-          background: var(--bs-body-bg);
-          border-top: 1px solid var(--bs-border-color);
-          box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
-          padding: 5px 18px;
-          display: flex; align-items: center; gap: 6px;
-          font-size: 13px; color: var(--bs-body-color);
-          user-select: none;
-        }
-        .cti-sep {
-          width: 1px; height: 20px;
-          background: var(--bs-border-color);
-          margin: 0 2px; flex-shrink: 0;
-        }
-        .cti-group {
-          display: flex; align-items: center; gap: 4px;
-          background: var(--bs-tertiary-bg);
-          border: 1px solid var(--bs-border-color);
-          border-radius: 8px;
-          padding: 2px 6px;
-        }
-        .cti-btn-timer {
-          font-family: monospace; letter-spacing: 1.5px; min-width: 88px;
-        }
-        .cti-btn-timer:hover:not(:disabled) {
-          --bs-btn-hover-bg: var(--bs-danger-bg-subtle);
-          --bs-btn-hover-border-color: var(--bs-danger-border-subtle);
-          --bs-btn-hover-color: var(--bs-danger);
-        }
-        .cti-btn-vol { min-width: 22px; }
-
-        .cti-number {
-          min-width: 120px; max-width: 160px;
-          font-size: 12px; font-variant-numeric: tabular-nums;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          letter-spacing: 0.3px;
-        }
-        .cti-number-active { color: var(--bs-success); font-weight: 500; }
-        .cti-number-waiting { color: var(--bs-warning); font-weight: 500; }
-        .cti-number-idle { color: var(--bs-secondary-color); }
-        .cti-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          display: inline-block; flex-shrink: 0;
-          transition: background 0.3s;
-        }
-        .cti-dot-on { background: var(--bs-success); box-shadow: 0 0 5px color-mix(in srgb, var(--bs-success) 50%, transparent); }
-        .cti-dot-err { background: var(--bs-danger); }
-        .cti-dot-off { background: var(--bs-secondary-bg); }
-        .cti-pulse {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: var(--bs-success);
-          box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent);
-          animation: cti-pulse-anim 1.4s ease-out infinite;
-          flex-shrink: 0;
-        }
-        @keyframes cti-pulse-anim {
-          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent); }
-          70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--bs-success) 0%, transparent); }
-          100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 0%, transparent); }
-        }
-        .cti-stat { font-variant-numeric: tabular-nums; }
-        .cti-error {
-          font-size: 11px; color: var(--bs-danger);
-          max-width: 180px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          background: var(--bs-danger-bg-subtle);
-          border: 1px solid var(--bs-danger-border-subtle);
-          border-radius: 5px;
-          padding: 2px 7px;
-          cursor: pointer;
-          text-align: left;
-        }
-        .cti-error:hover {
-          background: var(--bs-danger-border-subtle);
-          border-color: var(--bs-danger);
-        }
-        .cti-dtmf-popup {
-          position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
-          background: var(--bs-body-bg);
-          border: 1px solid var(--bs-border-color);
-          border-radius: 10px;
-          padding: 10px;
-          width: 210px;
-          z-index: 1100;
-          box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
-        }
-        .cti-dtmf-grid {
-          display: grid; grid-template-columns: repeat(3, 1fr);
-          gap: 5px;
-        }
-        .cti-btn-dtmf { font-family: monospace; }
-        .cti-ctx-menu {
-          position: absolute; bottom: calc(100% + 6px); right: 0;
-          border-radius: 8px;
-          box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
-          min-width: 170px;
-          z-index: 1200;
-          overflow: hidden;
-        }
-      </style>
 
       <div class="cti-bar">
 
@@ -1222,6 +1168,16 @@ class Bar extends LitElement
           </span>
           ${inCall ? html`<span class="cti-pulse"></span>` : ''}
         </div>
+
+        <div class="cti-sep"></div>
+
+        <!-- Auto-Dialer: Play/Pause -->
+        <button
+          class="btn btn-sm ${this._autoDialerActive ? 'btn-success' : 'btn-outline-secondary'}"
+          @click=${this._toggleAutoDialer.bind(this)}
+          title="${this._autoDialerActive ? 'Ferma auto-dialer' : 'Avvia auto-dialer'}"
+          ?disabled=${!this._sessionActive || inCall}
+        >${this._autoDialerActive ? html`<i class="bi bi-pause-fill"></i>` : html`<i class="bi bi-play-fill"></i>`}</button>
 
         <div class="cti-sep"></div>
 

@@ -68,13 +68,11 @@ Usage: cmd COMMAND [OPTIONS]
   module remove --name <name> --force  Bypass reverse dependency check
   module cli <module> <script> [OPTIONS]            Run module/<module>/cli/<script>.sh [OPTIONS]
 
-  ngrok start                      Start ngrok tunnel (port 8080) in background
+  ngrok start                      Start ngrok tunnel (port 8080) in foreground
   ngrok stop                       Stop ngrok tunnel
   ngrok status                     Show ngrok status and public URL
 
-  snapshot create [--label <n>]    Capture current config + modules → snapshots/<id>.tar.gz
-  snapshot restore <file>          Extract snapshot and run its install.sh
-  snapshot list                    List available snapshots
+  snap    Capture current config + modules → snapshots/<id>.tar.gz
 
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
                                      Default: -c 10 -r 100 (10 concurrent users, 100 reps each)
@@ -112,6 +110,11 @@ app_is_running() {
 
 app_build() {
     load_env
+
+    # Build frontend first
+    info "Building frontend (Vite)..."
+    vite_build
+
     info "Compiling Java backend (Maven)..."
     cd "$WORKSPACE"
     mvn --no-transfer-progress package -DskipTests
@@ -225,8 +228,6 @@ app_debug() {
 _app_run_common() {
     local JAVA_DEBUG_OPTS="$1"
     load_env
-    local NGROK_AUTO
-    NGROK_AUTO=$(grep "^ngrok.enabled=" /app/config/application.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
     cd "$WORKSPACE"
 
     command -v inotifywait >/dev/null 2>&1 || \
@@ -274,7 +275,6 @@ _app_run_common() {
 
     _dev_cleanup() {
         _dev_stop
-        [ "$NGROK_AUTO" = "true" ] && ngrok_stop
         [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null || true
         printf '\n'
         info "[dev] Dev mode stopped"
@@ -318,7 +318,6 @@ _app_run_common() {
 
     _dev_start
     _dev_wait_ready && touch "$WORKSPACE/gui/src/index.html" 2>/dev/null || true
-    [ "$NGROK_AUTO" = "true" ] && ngrok_start
 
     while true; do
         inotifywait -r -q -e modify,close_write,create,delete,moved_to \
@@ -419,54 +418,44 @@ ngrok_start() {
     load_env
     local PORT="${API_PORT:-8080}"
     local AUTHTOKEN
+    local NGROK_ENABLED
+    NGROK_ENABLED=$(grep "^ngrok.enabled=" /app/config/application.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
     AUTHTOKEN=$(grep "^ngrok.authtoken=" /app/config/application.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
 
+    [ "$NGROK_ENABLED" = "true" ] || error "ngrok disabilitato. Abilitare in config/application.properties: ngrok.enabled=true"
     command -v ngrok >/dev/null 2>&1 || error "ngrok non trovato. Installare con: ./install.sh --ngrok"
-
-    if [ -f "$NGROK_PID_FILE" ] && kill -0 "$(cat "$NGROK_PID_FILE")" 2>/dev/null; then
-        info "[ngrok] Già in esecuzione (PID: $(cat "$NGROK_PID_FILE"))"
-        return 0
-    fi
 
     if [ -n "$AUTHTOKEN" ]; then
         ngrok config add-authtoken "$AUTHTOKEN" >/dev/null 2>&1
     fi
 
-    ngrok http "$PORT" --log=stdout > /tmp/ngrok.log 2>&1 &
-    echo $! > "$NGROK_PID_FILE"
+    info "[ngrok] Starting tunnel on port $PORT (foreground mode)"
+    info "[ngrok] Web UI: http://localhost:4040"
+    info "[ngrok] Press Ctrl+C to stop"
+    printf '\n'
 
-    local i=0
-    local url=""
-    while [ $i -lt 20 ] && [ -z "$url" ]; do
-        sleep 0.5
-        url=$(_ngrok_public_url)
-        i=$((i+1))
-    done
-
-    if [ -n "$url" ]; then
-        success "[ngrok] Tunnel attivo: $url"
-        info "[ngrok] Web UI: http://localhost:4040"
-    else
-        warn "[ngrok] Tunnel avviato ma URL non ancora disponibile — controlla http://localhost:4040"
-    fi
+    exec ngrok http "$PORT" --log=stdout
 }
 
 ngrok_stop() {
-    if [ -f "$NGROK_PID_FILE" ]; then
-        local PID
-        PID=$(cat "$NGROK_PID_FILE")
+    local PID
+    PID=$(pgrep -f "ngrok http" | head -1)
+    if [ -n "$PID" ]; then
         kill "$PID" 2>/dev/null || true
-        rm -f "$NGROK_PID_FILE"
-        info "[ngrok] Stopped"
+        info "[ngrok] Stopped (PID: $PID)"
+    else
+        info "[ngrok] Not running"
     fi
 }
 
 ngrok_status() {
     load_env
-    if [ -f "$NGROK_PID_FILE" ] && kill -0 "$(cat "$NGROK_PID_FILE")" 2>/dev/null; then
+    local PID
+    PID=$(pgrep -f "ngrok http" | head -1)
+    if [ -n "$PID" ]; then
         local url
         url=$(_ngrok_public_url)
-        success "ngrok RUNNING (PID: $(cat "$NGROK_PID_FILE"))"
+        success "ngrok RUNNING (PID: $PID)"
         if [ -n "$url" ]; then
             info "URL: $url"
         else
@@ -475,7 +464,6 @@ ngrok_status() {
         info "Web UI: http://localhost:4040"
     else
         info "ngrok NOT RUNNING"
-        rm -f "$NGROK_PID_FILE" 2>/dev/null || true
     fi
 }
 
@@ -1399,7 +1387,7 @@ if notice:
 
     printf '\n'
     printf 'Prossimi passi:\n'
-    printf '  1. cmd gui build && cmd app build\n\n'
+    printf '  1. cmd app build (compila frontend + backend)\n\n'
 }
 
 # ============================================================================
@@ -2205,184 +2193,219 @@ module_test() {
 # Snapshot Operations
 # ============================================================================
 
-# _snapshot_module_order — legge installed.json e restituisce i moduli in ordine
-# topologico (ogni modulo dopo le sue dipendenze), uno per riga.
-_snapshot_module_order() {
-    local INSTALLED_JSON="$WORKSPACE/src/main/resources/module/installed.json"
-    [ -f "$INSTALLED_JSON" ] || return 0
-    python3 - "$INSTALLED_JSON" << 'PYEOF'
-import json, sys
+# ============================================================================
+# Snapshot Operations
+# ============================================================================
 
-with open(sys.argv[1]) as f:
-    modules = json.load(f)
-
-ordered = []
-visited = set()
-
-def visit(key):
-    if key in visited:
-        return
-    visited.add(key)
-    for dep in modules.get(key, {}).get('dependencies', {}).keys():
-        if dep in modules:
-            visit(dep)
-    ordered.append(key)
-
-for key in modules:
-    visit(key)
-
-for key in ordered:
-    print(key)
-PYEOF
-}
-
-snapshot_create() {
+snap_create() {
     load_env
 
-    local LABEL=""
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --label) LABEL="$2"; shift 2 ;;
-            *) error "Opzione sconosciuta: $1. Usage: cmd snapshot create [--label <name>]" ;;
-        esac
-    done
 
     local TIMESTAMP
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    local SNAP_ID="$TIMESTAMP"
-    [ -n "$LABEL" ] && SNAP_ID="${TIMESTAMP}-${LABEL}"
-
+    local SNAP_ID="${PROJECT_NAME}-$TIMESTAMP"
     local SNAP_DIR="$WORKSPACE/snapshots"
     local SNAP_TMP="$SNAP_DIR/${SNAP_ID}"
     local SNAP_OUT="$SNAP_DIR/${SNAP_ID}.tar.gz"
 
     [ -f "$SNAP_OUT" ] && error "Snapshot già esistente: ${SNAP_ID}.tar.gz"
 
-    mkdir -p "$SNAP_DIR" "$SNAP_TMP"
+    mkdir -p "$SNAP_TMP"
 
-    info "[snapshot] Creo snapshot: $SNAP_ID"
+    info "[snap] Creo snapshot: $SNAP_ID"
     printf '\n'
 
-    # .env
-    if [ -f "$WORKSPACE/.env" ]; then
-        cp "$WORKSPACE/.env" "$SNAP_TMP/env"
-        success "  .env"
-    fi
-
-    # config/
+    # 1. Cartella config/
     if [ -d "$WORKSPACE/config" ]; then
         cp -r "$WORKSPACE/config" "$SNAP_TMP/config"
-        success "  config/"
+        success "  ✓ config/ → $(find "$WORKSPACE/config" -type f | wc -l) file"
     fi
 
-    # gui/package.json + package-lock.json
+    # 2. Esportazione dati database (solo dati, no schema)
+    local DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
+    DB_HOST=$(grep "^db.host=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+    DB_PORT=$(grep "^db.port=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+    DB_NAME=$(grep "^db.name=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+    DB_USER=$(grep "^db.user=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+    DB_PASSWORD=$(grep "^db.password=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
+
+    if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
+        PGPASSWORD="$DB_PASSWORD" pg_dump -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" \
+            --data-only --column-inserts --no-owner --no-acl \
+            "$DB_NAME" > "$SNAP_TMP/database_data.sql" 2>/dev/null || true
+        if [ -f "$SNAP_TMP/database_data.sql" ] && [ -s "$SNAP_TMP/database_data.sql" ]; then
+            local DATA_SIZE
+            DATA_SIZE=$(du -sh "$SNAP_TMP/database_data.sql" | cut -f1)
+            success "  ✓ database_data.sql → $DATA_SIZE (solo dati, no schema)"
+        else
+            rm -f "$SNAP_TMP/database_data.sql"
+            warning "  ⚠ database export skipped (empty or failed)"
+        fi
+    fi
+
+    # 3. Elenco moduli installati
+    local INSTALLED_JSON="$WORKSPACE/src/main/resources/module/installed.json"
+    if [ -f "$INSTALLED_JSON" ]; then
+        python3 - "$INSTALLED_JSON" "$SNAP_TMP/modules.txt" << 'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
+    modules = json.load(f)
+with open(sys.argv[2], 'w') as out:
+    for key in sorted(modules.keys()):
+        name = modules[key].get('name', key)
+        version = modules[key].get('version', 'unknown')
+        out.write(f"{key}@{version}\n")
+PYEOF
+        local MODULE_COUNT
+        MODULE_COUNT=$(wc -l < "$SNAP_TMP/modules.txt" 2>/dev/null || echo 0)
+        success "  ✓ modules.txt → $MODULE_COUNT moduli"
+    fi
+
+    # 4. Elenco pacchetti npm
     if [ -f "$WORKSPACE/gui/package.json" ]; then
-        cp "$WORKSPACE/gui/package.json" "$SNAP_TMP/gui_package.json"
-        success "  gui/package.json"
+        cp "$WORKSPACE/gui/package.json" "$SNAP_TMP/package.json"
+        if [ -f "$WORKSPACE/gui/package-lock.json" ]; then
+            cp "$WORKSPACE/gui/package-lock.json" "$SNAP_TMP/package-lock.json"
+        fi
+        local NPM_COUNT
+        NPM_COUNT=$(jq -r '.dependencies // {} | length' "$WORKSPACE/gui/package.json" 2>/dev/null || echo 0)
+        success "  ✓ package.json + package-lock.json → $NPM_COUNT dipendenze"
     fi
-    if [ -f "$WORKSPACE/gui/package-lock.json" ]; then
-        cp "$WORKSPACE/gui/package-lock.json" "$SNAP_TMP/gui_package_lock.json"
-        success "  gui/package-lock.json"
+
+    # 5. Copia pom.xml
+    if [ -f "$WORKSPACE/pom.xml" ]; then
+        cp "$WORKSPACE/pom.xml" "$SNAP_TMP/pom.xml"
+        success "  ✓ pom.xml"
     fi
 
-    # Genera install.sh con sequenza moduli in ordine topologico
-    local MODULE_CMDS=""
-    while IFS= read -r key; do
-        MODULE_CMDS="${MODULE_CMDS}cmd module import ${key}"$'\n'
-    done < <(_snapshot_module_order)
+    # 6. Genera README.md
+    cat > "$SNAP_TMP/README.md" << 'READMEEOF'
+# Snapshot Configurazione Applicazione
 
-    cat > "$SNAP_TMP/install.sh" << INSTALLEOF
-#!/bin/bash
-set -e
-WORKSPACE="\${1:-/workspace}"
-SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+Questo snapshot contiene una fotografia completa della configurazione applicazione al momento della creazione.
 
-echo "[snapshot] Ripristino .env..."
-cp "\$SCRIPT_DIR/env" "\$WORKSPACE/.env"
+## Contenuto
 
-echo "[snapshot] Ripristino config/application.properties..."
-cp "\$SCRIPT_DIR/config/application.properties" "\$WORKSPACE/config/application.properties"
+### 1. Configurazione (`config/`)
+File di configurazione dell'applicazione (`application.properties`, chiavi private, ecc.).
 
-echo "[snapshot] Ripristino gui/package.json e package-lock.json..."
-cp "\$SCRIPT_DIR/gui_package.json" "\$WORKSPACE/gui/package.json"
-cp "\$SCRIPT_DIR/gui_package_lock.json" "\$WORKSPACE/gui/package-lock.json"
+**Ripristino:**
+```bash
+cp -r config/ /workspace/config/
+```
 
-echo "[snapshot] npm install..."
-cd "\$WORKSPACE/gui" && npm install
+### 2. Dati Database (`database_data.sql`)
+Esportazione dei dati del database (solo INSERT, senza schema).
+La struttura delle tabelle deve essere ricreata eseguendo le migration Flyway.
 
-echo "[snapshot] Installazione moduli..."
-cd "\$WORKSPACE"
-${MODULE_CMDS}
-echo "[snapshot] Restore completato."
-INSTALLEOF
-    chmod +x "$SNAP_TMP/install.sh"
-    success "  install.sh (moduli: $(echo "$MODULE_CMDS" | grep -c 'cmd module' || true))"
+**Ripristino:**
+```bash
+# 1. Ricrea database vuoto
+cmd db reset
+
+# 2. Applica migration (crea struttura tabelle)
+cmd app build  # Flyway viene eseguito automaticamente
+
+# 3. Importa dati
+cmd db -f database_data.sql
+```
+
+**ATTENZIONE:** L'import dei dati deve avvenire DOPO aver applicato le migration, altrimenti le tabelle non esistono.
+
+### 3. Moduli Installati (`modules.txt`)
+Lista dei moduli installati con le rispettive versioni (formato: `key@version`).
+
+**Ripristino:**
+```bash
+# Installa ogni modulo manualmente
+while IFS=@ read -r key version; do
+    cmd module import "$key"
+done < modules.txt
+```
+
+**NOTA:** I moduli devono essere disponibili in `module/` o come file `.tar.gz`. L'ordine di installazione non è critico se le dipendenze sono soddisfatte; in caso di errori di dipendenza, installare prima i moduli dipendenti.
+
+### 4. Pacchetti NPM (`package.json`, `package-lock.json`)
+Dipendenze frontend dell'applicazione.
+
+**Ripristino:**
+```bash
+cp package.json /workspace/gui/package.json
+cp package-lock.json /workspace/gui/package-lock.json
+cd /workspace/gui
+npm install
+```
+
+### 5. Maven POM (`pom.xml`)
+Configurazione Maven con dipendenze backend.
+
+**Ripristino:**
+```bash
+cp pom.xml /workspace/pom.xml
+```
+
+## Procedura Completa di Ripristino
+
+1. **Ripristina configurazione:**
+   ```bash
+   cp -r config/ /workspace/config/
+   ```
+
+2. **Ripristina pom.xml:**
+   ```bash
+   cp pom.xml /workspace/pom.xml
+   ```
+
+3. **Installa moduli:**
+   ```bash
+   while IFS=@ read -r key version; do
+       cmd module import "$key"
+   done < modules.txt
+   ```
+
+4. **Compila applicazione (applica migration):**
+   ```bash
+   cmd app build
+   ```
+
+5. **Importa dati database:**
+   ```bash
+   cmd db -f database_data.sql
+   ```
+
+6. **Ripristina pacchetti frontend:**
+   ```bash
+   cp package.json /workspace/gui/package.json
+   cp package-lock.json /workspace/gui/package-lock.json
+   cd /workspace/gui && npm install
+   ```
+
+7. **Ricompila frontend:**
+   ```bash
+   cmd gui build
+   ```
+
+## Metadata
+
+- **Creato:** TIMESTAMP_PLACEHOLDER
+READMEEOF
+
+    # Sostituisci placeholder nel README
+    sed -i "s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" "$SNAP_TMP/README.md"
+    success "  ✓ README.md → guida al ripristino manuale"
 
     # Comprimi
     printf '\n'
-    info "[snapshot] Comprimo → snapshots/${SNAP_ID}.tar.gz ..."
+    info "[snap] Comprimo → snapshots/${SNAP_ID}.tar.gz ..."
     tar -czf "$SNAP_OUT" -C "$SNAP_DIR" "$SNAP_ID"
     rm -rf "$SNAP_TMP"
 
     printf '\n'
     success "Snapshot creato: snapshots/${SNAP_ID}.tar.gz"
+    info "Estrai con: tar -xzf snapshots/${SNAP_ID}.tar.gz -C snapshots/"
     printf '\n'
 }
 
-snapshot_restore() {
-    load_env
-
-    local SNAP_FILE="$1"
-    [ -n "$SNAP_FILE" ] || error "Usage: cmd snapshot restore <file.tar.gz>"
-
-    # Accetta path assoluto o relativo a WORKSPACE/snapshots/
-    if [ ! -f "$SNAP_FILE" ]; then
-        SNAP_FILE="$WORKSPACE/snapshots/$1"
-    fi
-    [ -f "$SNAP_FILE" ] || error "Snapshot non trovato: $1"
-
-    local SNAP_NAME
-    SNAP_NAME=$(basename "$SNAP_FILE" .tar.gz)
-    local EXTRACT_DIR="$WORKSPACE/snapshots/${SNAP_NAME}"
-
-    [ -d "$EXTRACT_DIR" ] && rm -rf "$EXTRACT_DIR"
-
-    info "[snapshot] Estraggo: $(basename "$SNAP_FILE") ..."
-    tar -xzf "$SNAP_FILE" -C "$WORKSPACE/snapshots/"
-
-    [ -f "$EXTRACT_DIR/install.sh" ] || error "install.sh non trovato nello snapshot"
-
-    printf '\n'
-    info "[snapshot] Eseguo install.sh..."
-    printf '\n'
-    bash "$EXTRACT_DIR/install.sh" "$WORKSPACE"
-
-    rm -rf "$EXTRACT_DIR"
-    printf '\n'
-    success "Restore completato da: $(basename "$SNAP_FILE")"
-    printf '\n'
-}
-
-snapshot_list() {
-    local SNAP_DIR="$WORKSPACE/snapshots"
-    if [ ! -d "$SNAP_DIR" ] || [ -z "$(ls "$SNAP_DIR"/*.tar.gz 2>/dev/null)" ]; then
-        info "Nessuno snapshot disponibile in snapshots/"
-        return 0
-    fi
-
-    printf '\n'
-    printf '%-45s  %s\n' "SNAPSHOT" "SIZE"
-    printf '%-45s  %s\n' "--------" "----"
-    for f in "$SNAP_DIR"/*.tar.gz; do
-        local name size
-        name=$(basename "$f")
-        size=$(du -sh "$f" 2>/dev/null | cut -f1)
-        printf '%-45s  %s\n' "$name" "$size"
-    done
-    printf '\n'
-}
-
-# ============================================================================
 # Benchmark Operations
 # ============================================================================
 
@@ -2569,14 +2592,7 @@ case "$1" in
             *) error "Unknown module command: $2. Use: export, import, dist, remove, cli, test" ;;
         esac
         ;;
-    snapshot)
-        case "$2" in
-            create)  shift 2; snapshot_create "$@" ;;
-            restore) shift 2; snapshot_restore "$@" ;;
-            list)    snapshot_list ;;
-            *) error "Unknown snapshot command: $2. Use: create, restore, list" ;;
-        esac
-        ;;
+    snap) shift; snap_create "$@" ;;
     -h|--help|help|"")
         show_help
         ;;

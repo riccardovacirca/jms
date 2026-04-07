@@ -1,0 +1,270 @@
+/**
+ * CTI Bar — Tema chiaro indipendente
+ *
+ * Definisce un tema chiaro fisso per la barra CTI usando le variabili CSS di Bootstrap.
+ * La barra mantiene il tema chiaro anche se l'applicazione usa un tema scuro.
+ */
+
+/* Override variabili Bootstrap con tema chiaro fisso */
+.cti-bar {
+  --bs-body-bg: #ffffff;
+  --bs-body-color: #212529;
+  --bs-border-color: #dee2e6;
+  --bs-tertiary-bg: #f8f9fa;
+  --bs-secondary-color: #6c757d;
+  --bs-secondary-bg: #e9ecef;
+  --bs-success: #198754;
+  --bs-danger: #dc3545;
+  --bs-danger-bg-subtle: #f8d7da;
+  --bs-danger-border-subtle: #f5c2c7;
+  --bs-warning: #ffc107;
+  --bs-primary: #0d6efd;
+
+  /* Stili strutturali */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background: var(--bs-body-bg);
+  border-top: 1px solid var(--bs-border-color);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+  padding: 5px 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--bs-body-color);
+  user-select: none;
+}
+
+.cti-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--bs-border-color);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.cti-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+
+.cti-btn-timer {
+  font-family: monospace;
+  letter-spacing: 1.5px;
+  min-width: 88px;
+}
+
+.cti-btn-timer:hover:not(:disabled) {
+  --bs-btn-hover-bg: var(--bs-danger-bg-subtle);
+  --bs-btn-hover-border-color: var(--bs-danger-border-subtle);
+  --bs-btn-hover-color: var(--bs-danger);
+}
+
+.cti-btn-vol {
+  min-width: 22px;
+}
+
+.cti-number {
+  min-width: 120px;
+  max-width: 160px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.cti-number-active {
+  color: var(--bs-success);
+  font-weight: 500;
+}
+
+.cti-number-waiting {
+  color: var(--bs-warning);
+  font-weight: 500;
+}
+
+.cti-number-idle {
+  color: var(--bs-secondary-color);
+}
+
+.cti-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.cti-dot-on {
+  background: var(--bs-success);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--bs-success) 50%, transparent);
+}
+
+.cti-dot-err {
+  background: var(--bs-danger);
+}
+
+.cti-dot-off {
+  background: var(--bs-secondary-bg);
+}
+
+.cti-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bs-success);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent);
+  animation: cti-pulse-anim 1.4s ease-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cti-pulse-anim {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 40%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--bs-success) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 0%, transparent);
+  }
+}
+
+.cti-stat {
+  font-variant-numeric: tabular-nums;
+}
+
+.cti-error {
+  font-size: 11px;
+  color: var(--bs-danger);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bs-danger-bg-subtle);
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: 5px;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cti-error:hover {
+  background: var(--bs-danger-border-subtle);
+  border-color: var(--bs-danger);
+}
+
+.cti-dtmf-popup {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  padding: 10px;
+  width: 210px;
+  z-index: 1100;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.cti-dtmf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.cti-btn-dtmf {
+  font-family: monospace;
+}
+
+.cti-ctx-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  border-radius: 8px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+  min-width: 170px;
+  z-index: 1200;
+  overflow: hidden;
+}
+
+
+/* Pulsanti rotondi: solo quelli con una singola icona o simbolo (senza testo) */
+
+/* Pulsanti volume +/- */
+.cti-btn-vol {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Pulsante mute (solo icona microfono) */
+.cti-group button.btn:has(> i.bi-mic-fill:only-child),
+.cti-group button.btn:has(> i.bi-mic-mute-fill:only-child) {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+/* Pulsante DTMF principale (# symbol che apre la tastiera) - rotondo */
+.cti-btn-dtmf:not(.cti-dtmf-grid .cti-btn-dtmf) {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pulsanti numerici della tastiera DTMF - rettangolari (default Bootstrap) */
+.cti-dtmf-grid .cti-btn-dtmf {
+  border-radius: var(--bs-border-radius-sm);
+  /* Mantieni stile Bootstrap standard */
+}
+
+/* Pulsante menu (tre puntini) */
+.cti-btn-menu {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pulsanti chiamata/riaggancia (solo icona telefono) */
+.cti-group button.btn:has(> i.bi-telephone-fill:only-child),
+.cti-group button.btn:has(> i.bi-telephone-x-fill:only-child) {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
