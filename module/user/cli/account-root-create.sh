@@ -49,6 +49,12 @@ RESPONSE=$(curl -s -X POST "$API_BASE/api/user/root" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
 
+# Verifica risposta vuota (server non raggiungibile o endpoint non disponibile)
+if [ -z "$RESPONSE" ]; then
+  echo "Errore: nessuna risposta dal server ($API_BASE). Assicurati che l'app sia in esecuzione."
+  exit 1
+fi
+
 # Verifica errori
 if echo "$RESPONSE" | grep -q "\"err\":true"; then
   echo "$RESPONSE" | grep -oP "\"log\":\"\\K[^\"]+" || echo "$RESPONSE"

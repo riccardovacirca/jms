@@ -2,6 +2,22 @@ import { LitElement, html } from 'lit';
 import { authorized, user } from '../../../store.js';
 import { MODULE_CONFIG, DEFAULT_MODULE } from '../../../config.js';
 
+/**
+ * Restituisce la route di destinazione post-login.
+ * Se il router ha salvato una destinazione (redirect da pagina protetta), la usa e la rimuove.
+ * Altrimenti torna alla pagina iniziale (DEFAULT_MODULE).
+ *
+ * @returns {string} hash route di destinazione (es. '/home' o '/crm')
+ */
+function postLoginRoute() {
+  const saved = sessionStorage.getItem('redirectAfterLogin');
+  if (saved) {
+    sessionStorage.removeItem('redirectAfterLogin');
+    return saved;
+  }
+  return MODULE_CONFIG[DEFAULT_MODULE].route;
+}
+
 class Login extends LitElement {
 
   static properties = {
@@ -47,7 +63,7 @@ class Login extends LitElement {
       user.set(data.out);
       window.location.hash = data.out.must_change_password
         ? '/user/auth/change-password'
-        : MODULE_CONFIG[DEFAULT_MODULE].route;
+        : postLoginRoute();
     } catch (e) {
       this._error   = e.message;
       this._loading = false;
@@ -69,7 +85,7 @@ class Login extends LitElement {
       user.set(data.out);
       window.location.hash = data.out.must_change_password
         ? '/user/auth/change-password'
-        : MODULE_CONFIG[DEFAULT_MODULE].route;
+        : postLoginRoute();
     } catch (e) {
       this._error   = e.message;
       this._loading = false;

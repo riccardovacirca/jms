@@ -1,1 +1,6 @@
 - Le migrazioni dei moduli devono avere il prefisso jms_<nome_modulo>_
+- BUG - il post-install script dei moduli chiama l'API prima che l'app venga
+  ricompilata e riavviata con il nuovo modulo
+- se l'installazione di un modulo prevede una installazione di un pacchtto npm
+  deve essere verificata la presenza di node e di npm e in caso di assenza deve
+  essere dato un messaggio amichevola all'utente

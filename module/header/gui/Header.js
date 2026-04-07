@@ -49,6 +49,7 @@ class Header extends LitElement {
     try {
       await fetch('/api/user/auth/logout', { method: 'POST' });
     } finally {
+      sessionStorage.removeItem('redirectAfterLogin');
       authorized.set(false);
       user.set(null);
       window.location.hash = '/user/auth/login';
@@ -125,6 +126,12 @@ class Header extends LitElement {
                           <a class="dropdown-item" href="#/user/profile"
                              @click=${() => { this._userMenuOpen = false; this._closeMenu(); }}>
                             <i class="bi bi-person me-2"></i>Profilo
+                          </a>
+                        </li>
+                        <li>
+                          <a class="dropdown-item" href="#/user/account"
+                             @click=${() => { this._userMenuOpen = false; this._closeMenu(); }}>
+                            <i class="bi bi-gear me-2"></i>Account
                           </a>
                         </li>
                         <li><hr class="dropdown-divider"></li>

@@ -13,6 +13,7 @@ function parseSection() {
 }
 
 function renderRoute(container) {
+  if (!window.location.hash.startsWith('#/user')) return;
   const { section, sub } = parseSection();
 
   if (section === 'auth') {
@@ -48,11 +49,7 @@ function renderRoute(container) {
       container.innerHTML = '<user-profile></user-profile>';
     });
   } else {
-    if (authorized.get()) {
-      window.location.hash = '/user/account';
-    } else {
-      window.location.hash = '/user/auth/login';
-    }
+    window.location.hash = authorized.get() ? '/' : '/user/auth/login';
   }
 }
 

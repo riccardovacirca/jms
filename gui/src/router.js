@@ -181,6 +181,8 @@ class Router
       );
 
       if (redirectExists) {
+        const currentHash = window.location.hash.slice(1).split('?')[0];
+        sessionStorage.setItem('redirectAfterLogin', currentHash);
         window.location.hash = redirectTo;
       } else {
         this.currentModule = null;

@@ -39,6 +39,7 @@ class ChangePassword extends LitElement {
       const data = await res.json();
       if (!res.ok || data.err) throw new Error(data.log || 'Errore durante il cambio password');
       try { await fetch('/api/user/auth/logout', { method: 'POST' }); } finally {
+        sessionStorage.removeItem('redirectAfterLogin');
         authorized.set(false);
         user.set(null);
         window.location.hash = '/user/auth/login';
