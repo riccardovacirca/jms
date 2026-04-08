@@ -68,7 +68,8 @@ Usage: cmd COMMAND [OPTIONS]
   module remove --name <name> --force  Bypass reverse dependency check
   module cli <module> <script> [OPTIONS]            Run jms/module/<module>/cli/<script>.sh [OPTIONS]
 
-  ngrok start                      Start ngrok tunnel (port 8080) in foreground
+  ngrok run                        Start ngrok tunnel in foreground (Ctrl+C to stop)
+  ngrok start                      Start ngrok tunnel in background
   ngrok stop                       Stop ngrok tunnel
   ngrok status                     Show ngrok status and public URL
 
@@ -414,37 +415,62 @@ _ngrok_public_url() {
         | sed 's/"public_url":"//;s/"//'
 }
 
-ngrok_start() {
+_ngrok_setup() {
     load_env
-    local PORT="${API_PORT:-8080}"
-    local AUTHTOKEN
-    local NGROK_ENABLED
-    NGROK_ENABLED=$(grep "^ngrok.enabled=" /app/config/application.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-    AUTHTOKEN=$(grep "^ngrok.authtoken=" /app/config/application.properties 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-
-    [ "$NGROK_ENABLED" = "true" ] || error "ngrok disabilitato. Abilitare in config/application.properties: ngrok.enabled=true"
+    [ "${NGROK_ENABLED:-false}" = "true" ] || error "ngrok disabilitato. Abilitare in .env: NGROK_ENABLED=true"
     command -v ngrok >/dev/null 2>&1 || error "ngrok non trovato. Installare con: ./install.sh --ngrok"
-
+    local AUTHTOKEN="${NGROK_AUTHTOKEN:-}"
     if [ -n "$AUTHTOKEN" ]; then
         ngrok config add-authtoken "$AUTHTOKEN" >/dev/null 2>&1
     fi
+}
 
-    info "[ngrok] Starting tunnel on port $PORT (foreground mode)"
+ngrok_run() {
+    _ngrok_setup
+    local PORT="${API_PORT:-8080}"
+    info "[ngrok] Starting tunnel on port $PORT (foreground — Ctrl+C to stop)"
     info "[ngrok] Web UI: http://localhost:4040"
-    info "[ngrok] Press Ctrl+C to stop"
     printf '\n'
-
     exec ngrok http "$PORT" --log=stdout
+}
+
+ngrok_start() {
+    _ngrok_setup
+    local PORT="${API_PORT:-8080}"
+    if [ -f "$NGROK_PID_FILE" ] && kill -0 "$(cat "$NGROK_PID_FILE")" 2>/dev/null; then
+        warn "[ngrok] Already running (PID: $(cat "$NGROK_PID_FILE"))"
+        return
+    fi
+    ngrok http "$PORT" --log=stdout >> /app/logs/ngrok.log 2>&1 &
+    echo $! > "$NGROK_PID_FILE"
+    sleep 1
+    if kill -0 "$(cat "$NGROK_PID_FILE")" 2>/dev/null; then
+        local url
+        url=$(_ngrok_public_url)
+        success "[ngrok] Started (PID: $(cat "$NGROK_PID_FILE"))"
+        [ -n "$url" ] && info "[ngrok] URL: $url" || info "[ngrok] URL: not yet available (check: cmd ngrok status)"
+        info "[ngrok] Web UI: http://localhost:4040"
+    else
+        rm -f "$NGROK_PID_FILE"
+        error "[ngrok] Failed to start — check /app/logs/ngrok.log"
+    fi
 }
 
 ngrok_stop() {
     local PID
-    PID=$(pgrep -f "ngrok http" | head -1)
-    if [ -n "$PID" ]; then
+    if [ -f "$NGROK_PID_FILE" ]; then
+        PID=$(cat "$NGROK_PID_FILE")
         kill "$PID" 2>/dev/null || true
+        rm -f "$NGROK_PID_FILE"
         info "[ngrok] Stopped (PID: $PID)"
     else
-        info "[ngrok] Not running"
+        PID=$(pgrep -f "ngrok http" | head -1)
+        if [ -n "$PID" ]; then
+            kill "$PID" 2>/dev/null || true
+            info "[ngrok] Stopped (PID: $PID)"
+        else
+            info "[ngrok] Not running"
+        fi
     fi
 }
 
@@ -1352,25 +1378,6 @@ with open(path, 'w') as f:
     success "  Tracker scritto: ${TRACKER_DIR#$WORKSPACE/}/module.json"
     _module_manifest_update
 
-    # Execute post-install script if present
-    local INSTALL_SCRIPT
-    INSTALL_SCRIPT=$(python3 -c "
-import json
-with open('$MODULE_DIR/module.json') as f:
-    m = json.load(f)
-print(m.get('install_script', ''))
-" 2>/dev/null || echo "")
-
-    if [ -n "$INSTALL_SCRIPT" ] && [ -f "$MODULE_DIR/$INSTALL_SCRIPT" ]; then
-        info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
-        if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
-            success "  Script di post-install completato"
-        else
-            warn "  Script di post-install fallito (exit code: $?)"
-            warn "  L'installazione del modulo continua comunque"
-        fi
-    fi
-
     printf '\n'
     success "Installazione modulo '$MODULE' completata"
 
@@ -1384,6 +1391,68 @@ if notice:
     print()
     print('  NOTA: ' + notice)
 " 2>/dev/null || true
+
+    # Touch App.java so that cmd app run (inotifywait watch) triggers a full
+    # recompile *after* all module files are on disk. Without this, inotifywait
+    # may wake up on the first created directory, compile an incomplete source
+    # tree, and then miss all subsequent file events inside new subdirectories
+    # (inotifywait does not watch directories created after it starts).
+    touch "$WORKSPACE/src/main/java/dev/jms/app/App.java" 2>/dev/null || true
+
+    # Execute post-install script if present.
+    # The script runs AFTER the touch so that if cmd app run is active the
+    # recompile+restart cycle is already triggered. We then wait for the backend
+    # to become reachable before running the script, so that any API calls it
+    # makes find the new module already loaded.
+    local INSTALL_SCRIPT
+    INSTALL_SCRIPT=$(python3 -c "
+import json
+with open('$MODULE_DIR/module.json') as f:
+    m = json.load(f)
+print(m.get('install_script', ''))
+" 2>/dev/null || echo "")
+
+    if [ -n "$INSTALL_SCRIPT" ] && [ -f "$MODULE_DIR/$INSTALL_SCRIPT" ]; then
+        local PORT="${API_PORT:-8080}"
+        if app_is_running; then
+            info "[module] Backend in esecuzione — attendo riavvio con il nuovo modulo..."
+            local i=0
+            # Step 1: wait for the port to go DOWN (JVM restarting after recompile).
+            # Cap at 10 s — if cmd app run is not active the port never drops.
+            while [ $i -lt 20 ]; do
+                (echo > /dev/tcp/localhost/$PORT) 2>/dev/null || break
+                sleep 0.5
+                i=$((i+1))
+            done
+            # Step 2: wait for the port to come back UP (new binary loaded).
+            i=0
+            while [ $i -lt 120 ]; do
+                (echo > /dev/tcp/localhost/$PORT) 2>/dev/null && break
+                sleep 0.5
+                i=$((i+1))
+            done
+            if ! (echo > /dev/tcp/localhost/$PORT) 2>/dev/null; then
+                warn "[module] Backend non raggiungibile dopo 60s — esegui manualmente lo script di post-install:"
+                warn "         bash $MODULE_DIR/$INSTALL_SCRIPT $WORKSPACE $MODULE_KEY"
+            else
+                info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
+                if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
+                    success "  Script di post-install completato"
+                else
+                    warn "  Script di post-install fallito (exit code: $?)"
+                    warn "  L'installazione del modulo continua comunque"
+                fi
+            fi
+        else
+            info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
+            if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
+                success "  Script di post-install completato"
+            else
+                warn "  Script di post-install fallito (exit code: $?)"
+                warn "  L'installazione del modulo continua comunque"
+            fi
+        fi
+    fi
 
     printf '\n'
     printf 'Prossimi passi:\n'
@@ -2088,6 +2157,10 @@ open('$ENV_FILE', 'w').write(content)
 
     _module_manifest_update
 
+    # Touch App.java so that cmd app run (inotifywait watch) triggers a recompile
+    # after all module files have been removed from disk.
+    touch "$WORKSPACE/src/main/java/dev/jms/app/App.java" 2>/dev/null || true
+
     printf '\n'
     success "Modulo '$MODULE_KEY' rimosso"
 }
@@ -2571,10 +2644,11 @@ case "$1" in
         ;;
     ngrok)
         case "$2" in
+            run)    ngrok_run ;;
             start)  ngrok_start ;;
             stop)   ngrok_stop ;;
             status) ngrok_status ;;
-            *) error "Unknown ngrok command: $2. Use: start, stop, status" ;;
+            *) error "Unknown ngrok command: $2. Use: run, start, stop, status" ;;
         esac
         ;;
     bench)

@@ -623,8 +623,6 @@ GITIGNORE
     sed "s|{{MAIL_FROM}}|${MAIL_FROM:-noreply@example.com}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{SCHEDULER_ENABLED}}|${SCHEDULER_ENABLED:-true}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{SCHEDULER_POLL_INTERVAL_SECONDS}}|${SCHEDULER_POLL_INTERVAL_SECONDS:-15}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-    sed "s|{{NGROK_ENABLED}}|${NGROK_ENABLED:-false}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
-    sed "s|{{NGROK_AUTHTOKEN}}|${NGROK_AUTHTOKEN:-}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
