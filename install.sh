@@ -21,13 +21,25 @@
 #   ./install.sh --ngrok     # Installa ngrok nel container
 #
 # -----------------------------------------------------------------------------
-# PROCEDURA DI INSTALL (primo avvio)
+# PROCEDURA DI INSTALL (primo avvio) — due fasi
 # -----------------------------------------------------------------------------
 #
-# Al primo avvio (nessun container esistente) lo script esegue:
+# FASE 1 — ./install.sh  (nessun .env presente)
 #
-#   1. .env                 — genera il file di configurazione nella root
-#                             del progetto se non esiste già
+#   Genera il file .env nella root del progetto e si arresta.
+#   L'utente deve aprire .env e impostare le credenziali git:
+#
+#     GIT_USER=<github username>
+#     GIT_EMAIL=<email>
+#     GIT_TOKEN=<personal access token>
+#
+#   Il token viene usato anche per clonare repository privati.
+#
+# FASE 2 — ./install.sh  (dopo aver impostato le credenziali in .env)
+#
+#   1. jms/                 — clona https://github.com/riccardovacirca/jms.git
+#                             nella cartella jms/ usando le credenziali da .env.
+#                             Se jms/ esiste già viene saltato.
 #   2. Docker network       — crea la rete <project>-net per la comunicazione
 #                             tra i container (dev, postgres, produzione)
 #   3. Dockerfile.dev       — genera un Dockerfile temporaneo basato su
@@ -515,11 +527,29 @@ install_ngrok() {
 # =============================================================================
 
 install_dev() {
+    # Fase 1: genera .env e fermati per consentire di impostare le credenziali git
     if [ ! -f .env ]; then
         echo "Generating .env..."
         generate_env_file
+        echo ""
+        echo "==> .env created."
+        echo "    Open .env and set GIT_USER, GIT_EMAIL and GIT_TOKEN, then re-run ./install.sh"
+        exit 0
     fi
     . ./.env
+
+    # Fase 2a: verifica che le credenziali git siano state impostate
+    if [ -z "$GIT_USER" ] || [ -z "$GIT_EMAIL" ] || [ -z "$GIT_TOKEN" ]; then
+        echo "==> Git credentials not set in .env"
+        echo "    Set GIT_USER, GIT_EMAIL and GIT_TOKEN, then re-run ./install.sh"
+        exit 0
+    fi
+
+    # Fase 2b: clona jms/ usando le credenziali (supporta repo privati)
+    if [ ! -d jms ]; then
+        echo "Cloning jms..."
+        git clone "https://${GIT_USER}:${GIT_TOKEN}@github.com/riccardovacirca/jms.git" jms
+    fi
 
     local DEV_CONTAINER="$PROJECT_NAME"
 
@@ -600,10 +630,10 @@ GITIGNORE
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
 
     echo "Setting up cmd tool..."
-    chmod +x bin/cmd
+    chmod +x jms/bin/cmd
     docker exec "$DEV_CONTAINER" sh -c "
-        ln -sf /workspace/bin/cmd /usr/local/bin/cmd
-        chmod +x /workspace/bin/cmd
+        ln -sf /workspace/jms/bin/cmd /usr/local/bin/cmd
+        chmod +x /workspace/jms/bin/cmd
         grep -qxF \"alias cls='clear'\" /root/.bashrc || echo \"alias cls='clear'\" >> /root/.bashrc
         grep -qxF \"export LC_ALL=C\" /root/.bashrc || echo \"export LC_ALL=C\" >> /root/.bashrc
     "
@@ -613,6 +643,9 @@ GITIGNORE
     if [ -d .git ]; then
         rm -rf .git
     fi
+
+    echo "Removing template artifacts..."
+    rm -rf docker docs module TODO bin
 
     echo "Done"
 }

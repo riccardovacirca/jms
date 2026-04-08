@@ -60,13 +60,13 @@ Usage: cmd COMMAND [OPTIONS]
   db setup                         Create user and database from .env file
   db reset                         Reset database (drop and recreate)
 
-  module import <path>              Install module from path relative to module/ (folder or .tar.gz)
+  module import <path>              Install module from path relative to jms/module/ (folder or .tar.gz)
   module import <path> --force      Bypass missing dependency check
-  module export --name <n> [-v x]   Export current project module to module/<name>[-version]/
-  module dist <path>                Package module folder (relative to module/) → dist/<name>-<version>.tar.gz
+  module export --name <n> [-v x]   Export current project module to jms/module/<name>[-version]/
+  module dist <path>                Package module folder (relative to jms/module/) → dist/<name>-<version>.tar.gz
   module remove --name <name>       Remove installed module (blocked if other modules depend on it)
   module remove --name <name> --force  Bypass reverse dependency check
-  module cli <module> <script> [OPTIONS]            Run module/<module>/cli/<script>.sh [OPTIONS]
+  module cli <module> <script> [OPTIONS]            Run jms/module/<module>/cli/<script>.sh [OPTIONS]
 
   ngrok start                      Start ngrok tunnel (port 8080) in foreground
   ngrok stop                       Stop ngrok tunnel
@@ -1413,7 +1413,7 @@ module_import() {
     local REL_PATH="${INPUT#/}"
     REL_PATH="${REL_PATH%/}"
 
-    local ABS_INPUT="$WORKSPACE/module/$REL_PATH"
+    local ABS_INPUT="$WORKSPACE/jms/module/$REL_PATH"
 
     local MODULE_DIR
     local TMP_DIR=""
@@ -1565,9 +1565,9 @@ module_export() {
     fi
     local OUTPUT
     if [ -n "$MODULE_NS" ]; then
-        OUTPUT="$WORKSPACE/module/$MODULE_NS/$FOLDER_NAME"
+        OUTPUT="$WORKSPACE/jms/module/$MODULE_NS/$FOLDER_NAME"
     else
-        OUTPUT="$WORKSPACE/module/$FOLDER_NAME"
+        OUTPUT="$WORKSPACE/jms/module/$FOLDER_NAME"
     fi
 
     if [ -d "$OUTPUT" ]; then
@@ -1800,7 +1800,7 @@ module_dist() {
     local REL_PATH="$1"
     [ -n "$REL_PATH" ] || error "Usage: cmd module dist <path>"
 
-    local SRC="$WORKSPACE/module/$REL_PATH"
+    local SRC="$WORKSPACE/jms/module/$REL_PATH"
     [ -d "$SRC" ] || error "Cartella non trovata: $SRC"
     [ -f "$SRC/module.json" ] || error "module.json non trovato in: $SRC"
 
@@ -1910,8 +1910,8 @@ print(m.get('uninstall_script', ''))
     if [ -n "$UNINSTALL_SCRIPT" ]; then
         # Try to find the script in the original module directory
         local SCRIPT_PATH=""
-        if [ -d "$WORKSPACE/module/$MODULE_KEY" ] && [ -f "$WORKSPACE/module/$MODULE_KEY/$UNINSTALL_SCRIPT" ]; then
-            SCRIPT_PATH="$WORKSPACE/module/$MODULE_KEY/$UNINSTALL_SCRIPT"
+        if [ -d "$WORKSPACE/jms/module/$MODULE_KEY" ] && [ -f "$WORKSPACE/jms/module/$MODULE_KEY/$UNINSTALL_SCRIPT" ]; then
+            SCRIPT_PATH="$WORKSPACE/jms/module/$MODULE_KEY/$UNINSTALL_SCRIPT"
         fi
 
         if [ -n "$SCRIPT_PATH" ]; then
@@ -2108,7 +2108,7 @@ module_cli() {
     [ -n "$MODULE_NAME" ]  || error "Usage: cmd module cli <module_name> <script|list> [OPTIONS]"
     [ -n "$COMMAND" ]  || error "Usage: cmd module cli <module_name> <script|list> [OPTIONS]"
 
-    local CLI_DIR="$WORKSPACE/module/${MODULE_NAME}/cli"
+    local CLI_DIR="$WORKSPACE/jms/module/${MODULE_NAME}/cli"
 
     # Subcommand: list
     if [ "$COMMAND" = "list" ]; then
@@ -2157,7 +2157,7 @@ module_test() {
     [ -n "$MODULE_NAME" ]  || error "Usage: cmd module test <module_name> <script|list> [OPTIONS]"
     [ -n "$COMMAND" ]  || error "Usage: cmd module test <module_name> <script|list> [OPTIONS]"
 
-    local TEST_DIR="$WORKSPACE/module/${MODULE_NAME}/test"
+    local TEST_DIR="$WORKSPACE/jms/module/${MODULE_NAME}/test"
 
     # Subcommand: list
     if [ "$COMMAND" = "list" ]; then
