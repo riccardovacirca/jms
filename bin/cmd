@@ -856,7 +856,7 @@ db_cli() {
     load_env
     local FILE="$1"
 
-    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+    [ "$PGSQL_ENABLED" = "true" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=true in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
     local PG_HOST="${PGSQL_HOST:-postgres}"
@@ -890,7 +890,7 @@ db_cli_query() {
     load_env
     local SQL="$1"
 
-    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+    [ "$PGSQL_ENABLED" = "true" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=true in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
     local PG_HOST="${PGSQL_HOST:-postgres}"
@@ -901,7 +901,7 @@ db_cli_query() {
 
 db_reset() {
     load_env
-    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+    [ "$PGSQL_ENABLED" = "true" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=true in .env"
 
     warn "This will DELETE all data in $PGSQL_NAME and recreate it!"
     confirm "Are you sure you want to reset the database?" || exit 0
@@ -929,7 +929,7 @@ db_reset() {
 
 db_setup() {
     load_env
-    [ "$PGSQL_ENABLED" = "y" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=y in .env"
+    [ "$PGSQL_ENABLED" = "true" ] || error "PostgreSQL is not enabled. Set PGSQL_ENABLED=true in .env"
 
     export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
     local PG_HOST="${PGSQL_HOST:-postgres}"

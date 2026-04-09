@@ -19,7 +19,7 @@ Da eseguire dalla **macchina host**, non dentro il container di sviluppo.
 
 I container vengono avviati nella sequenza:
 
-1. `<project>-db` (PostgreSQL) — se `PGSQL_ENABLED=y` in `.env` e il container esiste
+1. `<project>-db` (PostgreSQL) — se `PGSQL_ENABLED=true` in `.env` e il container esiste
 2. `<project>-mail` (Mailpit) — se il container esiste
 3. `<project>` (container di sviluppo)
 

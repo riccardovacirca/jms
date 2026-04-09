@@ -1,6 +1,5 @@
 package dev.jms.app.user.handler;
 
-import dev.jms.app.user.adapter.ChangePasswordAdapter;
 import dev.jms.app.user.adapter.ForgotPasswordAdapter;
 import dev.jms.app.user.adapter.LoginCredentialAdapter;
 import dev.jms.app.user.adapter.ResetPasswordAdapter;
@@ -12,13 +11,11 @@ import dev.jms.app.user.dao.RefreshTokenDAO;
 import dev.jms.app.user.dto.AccountAuthDTO;
 import dev.jms.app.user.dto.AuthPinDTO;
 import dev.jms.app.user.dto.AuthenticatedAccountDTO;
-import dev.jms.app.user.dto.ChangePasswordDTO;
 import dev.jms.app.user.dto.ForgotPasswordDTO;
 import dev.jms.app.user.dto.LoginCredentialDTO;
 import dev.jms.app.user.dto.ResetPasswordDTO;
 import dev.jms.app.user.dto.TwoFactorCredentialDTO;
 import dev.jms.app.user.helper.LoginHelper;
-import dev.jms.app.user.helper.PasswordChangeHelper;
 import dev.jms.app.user.helper.PasswordResetHelper;
 import dev.jms.app.user.helper.TokenRefreshHelper;
 import dev.jms.app.user.helper.TwoFactorHelper;
@@ -31,7 +28,6 @@ import dev.jms.util.HttpResponse;
 import dev.jms.util.Permission;
 import dev.jms.util.Role;
 import dev.jms.util.Session;
-import dev.jms.util.ValidationException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -49,7 +45,6 @@ import java.util.HashMap;
  *   <li>POST /api/user/auth/2fa</li>
  *   <li>POST /api/user/auth/forgot-password</li>
  *   <li>POST /api/user/auth/reset-password</li>
- *   <li>PUT  /api/user/auth/change-password</li>
  * </ul>
  */
 public class AuthHandler
@@ -259,22 +254,4 @@ public class AuthHandler
        .err(false).log("Password aggiornata").out(null).send();
   }
 
-  /** PUT /api/user/auth/change-password — cambio password autenticato. Richiede user+. */
-  public void changePassword(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
-  {
-    ChangePasswordDTO dto;
-
-    session.require(Role.USER, Permission.WRITE);
-    dto = ChangePasswordAdapter.from(req);
-
-    try {
-      PasswordChangeHelper.changePassword(db, (int) session.sub(), dto.currentPassword(), dto.newPassword());
-    } catch (ValidationException e) {
-      res.status(200).contentType("application/json")
-         .err(true).log(e.getMessage()).out(null).send();
-      return;
-    }
-    res.status(200).contentType("application/json")
-       .err(false).log("Password aggiornata").out(null).send();
-  }
 }

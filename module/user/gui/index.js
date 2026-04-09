@@ -48,6 +48,11 @@ function renderRoute(container) {
     import('./account/Profile.js').then(() => {
       container.innerHTML = '<user-profile></user-profile>';
     });
+  } else if (section === 'admin') {
+    if (!authorized.get()) { window.location.hash = '/user/auth/login'; return; }
+    import('./admin/Users.js').then(() => {
+      container.innerHTML = '<user-admin-users></user-admin-users>';
+    });
   } else {
     window.location.hash = authorized.get() ? '/' : '/user/auth/login';
   }

@@ -194,6 +194,17 @@ public class AccountDAO
     return DB.toLong(rows.get(0).get("id"));
   }
 
+  /** Aggiornamento admin: username, email, ruolo, attivo, must_change_password. */
+  public void adminUpdate(long id, String username, String email, String ruolo, boolean attivo, boolean mustChangePassword) throws Exception
+  {
+    String sql;
+    String emailVal;
+
+    emailVal = (email == null || email.isBlank()) ? null : email;
+    sql      = "UPDATE jms_accounts SET username=?, email=?, ruolo=?, attivo=?, must_change_password=? WHERE id=?";
+    db.query(sql, username, emailVal, ruolo, attivo, mustChangePassword, id);
+  }
+
   /** Aggiornamento self: solo username, email, password. */
   public void updateSelf(long id, String username, String email, String passwordHash) throws Exception
   {

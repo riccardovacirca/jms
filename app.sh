@@ -25,7 +25,7 @@ PROJECT="${PROJECT_NAME:?PROJECT_NAME not set in .env}"
 START_ORDER=()
 STOP_ORDER=()
 
-if [ "${PGSQL_ENABLED:-n}" = "y" ] && [ -n "$PGSQL_HOST" ]; then
+if [ "${PGSQL_ENABLED:-false}" = "true" ] && [ -n "$PGSQL_HOST" ]; then
     if docker ps -a --format '{{.Names}}' | grep -q "^${PGSQL_HOST}$"; then
         START_ORDER+=("$PGSQL_HOST")
     fi

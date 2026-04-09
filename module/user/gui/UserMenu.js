@@ -94,6 +94,15 @@ class UserMenu extends LitElement {
                 <i class="bi bi-gear me-2"></i>Account
               </a>
             </li>
+            ${this._user?.ruolo_level >= 2 ? html`
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item" href="#/dashboard"
+                   @click=${() => { this._menuOpen = false; }}>
+                  <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                </a>
+              </li>
+            ` : ''}
             <li><hr class="dropdown-divider"></li>
             <li>
               <button class="dropdown-item text-danger" @click=${this._logout}>

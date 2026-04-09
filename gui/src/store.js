@@ -24,4 +24,10 @@ const headerNavItems = atom([]);
 // null = nessun modulo registrato.
 const headerUserSlot = atom(null);
 
-export { authorized, user, headerNavItems, headerUserSlot };
+// Voci della sidebar del modulo dashboard.
+// Ogni modulo con interfaccia amministrativa registra al massimo una voce:
+// { key: string, label: string, icon: string, tag: string, import: () => Promise, minRuoloLevel: number }
+// minRuoloLevel: 1=user, 2=admin, 3=root; default 0 = sempre visibile.
+const dashboardItems = atom([]);
+
+export { authorized, user, headerNavItems, headerUserSlot, dashboardItems };

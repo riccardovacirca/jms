@@ -245,7 +245,7 @@ RELEASE_APP_USER_GID=1001
 # ========================================
 # Database
 # ========================================
-PGSQL_ENABLED=y
+PGSQL_ENABLED=true
 PGSQL_IMAGE=postgres:16
 PGSQL_HOST=PROJECT_DIR_PLACEHOLDER-db
 PGSQL_PORT=5432

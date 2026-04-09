@@ -37,14 +37,15 @@ public class Routes
     auth    = new AuthHandler(config);
     profile = new ProfileHandler();
 
-    // Account — /sid e /root prima di /{id} (match esatto ha precedenza nel PathTemplateMatcher)
-    router.route(HttpMethod.GET,    "/api/user/accounts/sid",  account::sid);
-    router.route(HttpMethod.PUT,    "/api/user/accounts/sid",  account::update);
-    router.route(HttpMethod.DELETE, "/api/user/accounts/sid",  account::delete);
-    router.route(HttpMethod.POST,   "/api/user/root",          account::createRoot);
-    router.route(HttpMethod.GET,    "/api/user/accounts/{id}", account::byId);
-    router.route(HttpMethod.GET,    "/api/user/accounts",      account::list);
-    router.route(HttpMethod.POST,   "/api/user/accounts",      account::register);
+    // Account — /sid e /root prima di /{id}; /{id}/password prima di /{id}
+    router.route(HttpMethod.GET,    "/api/user/accounts/sid",          account::sid);
+    router.route(HttpMethod.POST,   "/api/user/root",                  account::createRoot);
+    router.route(HttpMethod.PUT,    "/api/user/accounts/{id}/password", account::changePassword);
+    router.route(HttpMethod.GET,    "/api/user/accounts/{id}",         account::byId);
+    router.route(HttpMethod.PUT,    "/api/user/accounts/{id}",         account::update);
+    router.route(HttpMethod.DELETE, "/api/user/accounts/{id}",         account::delete);
+    router.route(HttpMethod.GET,    "/api/user/accounts",              account::list);
+    router.route(HttpMethod.POST,   "/api/user/accounts",              account::register);
 
     // Auth
     router.route(HttpMethod.GET,    "/api/user/auth/session",           auth::session);
@@ -55,7 +56,6 @@ public class Routes
     router.route(HttpMethod.POST,   "/api/user/auth/2fa",               auth::twoFactor);
     router.route(HttpMethod.POST,   "/api/user/auth/forgot-password",   auth::forgotPassword);
     router.route(HttpMethod.POST,   "/api/user/auth/reset-password",    auth::resetPassword);
-    router.route(HttpMethod.PUT,    "/api/user/auth/change-password",   auth::changePassword);
 
     // Profile — /sid/settings/{key} prima di /sid/settings prima di /sid
     router.route(HttpMethod.GET,    "/api/user/users/sid/settings/{key}", profile::settingByKey);

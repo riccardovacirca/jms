@@ -1,0 +1,20 @@
+{
+    "name": "dashboard",
+    "version": "1.0.0",
+    "dependencies": {},
+    "api": null,
+    "gui": {
+        "config": {
+            "route": "/dashboard",
+            "path": "dashboard",
+            "container": "main",
+            "authorization": { "redirectTo": "/user/auth/login" },
+            "persistent": false,
+            "priority": 999,
+            "init": true
+        }
+    },
+    "install_script": null,
+    "uninstall_script": null,
+    "install_notice": null
+}

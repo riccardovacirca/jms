@@ -29,6 +29,11 @@ Creare e registrare gli operatori CTI: ogni operatore deve esistere sia su Vonag
 5. `OperatorDAO.insert(vonageUserId, nome)` crea il record locale con `attivo = TRUE`
 6. Risposta: `{vonageUserId, nome, attivo: true}`
 
+#### TODO
+
+* Verificare se il display name è richiesto dalla API di Vonage oppure è usato solo nella implementazione locale di un operatore. In questo secondo caso va rimosso dal momento che il nome dell'operatore non viene mai visualizzato, ma è solo un identificatore interno necessario per associare un utente della applicazione a un operatore Vonage. Il nome visualizzato è sempre quello dell'utente locale associato all'operatore. In pratica anche localmente possiamo identificare un operatore mediante il `vonage_user_id`.
+
+
 ### Flusso alternativo — Sincronizzazione da Vonage
 
 1. Admin invia `POST /api/cti/vonage/admin/operator/sync`

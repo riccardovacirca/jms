@@ -31,7 +31,8 @@ class ChangePassword extends LitElement {
     this._loading = true;
     this._error   = null;
     try {
-      const res = await fetch('/api/user/auth/change-password', {
+      const id  = user.get()?.sub;
+      const res = await fetch(`/api/user/accounts/${id}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ current_password: cur, new_password: nw })

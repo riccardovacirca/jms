@@ -59,7 +59,7 @@ class Settings extends LitElement {
   async _save() {
     this._saving  = true;
     this._formErr = null;
-    const r       = await fetch('/api/user/accounts/sid', {
+    const r       = await fetch(`/api/user/accounts/${this._account.id}`, {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(this._form),
@@ -76,7 +76,7 @@ class Settings extends LitElement {
 
   async _deleteAccount() {
     this._deleting = true;
-    const r        = await fetch('/api/user/accounts/sid', { method: 'DELETE' });
+    const r        = await fetch(`/api/user/accounts/${this._account.id}`, { method: 'DELETE' });
     const data     = await r.json();
     this._deleting = false;
     if (!data.err) {
