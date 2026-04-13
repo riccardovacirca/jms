@@ -9,8 +9,13 @@ import dev.jms.util.Session;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Mail;
+import dev.jms.util.HttpMethod;
+import dev.jms.util.Log;
+import dev.jms.util.Permission;
+import dev.jms.util.Role;
 import dev.jms.util.Router;
 import com.fasterxml.jackson.core.type.TypeReference;
+import java.util.HashMap;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.undertow.Undertow;
 import io.undertow.server.HttpHandler;
@@ -31,6 +36,8 @@ import javax.sql.DataSource;
  */
 public class App
 {
+  private static final Log log = Log.get(App.class);
+
   /**
    * Avvia il server HTTP sulla porta configurata in application.properties.
    */
@@ -48,7 +55,7 @@ public class App
     // === CARICAMENTO CONFIGURAZIONE ===
 
     config = new Config();
-    port = config.getInt("server.port", 8080);
+    port   = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
 
     // === INIZIALIZZAZIONE UTILITY CORE ===
@@ -126,6 +133,54 @@ public class App
       }
     });
 
+    // Frontend log endpoint — raccoglie log dal browser e li scrive nel file di log del backend.
+    router.route(HttpMethod.POST, "/api/log", (req, res, session, db) ->
+    {
+      HashMap<String, Object> body;
+      String level;
+      String message;
+      String context;
+      String username;
+      String formatted;
+
+      session.require(Role.USER, Permission.READ);
+      body     = req.body();
+      level    = DB.toString(body.get("level"));
+      message  = DB.toString(body.get("message"));
+      context  = DB.toString(body.get("context"));
+      username = session.username();
+
+      if (message == null || message.isBlank()) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("message obbligatorio")
+           .out(null)
+           .send();
+      } else {
+        formatted = context != null
+          ? "[FE] [" + username + "] " + message + " — " + context
+          : "[FE] [" + username + "] " + message;
+
+        if ("error".equals(level)) {
+          log.error("{}", formatted);
+        } else if ("warn".equals(level)) {
+          log.warn("{}", formatted);
+        } else if ("debug".equals(level)) {
+          log.debug("{}", formatted);
+        } else {
+          log.info("{}", formatted);
+        }
+
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(null)
+           .send();
+      }
+    });
+
     // Marker per inserimento route da moduli installati.
     // cmd module import inserisce chiamate a Routes.register(router) qui.
 
@@ -152,7 +207,7 @@ public class App
     }));
 
     server.start();
-    System.out.println("[info] Server in ascolto sulla porta " + port);
+    log.info("Server in ascolto sulla porta {}", port);
   }
 
   /**
@@ -175,7 +230,7 @@ public class App
       try {
         installed = mapper.readValue(is, new TypeReference<Map<String, Map<String, Object>>>() {});
       } catch (Exception e) {
-        System.out.println("[warn] Impossibile leggere module/installed.json: " + e.getMessage());
+        log.warn("Impossibile leggere module/installed.json: {}", e.getMessage());
       }
       if (installed != null) {
         ok = true;
@@ -197,14 +252,14 @@ public class App
                 }
               }
               if (!found) {
-                System.out.println("[warn] Modulo '" + info.get("name") + "': dipendenza non installata: " + dep);
+                log.warn("Modulo '{}': dipendenza non installata: {}", info.get("name"), dep);
                 ok = false;
               }
             }
           }
         }
         if (!ok) {
-          System.out.println("[warn] Dipendenze moduli non soddisfatte — alcune funzionalita' potrebbero non essere disponibili");
+          log.warn("Dipendenze moduli non soddisfatte — alcune funzionalita' potrebbero non essere disponibili");
         }
       }
     }
@@ -213,7 +268,7 @@ public class App
   private static void runMigrations()
   {
     if (!DB.isConfigured()) {
-      System.out.println("[info] Flyway: nessun DataSource, migrazione saltata");
+      log.info("Flyway: nessun DataSource, migrazione saltata");
     } else {
       try {
         Flyway flyway;
@@ -223,9 +278,9 @@ public class App
           .locations("classpath:db/migration")
           .load();
         applied = flyway.migrate().migrationsExecuted;
-        System.out.println("[info] Flyway: " + applied + " migrazione/i applicata/e");
+        log.info("Flyway: {} migrazione/i applicata/e", applied);
       } catch (Exception e) {
-        System.err.println("[warn] Flyway migration fallita: " + e.getMessage());
+        log.warn("Flyway migration fallita: {}", e.getMessage());
       }
     }
   }

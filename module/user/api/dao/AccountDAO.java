@@ -28,8 +28,8 @@ public class AccountDAO
 
     sql =
       "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, r.level AS ruolo_level " +
-      "FROM jms_accounts a " +
-      "JOIN jms_roles r ON r.name = a.ruolo " +
+      "FROM jms_user_accounts a " +
+      "JOIN jms_user_roles r ON r.name = a.ruolo " +
       "WHERE a.username = ? AND a.attivo = true";
     rows = db.select(sql, username);
 
@@ -45,8 +45,8 @@ public class AccountDAO
 
     sql =
       "SELECT a.id, a.username, a.password_hash, a.must_change_password, a.two_factor_enabled, a.email, a.ruolo, r.level AS ruolo_level " +
-      "FROM jms_accounts a " +
-      "JOIN jms_roles r ON r.name = a.ruolo " +
+      "FROM jms_user_accounts a " +
+      "JOIN jms_user_roles r ON r.name = a.ruolo " +
       "WHERE a.id = ? AND a.attivo = true";
     rows = db.select(sql, id);
 
@@ -61,8 +61,8 @@ public class AccountDAO
 
     sql =
       "SELECT a.id, a.username, a.must_change_password, a.ruolo, r.level AS ruolo_level " +
-      "FROM jms_accounts a " +
-      "JOIN jms_roles r ON r.name = a.ruolo " +
+      "FROM jms_user_accounts a " +
+      "JOIN jms_user_roles r ON r.name = a.ruolo " +
       "WHERE a.id = ? AND a.attivo = true";
     rows = db.select(sql, id);
 
@@ -77,9 +77,9 @@ public class AccountDAO
 
     sql =
       "SELECT a.id, a.username, a.must_change_password, a.ruolo, r.level AS ruolo_level " +
-      "FROM jms_refresh_tokens rt " +
-      "JOIN jms_accounts a ON a.id = rt.account_id " +
-      "JOIN jms_roles r ON r.name = a.ruolo " +
+      "FROM jms_user_refresh_tokens rt " +
+      "JOIN jms_user_accounts a ON a.id = rt.account_id " +
+      "JOIN jms_user_roles r ON r.name = a.ruolo " +
       "WHERE rt.token = ? AND rt.expires_at > NOW() AND a.attivo = true";
     rows = db.select(sql, token);
 
@@ -92,7 +92,7 @@ public class AccountDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql  = "SELECT id, username, email, ruolo, attivo, must_change_password, created_at FROM jms_accounts WHERE id = ?";
+    sql  = "SELECT id, username, email, ruolo, attivo, must_change_password, created_at FROM jms_user_accounts WHERE id = ?";
     rows = db.select(sql, id);
     return rows.isEmpty() ? null : rows.get(0);
   }
@@ -105,7 +105,7 @@ public class AccountDAO
 
     sql  =
       "SELECT id, username, email, ruolo, attivo, must_change_password, created_at " +
-      "FROM jms_accounts WHERE id = ?";
+      "FROM jms_user_accounts WHERE id = ?";
     rows = db.select(sql, id);
     return rows.isEmpty() ? null : rows.get(0);
   }
@@ -118,13 +118,13 @@ public class AccountDAO
     if (search != null && !search.isBlank()) {
       sql =
         "SELECT id, username, email, ruolo, attivo, must_change_password, created_at " +
-        "FROM jms_accounts WHERE username ILIKE ? OR email ILIKE ? " +
+        "FROM jms_user_accounts WHERE username ILIKE ? OR email ILIKE ? " +
         "ORDER BY username LIMIT ? OFFSET ?";
       return db.select(sql, "%" + search + "%", "%" + search + "%", limit, offset);
     }
     sql =
       "SELECT id, username, email, ruolo, attivo, must_change_password, created_at " +
-      "FROM jms_accounts ORDER BY username LIMIT ? OFFSET ?";
+      "FROM jms_user_accounts ORDER BY username LIMIT ? OFFSET ?";
     return db.select(sql, limit, offset);
   }
 
@@ -135,10 +135,10 @@ public class AccountDAO
     List<HashMap<String, Object>> rows;
 
     if (search != null && !search.isBlank()) {
-      sql  = "SELECT COUNT(*) AS cnt FROM jms_accounts WHERE username ILIKE ? OR email ILIKE ?";
+      sql  = "SELECT COUNT(*) AS cnt FROM jms_user_accounts WHERE username ILIKE ? OR email ILIKE ?";
       rows = db.select(sql, "%" + search + "%", "%" + search + "%");
     } else {
-      sql  = "SELECT COUNT(*) AS cnt FROM jms_accounts";
+      sql  = "SELECT COUNT(*) AS cnt FROM jms_user_accounts";
       rows = db.select(sql);
     }
     return DB.toLong(rows.get(0).get("cnt"));
@@ -151,10 +151,10 @@ public class AccountDAO
     List<HashMap<String, Object>> rows;
 
     if (excludeId != null) {
-      sql  = "SELECT id FROM jms_accounts WHERE username = ? AND id != ?";
+      sql  = "SELECT id FROM jms_user_accounts WHERE username = ? AND id != ?";
       rows = db.select(sql, username, excludeId);
     } else {
-      sql  = "SELECT id FROM jms_accounts WHERE username = ?";
+      sql  = "SELECT id FROM jms_user_accounts WHERE username = ?";
       rows = db.select(sql, username);
     }
     return !rows.isEmpty();
@@ -170,10 +170,10 @@ public class AccountDAO
       return false;
     }
     if (excludeId != null) {
-      sql  = "SELECT id FROM jms_accounts WHERE email = ? AND id != ?";
+      sql  = "SELECT id FROM jms_user_accounts WHERE email = ? AND id != ?";
       rows = db.select(sql, email, excludeId);
     } else {
-      sql  = "SELECT id FROM jms_accounts WHERE email = ?";
+      sql  = "SELECT id FROM jms_user_accounts WHERE email = ?";
       rows = db.select(sql, email);
     }
     return !rows.isEmpty();
@@ -188,7 +188,7 @@ public class AccountDAO
 
     emailVal = (email == null || email.isBlank()) ? null : email;
     sql      =
-      "INSERT INTO jms_accounts (username, email, password_hash, ruolo, must_change_password) " +
+      "INSERT INTO jms_user_accounts (username, email, password_hash, ruolo, must_change_password) " +
       "VALUES (?, ?, ?, ?, false) RETURNING id";
     rows = db.select(sql, username, emailVal, passwordHash, ruolo);
     return DB.toLong(rows.get(0).get("id"));
@@ -201,7 +201,7 @@ public class AccountDAO
     String emailVal;
 
     emailVal = (email == null || email.isBlank()) ? null : email;
-    sql      = "UPDATE jms_accounts SET username=?, email=?, ruolo=?, attivo=?, must_change_password=? WHERE id=?";
+    sql      = "UPDATE jms_user_accounts SET username=?, email=?, ruolo=?, attivo=?, must_change_password=? WHERE id=?";
     db.query(sql, username, emailVal, ruolo, attivo, mustChangePassword, id);
   }
 
@@ -213,10 +213,10 @@ public class AccountDAO
 
     emailVal = (email == null || email.isBlank()) ? null : email;
     if (passwordHash != null) {
-      sql = "UPDATE jms_accounts SET username=?, email=?, password_hash=? WHERE id=?";
+      sql = "UPDATE jms_user_accounts SET username=?, email=?, password_hash=? WHERE id=?";
       db.query(sql, username, emailVal, passwordHash, id);
     } else {
-      sql = "UPDATE jms_accounts SET username=?, email=? WHERE id=?";
+      sql = "UPDATE jms_user_accounts SET username=?, email=? WHERE id=?";
       db.query(sql, username, emailVal, id);
     }
   }
@@ -226,7 +226,7 @@ public class AccountDAO
   {
     String sql;
 
-    sql = "UPDATE jms_accounts SET password_hash = ?, must_change_password = ? WHERE id = ?";
+    sql = "UPDATE jms_user_accounts SET password_hash = ?, must_change_password = ? WHERE id = ?";
     db.query(sql, passwordHash, mustChangePassword, id);
   }
 
@@ -235,7 +235,7 @@ public class AccountDAO
   {
     String sql;
 
-    sql = "UPDATE jms_accounts SET attivo = false WHERE id = ?";
+    sql = "UPDATE jms_user_accounts SET attivo = false WHERE id = ?";
     db.query(sql, id);
   }
 

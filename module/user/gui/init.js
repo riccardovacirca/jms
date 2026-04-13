@@ -11,7 +11,7 @@ async function init() {
   headerUserSlot.set({ tag: 'user-menu' });
   dashboardItems.set([...dashboardItems.get(), {
     key:           'user-admin',
-    label:         'Gestione utenti',
+    label:         'Utenti',
     icon:          'bi-people',
     tag:           'user-admin-users',
     import:        () => import('./admin/Users.js'),

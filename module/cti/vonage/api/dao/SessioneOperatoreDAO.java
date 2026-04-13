@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * DAO per la tabella {@code jms_sessione_operatore}.
+ * DAO per la tabella {@code jms_cti_sessione_operatore}.
  *
  * <p>Gestisce il ciclo di vita delle sessioni tecniche CTI: apertura automatica
  * alla connessione dell'operatore, aggiornamento agli eventi di connessione/pausa/chiamata.</p>
@@ -39,7 +39,7 @@ public class SessioneOperatoreDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "INSERT INTO jms_sessione_operatore (operatore_id, creato_da) "
+    sql = "INSERT INTO jms_cti_sessione_operatore (operatore_id, creato_da) "
         + "VALUES (?, ?) RETURNING id";
     rows = db.select(sql, operatoreId, creatoDA);
     return DB.toLong(rows.get(0).get("id"));
@@ -57,7 +57,7 @@ public class SessioneOperatoreDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "SELECT * FROM jms_sessione_operatore "
+    sql = "SELECT * FROM jms_cti_sessione_operatore "
         + "WHERE operatore_id = ? AND stato IN (1, 2, 3) "
         + "ORDER BY data_creazione DESC LIMIT 1";
     rows = db.select(sql, operatoreId);
@@ -78,7 +78,7 @@ public class SessioneOperatoreDAO
   {
     String sql;
 
-    sql = "UPDATE jms_sessione_operatore "
+    sql = "UPDATE jms_cti_sessione_operatore "
         + "SET connessione_inizio = COALESCE(connessione_inizio, NOW()), "
         + "ultima_connessione = NOW(), "
         + "stato = 1, modificato_da = ?, data_modifica = NOW() "
@@ -98,7 +98,7 @@ public class SessioneOperatoreDAO
   {
     String sql;
 
-    sql = "UPDATE jms_sessione_operatore "
+    sql = "UPDATE jms_cti_sessione_operatore "
         + "SET numero_pause = numero_pause + 1, "
         + "durata_pause = durata_pause + ?, "
         + "stato = 2, modificato_da = ?, data_modifica = NOW() "
@@ -115,7 +115,7 @@ public class SessioneOperatoreDAO
   {
     String sql;
 
-    sql = "UPDATE jms_sessione_operatore SET stato = 3, data_modifica = NOW() "
+    sql = "UPDATE jms_cti_sessione_operatore SET stato = 3, data_modifica = NOW() "
         + "WHERE operatore_id = ? AND stato = 1 "
         + "ORDER BY data_creazione DESC LIMIT 1";
     db.query(sql, operatoreId);
@@ -131,7 +131,7 @@ public class SessioneOperatoreDAO
   {
     String sql;
 
-    sql = "UPDATE jms_sessione_operatore "
+    sql = "UPDATE jms_cti_sessione_operatore "
         + "SET stato = 1, "
         + "numero_chiamate = numero_chiamate + 1, "
         + "durata_conversazione = durata_conversazione + ?, "
@@ -154,7 +154,7 @@ public class SessioneOperatoreDAO
     List<HashMap<String, Object>> rows;
     List<SessioneOperatoreDTO> result;
 
-    sql = "SELECT * FROM jms_sessione_operatore ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
+    sql = "SELECT * FROM jms_cti_sessione_operatore ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
     rows = db.select(sql, size, (page - 1) * size);
     result = new ArrayList<>();
     for (HashMap<String, Object> r : rows) {
@@ -171,7 +171,7 @@ public class SessioneOperatoreDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM jms_sessione_operatore";
+    sql = "SELECT COUNT(*) AS n FROM jms_cti_sessione_operatore";
     rows = db.select(sql);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -187,7 +187,7 @@ public class SessioneOperatoreDAO
     String sql;
     List<HashMap<String, Object>> rows;
 
-    sql = "SELECT * FROM jms_sessione_operatore WHERE id = ?";
+    sql = "SELECT * FROM jms_cti_sessione_operatore WHERE id = ?";
     rows = db.select(sql, id);
     if (rows.isEmpty()) {
       return null;

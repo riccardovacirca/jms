@@ -1,0 +1,16 @@
+{
+  "java.compile.nullAnalysis.mode": "automatic",
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "{{PGSQL_HOST}}",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "{{PROJECT_NAME}}-db",
+      "database": "{{PROJECT_NAME}}",
+      "username": "{{PROJECT_NAME}}",
+      "password": "{{PGSQL_PASSWORD}}"
+    }
+  ]
+}

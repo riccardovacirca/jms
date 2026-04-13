@@ -50,13 +50,18 @@ public class Routes
     router.route(HttpMethod.GET,  "/api/cti/vonage/call",  calls::list);
 
     // CRUD operatori (admin)
-    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator",       operators::list);
-    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator/{id}",  operators::get);
-    router.async(HttpMethod.POST,   "/api/cti/vonage/admin/operator",       operators::create);
-    router.route(HttpMethod.PUT,    "/api/cti/vonage/admin/operator/{id}",  operators::update);
-    router.route(HttpMethod.DELETE, "/api/cti/vonage/admin/operator/{id}",  operators::delete);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator",                  operators::list);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator/{id}",             operators::get);
+    router.async(HttpMethod.POST,   "/api/cti/vonage/admin/operator",                  operators::create);
+    router.route(HttpMethod.PUT,    "/api/cti/vonage/admin/operator/{id}",             operators::update);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/admin/operator/{id}",             operators::delete);
     // sync operatori locali da Vonage
-    router.async(HttpMethod.POST,   "/api/cti/vonage/admin/operator/sync",  operators::sync);
+    router.async(HttpMethod.POST,   "/api/cti/vonage/admin/operator/sync",             operators::sync);
+    // assegnazione account utente a operatore
+    router.route(HttpMethod.PUT,    "/api/cti/vonage/admin/operator/{id}/account",     operators::assignAccount);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/admin/operator/{id}/account",     operators::unassignAccount);
+    // lista account utenti per dropdown assegnazione
+    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/accounts",                  operators::accounts);
 
     // prefissi telefonici internazionali
     router.route(HttpMethod.GET, "/api/cti/vonage/prefissi", prefissi::list);
@@ -66,11 +71,20 @@ public class Routes
     // sessione tecnica corrente dell'operatore autenticato
     router.route(HttpMethod.GET, "/api/cti/vonage/sessione/corrente", turni::corrente);
 
-    // Coda chiamate
-    router.route(HttpMethod.POST, "/api/cti/vonage/queue", queue::addToQueue);
-    router.route(HttpMethod.POST, "/api/cti/vonage/queue/bulk", queue::addBulkToQueue);
-    router.route(HttpMethod.GET,  "/api/cti/vonage/queue/next", queue::getNext);
-    router.route(HttpMethod.GET,  "/api/cti/vonage/queue/stats", queue::getStats);
+    // coda personale operatore (admin) + rimozione forzata orfani
+    router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator/{id}/queue",   queue::adminQueueByOperator);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/admin/queue/contatto/{id}",   queue::adminRimuoviContatto);
+
+    // Coda contatti — prefissi più specifici prima di quelli generici
+    router.route(HttpMethod.GET,    "/api/cti/vonage/queue/contact",                   queue::getCurrentContact);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/queue/contatti",                  queue::listPersonal);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/queue/next",                      queue::getNext);
+    router.route(HttpMethod.GET,    "/api/cti/vonage/queue/stats",                     queue::getStats);
+    router.route(HttpMethod.PUT,    "/api/cti/vonage/queue/contatto/{id}/pianifica",   queue::pianifica);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/queue/contatto/{id}/rimetti",     queue::rimettiInCoda);
+    router.route(HttpMethod.DELETE, "/api/cti/vonage/queue/contatto/{id}",             queue::rimuoviContatto);
+    router.route(HttpMethod.POST,   "/api/cti/vonage/queue",                         queue::addToQueue);
+    router.route(HttpMethod.POST,   "/api/cti/vonage/queue/bulk",                    queue::addBulkToQueue);
 
     // cleanup sessioni operatori scadute (ogni minuto)
     Scheduler.register("cti-session-cleanup", "* * * * *", OperatorDAO::releaseExpired);

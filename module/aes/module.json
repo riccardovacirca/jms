@@ -19,7 +19,7 @@
             "init": null
         }
     },
-    "install_script": "install.sh",
-    "uninstall_script": "uninstall.sh",
+    "install_script": "cli/setup.sh",
+    "uninstall_script": "cli/remove.sh",
     "install_notice": null
 }

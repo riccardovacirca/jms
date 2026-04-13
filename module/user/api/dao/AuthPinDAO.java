@@ -23,7 +23,7 @@ public class AuthPinDAO
   {
     String sql;
 
-    sql = "DELETE FROM jms_auth_pins WHERE account_id = ? OR expires_at < NOW()";
+    sql = "DELETE FROM jms_user_auth_pins WHERE account_id = ? OR expires_at < NOW()";
     db.query(sql, accountId);
   }
 
@@ -32,7 +32,7 @@ public class AuthPinDAO
   {
     String sql;
 
-    sql = "INSERT INTO jms_auth_pins (challenge_token, account_id, pin_hash, expires_at) VALUES (?, ?, ?, ?)";
+    sql = "INSERT INTO jms_user_auth_pins (challenge_token, account_id, pin_hash, expires_at) VALUES (?, ?, ?, ?)";
     db.query(sql, challengeToken, accountId, pinHash, DB.toSqlTimestamp(expiresAt));
   }
 
@@ -43,7 +43,7 @@ public class AuthPinDAO
     ArrayList<HashMap<String, Object>> rows;
     HashMap<String, Object> row;
 
-    sql  = "SELECT id, account_id, pin_hash, expires_at FROM jms_auth_pins WHERE challenge_token = ?";
+    sql  = "SELECT id, account_id, pin_hash, expires_at FROM jms_user_auth_pins WHERE challenge_token = ?";
     rows = db.select(sql, challengeToken);
 
     if (rows.isEmpty()) {
@@ -63,7 +63,7 @@ public class AuthPinDAO
   {
     String sql;
 
-    sql = "DELETE FROM jms_auth_pins WHERE challenge_token = ?";
+    sql = "DELETE FROM jms_user_auth_pins WHERE challenge_token = ?";
     db.query(sql, challengeToken);
   }
 }

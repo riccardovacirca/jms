@@ -624,6 +624,11 @@ GITIGNORE
     sed "s|{{SCHEDULER_ENABLED}}|${SCHEDULER_ENABLED:-true}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{SCHEDULER_POLL_INTERVAL_SECONDS}}|${SCHEDULER_POLL_INTERVAL_SECONDS:-15}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
+    # .vscode/settings.json — sostituisce i placeholder con i valori da .env
+    sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
+    sed "s|{{PGSQL_HOST}}|$PGSQL_HOST|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
+    sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
+
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
 

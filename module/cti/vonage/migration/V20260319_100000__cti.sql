@@ -1,4 +1,4 @@
-CREATE TABLE jms_chiamate (
+CREATE TABLE jms_cti_chiamate (
   id                  BIGSERIAL     PRIMARY KEY,
   uuid                VARCHAR(64),
   conversazione_uuid  VARCHAR(64),
@@ -32,17 +32,18 @@ CREATE TABLE jms_cti_operatori (
   account_id       INTEGER,
   claim_account_id INTEGER,
   claim_scadenza   TIMESTAMP,
+  sessione_ttl     TIMESTAMP,
   nome             VARCHAR(100),
   attivo           BOOLEAN      NOT NULL DEFAULT TRUE,
   data_creazione   TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX jms_idx_cti_operatori_claim
+CREATE UNIQUE INDEX jms_cti_idx_operatori_claim
     ON jms_cti_operatori(claim_account_id)
     WHERE claim_account_id IS NOT NULL;
 
 -- stato: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata
-CREATE TABLE jms_sessione_operatore (
+CREATE TABLE jms_cti_sessione_operatore (
   id                   BIGSERIAL    PRIMARY KEY,
   operatore_id         INTEGER      NOT NULL,
 
@@ -72,10 +73,10 @@ CREATE TABLE jms_sessione_operatore (
   data_modifica        TIMESTAMP
 );
 
-CREATE INDEX jms_idx_sessione_operatore_operatore ON jms_sessione_operatore(operatore_id);
-CREATE INDEX jms_idx_sessione_operatore_stato     ON jms_sessione_operatore(stato);
+CREATE INDEX jms_cti_idx_sessione_operatore_operatore ON jms_cti_sessione_operatore(operatore_id);
+CREATE INDEX jms_cti_idx_sessione_operatore_stato     ON jms_cti_sessione_operatore(stato);
 
-CREATE TABLE prefissi_internazionali (
+CREATE TABLE jms_cti_prefissi_internazionali (
     id       SERIAL       PRIMARY KEY,
     paese    VARCHAR(100) NOT NULL,
     iso      CHAR(2)      NOT NULL,
@@ -85,10 +86,10 @@ CREATE TABLE prefissi_internazionali (
     CONSTRAINT uq_iso UNIQUE (iso)
 );
 
-CREATE INDEX jms_idx_prefissi_paese    ON prefissi_internazionali(paese);
-CREATE INDEX jms_idx_prefissi_prefisso ON prefissi_internazionali(prefisso);
+CREATE INDEX jms_cti_idx_prefissi_paese    ON jms_cti_prefissi_internazionali(paese);
+CREATE INDEX jms_cti_idx_prefissi_prefisso ON jms_cti_prefissi_internazionali(prefisso);
 
-INSERT INTO prefissi_internazionali (paese, iso, prefisso) VALUES
+INSERT INTO jms_cti_prefissi_internazionali (paese, iso, prefisso) VALUES
 ('Afghanistan',          'AF', '+93'),
 ('Albania',              'AL', '+355'),
 ('Algeria',              'DZ', '+213'),
@@ -142,3 +143,30 @@ INSERT INTO prefissi_internazionali (paese, iso, prefisso) VALUES
 ('Turchia',              'TR', '+90'),
 ('Ucraina',              'UA', '+380'),
 ('Ungheria',             'HU', '+36');
+
+-- Coda globale contatti CTI in ingresso (condivisa tra tutti gli operatori)
+CREATE TABLE jms_cti_coda_contatti (
+  id               BIGSERIAL  PRIMARY KEY,
+  contatto_json    JSONB      NOT NULL,
+  data_inserimento TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX jms_cti_idx_coda_contatti_data ON jms_cti_coda_contatti(data_inserimento);
+
+-- Coda personale per operatore: contatti estratti dalla coda globale e pianificati
+CREATE TABLE jms_cti_operatore_contatti (
+  id               BIGSERIAL  PRIMARY KEY,
+  operatore_id     BIGINT     NOT NULL REFERENCES jms_cti_operatori(id),
+  contatto_json    JSONB      NOT NULL,
+  data_inserimento TIMESTAMP  NOT NULL DEFAULT NOW(),
+  pianificato_al   TIMESTAMP  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX jms_cti_idx_op_contatti_op    ON jms_cti_operatore_contatti(operatore_id);
+CREATE INDEX jms_cti_idx_op_contatti_piano ON jms_cti_operatore_contatti(operatore_id, pianificato_al, data_inserimento);
+
+COMMENT ON TABLE  jms_cti_coda_contatti                     IS 'Coda globale contatti CTI in ingresso';
+COMMENT ON TABLE  jms_cti_operatore_contatti                IS 'Coda personale per operatore: contatti estratti e pianificati';
+COMMENT ON COLUMN jms_cti_coda_contatti.contatto_json       IS 'Formato: {id, phone, callback, data: [{key, value, type}]}';
+COMMENT ON COLUMN jms_cti_operatore_contatti.contatto_json  IS 'Formato: {id, phone, callback, data: [{key, value, type}]}';
+COMMENT ON COLUMN jms_cti_operatore_contatti.pianificato_al IS 'Contatto disponibile solo dopo questa data/ora (NOW() = disponibile subito)';

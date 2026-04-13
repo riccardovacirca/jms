@@ -34,28 +34,6 @@ L'operatore riagganica la chiamata in corso. Il backend termina entrambe le legs
 4. Risposta al frontend: `{err: false}`
 5. SDK Vonage notifica `callHangup` al frontend → `Bar._onCallHangup()` → `callState = idle`
 
-### Flusso successivo — Evento `completed` da Vonage
-
-6. Vonage invia `POST /api/cti/vonage/event` con `{uuid, status: "completed", start_time, end_time, duration, rate, price, network, from_user}`
-7. `VoiceHelper.processEvent`:
-   a. `CallDAO.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network)`
-   b. Se `callbackUrl` presente: `fireCallback(callbackUrl, contattoId, "call_ended", {duration})`
-   c. Se `from_user` presente: `SessioneOperatoreDAO.registraFineChiamata(operatoreId, durata)` → `stato = 1`, aggiorna `numero_chiamate`, `durata_conversazione`
-
----
-
-### Postcondizioni
-
-* `jms_chiamate`: `ora_fine`, `durata`, `tariffa`, `costo`, `rete` impostati
-* `jms_sessione_operatore`: `stato = 1` (connesso), statistiche chiamata aggiornate
-* Frontend: UI torna a stato idle
-* Callback inviata al modulo esterno (se `callbackUrl` presente)
-* `outgoingCalls`: mappatura rimossa
-
----
-
-### Diagramma di sequenza
-
 ```mermaid
 sequenceDiagram
     participant Op as Browser/Operatore
@@ -63,11 +41,7 @@ sequenceDiagram
     participant Handler as CallHandler (async)
     participant Helper as VoiceHelper
     participant Vonage as Vonage Platform
-    participant CallDAO as CallDAO
-    participant SessDAO as SessioneOperatoreDAO
-    participant CB as Modulo esterno (CRM)
 
-    %% Hangup lato operatore
     Op->>Bar: click Riagganica
     Bar->>Handler: PUT /api/cti/vonage/call/{uuid}/hangup
     Handler->>Handler: session.require(USER, WRITE)
@@ -76,13 +50,28 @@ sequenceDiagram
     Helper->>Helper: customerUuid = outgoingCalls.remove(operatorUuid)
     Helper->>Vonage: terminateCall(customerUuid)
     Handler-->>Bar: {err: false}
-
-    %% Evento SDK
     Vonage->>Bar: evento SDK callHangup(callId)
     Bar->>Bar: callState = {active:false, status:'idle'}
     Bar->>Bar: _stopNetStatsPolling()
+```
 
-    %% Webhook completed
+### Flusso successivo — Evento `completed` da Vonage
+
+6. Vonage invia `POST /api/cti/vonage/event` con `{uuid, status: "completed", start_time, end_time, duration, rate, price, network, from_user}`
+7. `VoiceHelper.processEvent`:
+   a. `CallDAO.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network)`
+   b. Se `callbackUrl` presente: `fireCallback(callbackUrl, contattoId, "call_ended", {duration})`
+   c. Se `from_user` presente: `SessioneOperatoreDAO.registraFineChiamata(operatoreId, durata)` → `stato = 1`, aggiorna `numero_chiamate`, `durata_conversazione`
+
+```mermaid
+sequenceDiagram
+    participant Vonage as Vonage Platform
+    participant Handler as CallHandler (async)
+    participant Helper as VoiceHelper
+    participant CallDAO as CallDAO
+    participant SessDAO as SessioneOperatoreDAO
+    participant CB as Modulo esterno (CRM)
+
     Vonage->>Handler: POST /api/cti/vonage/event {uuid, status:"completed", durata, billing, from_user}
     Handler->>Helper: processEvent(body, db)
     Helper->>CallDAO: updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network)
@@ -97,3 +86,13 @@ sequenceDiagram
     end
     Handler-->>Vonage: HTTP 200
 ```
+
+---
+
+### Postcondizioni
+
+* `jms_chiamate`: `ora_fine`, `durata`, `tariffa`, `costo`, `rete` impostati
+* `jms_sessione_operatore`: `stato = 1` (connesso), statistiche chiamata aggiornate
+* Frontend: UI torna a stato idle
+* Callback inviata al modulo esterno (se `callbackUrl` presente)
+* `outgoingCalls`: mappatura rimossa

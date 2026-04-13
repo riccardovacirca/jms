@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * DAO per la tabella {@code prefissi_internazionali}.
+ * DAO per la tabella {@code jms_cti_prefissi_internazionali}.
  */
 public class PrefissoDAO
 {
@@ -28,7 +28,7 @@ public class PrefissoDAO
   {
     String sql;
 
-    sql = "SELECT id, paese, iso, prefisso FROM prefissi_internazionali "
+    sql = "SELECT id, paese, iso, prefisso FROM jms_cti_prefissi_internazionali "
         + "WHERE attivo = TRUE ORDER BY paese";
     return db.select(sql);
   }

@@ -33,6 +33,9 @@ class Dashboard extends LitElement {
    */
   _onSelect(e) {
     const item = e.detail;
+    if (!item.tag || !item.import) {
+      return;
+    }
     this._activeTag = null;
     item.import().then(() => {
       this._activeTag = item.tag;

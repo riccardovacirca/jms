@@ -138,19 +138,18 @@ public class VoiceHelper
     Map<String, Object> conversation;
     List<String> musicList;
 
-    musicList = new ArrayList<>();
-    musicList.add(musicOnHoldUrl);
+    musicList = null;
 
     // azione NCCO di tipo conversation per l'operatore
     conversation = new HashMap<>();
-    // tipo di azione NCCO
     conversation.put("action", "conversation");
-    // nome condiviso tra la leg dell'operatore e quella del cliente
     conversation.put("name", conversationName);
-    // l'operatore attende senza attivare la conversazione
     conversation.put("startOnEnter", false);
-    // audio riprodotto all'operatore durante l'attesa del cliente
-    conversation.put("musicOnHoldUrl", musicList);
+    if (musicOnHoldUrl != null && !musicOnHoldUrl.isBlank()) {
+      musicList = new ArrayList<>();
+      musicList.add(musicOnHoldUrl);
+      conversation.put("musicOnHoldUrl", musicList);
+    }
 
     ncco = new ArrayList<>();
     ncco.add(conversation);
@@ -214,6 +213,9 @@ public class VoiceHelper
     answerUrl  = config.get("cti.vonage.answer_url", "");
     eventUrl   = config.get("cti.vonage.event_url", "");
 
+    log.debug("[CTI] callCustomer: from={}, answerUrl={}, eventUrl={}, operatoreId={}, contattoId={}",
+              fromNumber, answerUrl, eventUrl, operatoreId, contattoId);
+
     conversationAction = ConversationAction.builder(conversationName).build();
     call = new Call(customerNumber, fromNumber, List.of(conversationAction));
 
@@ -254,7 +256,7 @@ public class VoiceHelper
 
   /**
    * Processa un evento Vonage Voice e aggiorna il record corrispondente
-   * in {@code jms_chiamate}.
+   * in {@code jms_cti_chiamate}.
    *
    * <p>Gestisce i seguenti stati:
    * <ul>
@@ -302,7 +304,10 @@ public class VoiceHelper
     network     = DB.toString(body.get("network"));
     fromUser    = DB.toString(body.get("from_user"));
 
+    log.debug("[CTI] processEvent body: {}", body);
+
     if (uuid == null || uuid.isBlank() || status == null || status.isBlank()) {
+      log.debug("[CTI] processEvent: evento ignorato (uuid o status assente) body={}", body);
       return;
     }
 
@@ -353,7 +358,10 @@ public class VoiceHelper
             || "busy".equals(status)      || "timeout".equals(status)
             || "cancelled".equals(status) || "unanswered".equals(status)
             || "machine".equals(status)) {
+      log.warn("[CTI] processEvent: chiamata non risposta uuid={} status={}", uuid, status);
       dao.updateStatus(uuid, status);
+    } else {
+      log.debug("[CTI] processEvent: status non gestito uuid={} status={}", uuid, status);
     }
   }
 

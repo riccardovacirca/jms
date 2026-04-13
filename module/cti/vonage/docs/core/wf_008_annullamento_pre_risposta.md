@@ -31,6 +31,25 @@ L'operatore riagganica mentre la chiamata al cliente è stata avviata ma il clie
    c. `terminateCall(customerUuid)`
 3. Vonage notifica eventi di chiusura per entrambe le legs
 
+```mermaid
+sequenceDiagram
+    participant Op as Browser/Operatore
+    participant Bar as Bar
+    participant HangupH as CallHandler.hangup (async)
+    participant Helper as VoiceHelper
+    participant Vonage as Vonage Platform
+
+    Op->>Bar: click Riaggancia (stato: waiting_customer)
+    Bar->>HangupH: PUT /api/cti/vonage/call/{uuid}/hangup
+    HangupH->>Helper: hangupCall(operatorUuid)
+    Helper->>Vonage: terminateCall(operatorUuid)
+    Helper->>Helper: customerUuid = outgoingCalls.remove(operatorUuid) → trovato
+    Helper->>Vonage: terminateCall(customerUuid)
+    HangupH-->>Bar: {err: false}
+    Vonage->>Bar: evento SDK callHangup
+    Bar->>Bar: callState = {active:false, status:'idle'}
+```
+
 ### Flusso alternativo — Race condition: hangup prima del customerUuid
 
 1. Operatore clicca riaggiancio durante `Thread.sleep(1000)` o mentre `callCustomer` chiama Vonage
@@ -43,19 +62,6 @@ L'operatore riagganica mentre la chiamata al cliente è stata avviata ma il clie
    b. `terminateCall(customerUuid)` → termina immediatamente la chiamata cliente
    c. La riga viene comunque inserita in `jms_chiamate` (stato: started ma chiuso subito)
 
----
-
-### Postcondizioni
-
-* Entrambe le legs terminate
-* `outgoingCalls` pulita
-* `cancelledOperators` pulita
-* Frontend: `callState = idle` (via evento SDK `callHangup`)
-
----
-
-### Diagramma di sequenza
-
 ```mermaid
 sequenceDiagram
     participant Op as Browser/Operatore
@@ -65,10 +71,8 @@ sequenceDiagram
     participant AnswerT as Thread callCustomer (async)
     participant Vonage as Vonage Platform
 
-    %% Race condition: hangup arriva prima del customerUuid
     Note over AnswerT: callCustomer in esecuzione (sleep o API Vonage)
-
-    Op->>Bar: click Riagganica (stato: waiting_customer)
+    Op->>Bar: click Riaggancia (stato: waiting_customer)
     Bar->>HangupH: PUT /api/cti/vonage/call/{uuid}/hangup
     HangupH->>Helper: hangupCall(operatorUuid)
     Helper->>Vonage: terminateCall(operatorUuid)
@@ -85,3 +89,12 @@ sequenceDiagram
     Vonage->>Bar: evento SDK callHangup
     Bar->>Bar: callState = {active:false, status:'idle'}
 ```
+
+---
+
+### Postcondizioni
+
+* Entrambe le legs terminate
+* `outgoingCalls` pulita
+* `cancelledOperators` pulita
+* Frontend: `callState = idle` (via evento SDK `callHangup`)

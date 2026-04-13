@@ -2,8 +2,11 @@ package dev.jms.app.module.cti.vonage.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jms.app.module.cti.vonage.dao.CallDAO;
+import dev.jms.app.module.cti.vonage.dao.CodaContattiDAO;
 import dev.jms.app.module.cti.vonage.dao.OperatorDAO;
+import dev.jms.app.module.cti.vonage.dao.OperatoreContattiDAO;
 import dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO;
+import dev.jms.app.module.cti.vonage.dto.OperatoreContattoDTO;
 import dev.jms.app.module.cti.vonage.dto.OperatorDTO;
 import dev.jms.app.module.cti.vonage.dto.SessioneOperatoreDTO;
 import dev.jms.app.module.cti.vonage.helper.VoiceHelper;
@@ -40,11 +43,16 @@ public class CallHandler
   }
 
   /**
-   * POST /api/cti/vonage/sdk/auth — assegna un operatore e genera il JWT SDK.
+   * POST /api/cti/vonage/sdk/auth — genera il JWT SDK per l'operatore permanentemente
+   * assegnato all'account corrente.
    *
-   * <p>Assegna dinamicamente un operatore libero dalla tabella {@code cti_operatori}
-   * via claim atomico. Se l'account ha già un operatore assegnato lo restituisce
-   * direttamente (idempotente).</p>
+   * <p>Solo gli utenti con un operatore CTI permanentemente associato (colonna
+   * {@code account_id} in {@code jms_cti_operatori}) possono connettersi.
+   * Se non esiste un'associazione restituisce {@code err: true} con messaggio
+   * "Utente non abilitato come operatore CTI".</p>
+   *
+   * <p>Il claim di sessione è idempotente: chiamate successive rinnovano
+   * il TTL senza creare duplicati.</p>
    *
    * <p>Risposta: {@code {"token": "<JWT RS256>"}}.</p>
    */
@@ -59,42 +67,68 @@ public class CallHandler
     SessioneOperatoreDAO sessioneDao;
     SessioneOperatoreDTO sessione;
     long sessioneId;
+    OperatoreContattiDAO opCodaDao;
+    CodaContattiDAO codaDao;
+    List<OperatoreContattoDTO> orphans;
 
     session.require(Role.USER, Permission.READ);
     accountId = (int) session.sub();
-    userId = null;
     dao = new OperatorDAO(db);
-    operator = dao.claimOrRenew(accountId);
+    operator = dao.findByAccountId(accountId);
 
-    if (operator != null) {
-      userId = operator.vonageUserId();
-    }
-
-    if (userId == null || userId.isBlank()) {
+    if (operator == null) {
       res.status(200)
          .contentType("application/json")
          .err(true)
-         .log("Nessun operatore CTI disponibile")
+         .log("Utente non abilitato come operatore CTI")
          .out(null)
          .send();
     } else {
-      sessioneDao = new SessioneOperatoreDAO(db);
-      sessione = sessioneDao.findActive(operator.id());
-      if (sessione != null) {
-        sessioneId = sessione.id();
-      } else {
-        sessioneId = sessioneDao.openSession(operator.id(), accountId);
+      opCodaDao = new OperatoreContattiDAO(db);
+      orphans   = opCodaDao.findOrphans(operator.id());
+      if (!orphans.isEmpty()) {
+        codaDao = new CodaContattiDAO(db);
+        db.begin();
+        try {
+          for (OperatoreContattoDTO orphan : orphans) {
+            codaDao.insert(orphan.contattoJson());
+            opCodaDao.rimuoviById(orphan.id());
+          }
+          db.commit();
+        } catch (Exception e) {
+          try { db.rollback(); } catch (Exception ignored) {}
+          throw e;
+        }
+        log.info("[CTI] sdkToken: {} orfani reaccodati per operatore {} prima della connessione", orphans.size(), operator.id());
       }
-      sessioneDao.registraConnessione(sessioneId, accountId);
-      sdkToken = voiceHelper.generateSdkJwt(userId);
-      out = new HashMap<>();
-      out.put("token", sdkToken);
-      res.status(200)
-         .contentType("application/json")
-         .err(false)
-         .log(null)
-         .out(out)
-         .send();
+      operator = dao.claimOrRenewAssigned(accountId, operator.id());
+      userId = operator != null ? operator.vonageUserId() : null;
+      if (userId == null || userId.isBlank()) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Operatore CTI non disponibile")
+           .out(null)
+           .send();
+      } else {
+        sessioneDao = new SessioneOperatoreDAO(db);
+        sessione = sessioneDao.findActive(operator.id());
+        if (sessione != null) {
+          sessioneId = sessione.id();
+        } else {
+          sessioneId = sessioneDao.openSession(operator.id(), accountId);
+        }
+        sessioneDao.registraConnessione(sessioneId, accountId);
+        sdkToken = voiceHelper.generateSdkJwt(userId);
+        out = new HashMap<>();
+        out.put("token", sdkToken);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(out)
+           .send();
+      }
     }
   }
 
@@ -111,6 +145,9 @@ public class CallHandler
     SessioneOperatoreDAO sessioneDao;
     SessioneOperatoreDTO sessione;
     int durataPausa;
+    OperatoreContattiDAO opCodaDao;
+    CodaContattiDAO codaDao;
+    List<OperatoreContattoDTO> orphans;
 
     if (session.isAuthenticated()) {
       accountId = (int) session.sub();
@@ -126,6 +163,24 @@ public class CallHandler
                     sessione.ultimaConnessione(), java.time.LocalDateTime.now()).getSeconds()
                 : 0;
             sessioneDao.registraPausa(sessione.id(), durataPausa, accountId);
+          }
+
+          opCodaDao = new OperatoreContattiDAO(db);
+          orphans   = opCodaDao.findOrphans(operator.id());
+          if (!orphans.isEmpty()) {
+            codaDao = new CodaContattiDAO(db);
+            db.begin();
+            try {
+              for (OperatoreContattoDTO orphan : orphans) {
+                codaDao.insert(orphan.contattoJson());
+                opCodaDao.rimuoviById(orphan.id());
+              }
+              db.commit();
+            } catch (Exception e) {
+              try { db.rollback(); } catch (Exception ignored) {}
+              throw e;
+            }
+            log.info("[CTI] releaseSession: {} orfani reaccodati per operatore {}", orphans.size(), operator.id());
           }
         }
         dao.releaseSession(accountId);
@@ -178,9 +233,13 @@ public class CallHandler
     String callbackUrl;
 
     body = req.body();
+    log.debug("[CTI] answer: body={}", body);
+
     fromUser = DB.toString(body.get("from_user"));
     operatorUuid = DB.toString(body.get("uuid"));
     customDataStr = DB.toString(body.get("custom_data"));
+    log.debug("[CTI] answer: custom_data grezzo={}", customDataStr);
+
     customerNumber = null;
     contattoId = null;
     callbackUrl = null;
@@ -213,6 +272,7 @@ public class CallHandler
 
     log.info("[CTI] answer: fromUser={}, operatoreId={}, operatorUuid={}, customerNumber={}",
              fromUser, operatoreId, operatorUuid, customerNumber);
+    log.debug("[CTI] answer: NCCO={}", nccoJson);
 
     res.status(200)
        .contentType("application/json")
@@ -263,7 +323,7 @@ public class CallHandler
   /**
    * POST /api/cti/vonage/event — webhook Vonage (event URL).
    * <p>
-   * Riceve eventi Voice e RTC da Vonage. Aggiorna {@code jms_chiamate} in base
+   * Riceve eventi Voice e RTC da Vonage. Aggiorna {@code jms_cti_chiamate} in base
    * allo stato ricevuto (answered, completed, errori).
    * Non richiede autenticazione: è un endpoint webhook raggiungibile solo da Vonage.
    * </p>

@@ -141,7 +141,7 @@ app_start() {
 
     info "Starting Java server in background..."
     cd "$WORKSPACE"
-    nohup java -jar "$APP_JAR" > "$APP_LOG_FILE" 2>&1 &
+    nohup java -jar "$APP_JAR" > /dev/null 2>&1 &
     echo $! > "$APP_PID_FILE"
 
     sleep 1
@@ -249,7 +249,7 @@ _app_run_common() {
     _dev_start() {
         printf '\n=== %s restart ===\n' "$(date '+%H:%M:%S')" >> "$DEV_LOG"
         local CP="$WORKSPACE/target/classes:$(cat "$DEV_CP_FILE")"
-        java $JAVA_DEBUG_OPTS -cp "$CP" dev.jms.app.App >> "$DEV_LOG" 2>&1 &
+        java $JAVA_DEBUG_OPTS -cp "$CP" dev.jms.app.App > /dev/null 2>&1 &
         DEV_PID=$!
         echo "$DEV_PID" > "$APP_PID_FILE"
         sleep 1
@@ -1674,6 +1674,14 @@ module_export() {
 
     [ "$HAS_MIGRATIONS" = true ] || warn "[module] Nessuna migration trovata per il modulo '$MODULE_NAME'"
 
+    # CLI scripts
+    local SRC_CLI_DIR="$WORKSPACE/jms/module/$MODULE_KEY/cli"
+    if [ -d "$SRC_CLI_DIR" ]; then
+        info "[module] Copio script CLI..."
+        mkdir -p "$OUTPUT/cli"
+        cp -r "$SRC_CLI_DIR/." "$OUTPUT/cli/"
+    fi
+
     # Maven profile extraction (il marker usa key con / sostituito da -)
     local PROFILE_MARKER="${MODULE_KEY//\//-}"
     local POM="$WORKSPACE/pom.xml"
@@ -1843,12 +1851,18 @@ try:
 except Exception:
     cfg = None
 
+import os
+install_script  = 'cli/setup.sh'  if os.path.isfile('$OUTPUT/cli/setup.sh')  else None
+uninstall_script = 'cli/remove.sh' if os.path.isfile('$OUTPUT/cli/remove.sh') else None
+
 module_data = {
     'name': '$MODULE_NAME',
     'version': '${VERSION:-dev}',
     'dependencies': deps,
     'api': api,
     'gui': {'config': cfg},
+    'install_script': install_script,
+    'uninstall_script': uninstall_script,
     'install_notice': notice.strip() if notice.strip() else None
 }
 with open('$OUTPUT/module.json', 'w') as f:

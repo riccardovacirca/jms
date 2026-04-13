@@ -24,6 +24,6 @@
             "init": true
         }
     },
-    "install_script": "install.sh",
+    "install_script": "cli/setup.sh",
     "install_notice": "Lo script di post-install crea automaticamente gli account root, admin e operator con password di default. Cambiare le password dopo la prima installazione."
 }

@@ -28,8 +28,8 @@ public class ListaDAO
 
     sql =
       "SELECT l.*, COUNT(lc.contatto_id) AS contatti_count " +
-      "FROM jms_liste l " +
-      "LEFT JOIN jms_lista_contatti lc ON lc.lista_id = l.id " +
+      "FROM jms_crm_liste l " +
+      "LEFT JOIN jms_crm_lista_contatti lc ON lc.lista_id = l.id " +
       "WHERE l.deleted_at IS NULL " +
       "GROUP BY l.id " +
       "ORDER BY l.nome " +
@@ -44,7 +44,7 @@ public class ListaDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM jms_liste WHERE deleted_at IS NULL";
+    sql = "SELECT COUNT(*) AS n FROM jms_crm_liste WHERE deleted_at IS NULL";
     rows = db.select(sql);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -57,8 +57,8 @@ public class ListaDAO
 
     sql =
       "SELECT l.*, COUNT(lc.contatto_id) AS contatti_count " +
-      "FROM jms_liste l " +
-      "LEFT JOIN jms_lista_contatti lc ON lc.lista_id = l.id " +
+      "FROM jms_crm_liste l " +
+      "LEFT JOIN jms_crm_lista_contatti lc ON lc.lista_id = l.id " +
       "WHERE l.id = ? AND l.deleted_at IS NULL " +
       "GROUP BY l.id";
     rows = db.select(sql, id);
@@ -74,7 +74,7 @@ public class ListaDAO
 
     scadenza = l.scadenza() != null && !l.scadenza().isBlank() ? java.sql.Date.valueOf(l.scadenza()) : null;
     sql =
-      "INSERT INTO jms_liste (nome, descrizione, consenso, stato, scadenza) " +
+      "INSERT INTO jms_crm_liste (nome, descrizione, consenso, stato, scadenza) " +
       "VALUES (?, ?, ?, ?, ?) " +
       "RETURNING id";
     rows = db.select(sql, l.nome(), l.descrizione(), l.consenso(), l.stato(), scadenza);
@@ -88,7 +88,7 @@ public class ListaDAO
     Object scadenza;
 
     scadenza = l.scadenza() != null && !l.scadenza().isBlank() ? java.sql.Date.valueOf(l.scadenza()) : null;
-    sql = "UPDATE jms_liste SET nome = ?, descrizione = ?, consenso = ?, stato = ?, scadenza = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_crm_liste SET nome = ?, descrizione = ?, consenso = ?, stato = ?, scadenza = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, l.nome(), l.descrizione(), l.consenso(), l.stato(), scadenza, l.id());
   }
 
@@ -97,7 +97,7 @@ public class ListaDAO
   {
     String sql;
 
-    sql = "UPDATE jms_liste SET deleted_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_crm_liste SET deleted_at = NOW() WHERE id = ?";
     db.query(sql, id);
   }
 
@@ -106,7 +106,7 @@ public class ListaDAO
   {
     String sql;
 
-    sql = "UPDATE jms_liste SET stato = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_crm_liste SET stato = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, stato, id);
   }
 
@@ -117,7 +117,7 @@ public class ListaDAO
     Object scadenzaVal;
 
     scadenzaVal = scadenza != null && !scadenza.isBlank() ? java.sql.Date.valueOf(scadenza) : null;
-    sql = "UPDATE jms_liste SET scadenza = ?, updated_at = NOW() WHERE id = ?";
+    sql = "UPDATE jms_crm_liste SET scadenza = ?, updated_at = NOW() WHERE id = ?";
     db.query(sql, scadenzaVal, id);
   }
 
@@ -128,10 +128,10 @@ public class ListaDAO
     ArrayList<HashMap<String, Object>> rows;
 
     if (excludeId != null) {
-      sql = "SELECT COUNT(*) AS n FROM jms_liste WHERE nome = ? AND id != ? AND deleted_at IS NULL";
+      sql = "SELECT COUNT(*) AS n FROM jms_crm_liste WHERE nome = ? AND id != ? AND deleted_at IS NULL";
       rows = db.select(sql, nome, excludeId);
     } else {
-      sql = "SELECT COUNT(*) AS n FROM jms_liste WHERE nome = ? AND deleted_at IS NULL";
+      sql = "SELECT COUNT(*) AS n FROM jms_crm_liste WHERE nome = ? AND deleted_at IS NULL";
       rows = db.select(sql, nome);
     }
     return DB.toInteger(rows.get(0).get("n")) > 0;
@@ -150,8 +150,8 @@ public class ListaDAO
     sql =
       "SELECT lc.id, lc.lista_id, lc.contatto_id, lc.created_at, " +
       "       c.nome, c.cognome, c.telefono " +
-      "FROM jms_lista_contatti lc " +
-      "JOIN jms_contatti c ON c.id = lc.contatto_id " +
+      "FROM jms_crm_lista_contatti lc " +
+      "JOIN jms_crm_contatti c ON c.id = lc.contatto_id " +
       "WHERE lc.lista_id = ? " +
       "ORDER BY c.cognome, c.nome " +
       "LIMIT ? OFFSET ?";
@@ -165,7 +165,7 @@ public class ListaDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM jms_lista_contatti WHERE lista_id = ?";
+    sql = "SELECT COUNT(*) AS n FROM jms_crm_lista_contatti WHERE lista_id = ?";
     rows = db.select(sql, listaId);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -175,7 +175,7 @@ public class ListaDAO
   {
     String sql;
 
-    sql = "INSERT INTO jms_lista_contatti (lista_id, contatto_id) VALUES (?, ?) ON CONFLICT DO NOTHING";
+    sql = "INSERT INTO jms_crm_lista_contatti (lista_id, contatto_id) VALUES (?, ?) ON CONFLICT DO NOTHING";
     db.query(sql, listaId, contattoId);
   }
 
@@ -184,7 +184,7 @@ public class ListaDAO
   {
     String sql;
 
-    sql = "DELETE FROM jms_lista_contatti WHERE lista_id = ? AND contatto_id = ?";
+    sql = "DELETE FROM jms_crm_lista_contatti WHERE lista_id = ? AND contatto_id = ?";
     db.query(sql, listaId, contattoId);
   }
 

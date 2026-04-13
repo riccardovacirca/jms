@@ -4,7 +4,7 @@
 
 ### Obiettivo
 
-L'operatore conferma la chiamata dal dialog. Il frontend esegue `client.serverCall()` via Vonage Client SDK, che triggerizza il webhook `POST /api/cti/vonage/answer`. Il backend risponde immediatamente con l'NCCO per l'operatore (musica di attesa), poi su thread asincrono chiama il cliente tramite Vonage Voice API e persiste il record in `jms_chiamate`.
+L'operatore conferma la chiamata dal dialog. Il frontend esegue `client.serverCall()` via Vonage Client SDK, che triggera il webhook `POST /api/cti/vonage/answer`. Il backend risponde immediatamente con l'NCCO per l'operatore (musica di attesa), poi su thread asincrono chiama il cliente tramite Vonage Voice API e persiste il record in `jms_chiamate`.
 
 ### Attori
 

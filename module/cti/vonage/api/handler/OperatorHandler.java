@@ -44,16 +44,14 @@ public class OperatorHandler
    *
    * <p>Richiede autenticazione con ruolo ADMIN.</p>
    *
-   * <p>Body JSON: {@code {"name": "operatore_01", "displayName": "Operatore 01"}}
-   * — {@code displayName} è opzionale.</p>
+   * <p>Body JSON: {@code {"name": "operatore_01"}}.</p>
    *
-   * <p>Risposta: {@code {"vonageUserId": "...", "nome": "...", "attivo": true}}.</p>
+   * <p>Risposta: {@code {"vonageUserId": "...", "attivo": true}}.</p>
    */
   public void create(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     HashMap<String, Object> body;
     String name;
-    String displayName;
     String vonageUserId;
     OperatorDAO operatorDao;
     HashMap<String, Object> out;
@@ -61,16 +59,14 @@ public class OperatorHandler
     session.require(Role.ADMIN, Permission.WRITE);
     body = req.body();
     name = DB.toString(body.get("name"));
-    displayName = DB.toString(body.get("displayName"));
 
     try {
       Validator.required(name, "name");
-      vonageUserId = voiceHelper.createVonageUser(name, displayName);
+      vonageUserId = voiceHelper.createVonageUser(name, null);
       operatorDao = new OperatorDAO(db);
-      operatorDao.insert(vonageUserId, displayName);
+      operatorDao.insert(vonageUserId);
       out = new HashMap<>();
       out.put("vonageUserId", vonageUserId);
-      out.put("nome", displayName);
       out.put("attivo", true);
       res.status(200)
          .contentType("application/json")
@@ -90,29 +86,152 @@ public class OperatorHandler
   }
 
   /**
-   * GET /api/cti/vonage/admin/operator — lista tutti gli operatori registrati localmente.
+   * GET /api/cti/vonage/admin/operator — lista tutti gli operatori con lo username
+   * dell'account associato.
    *
    * <p>Richiede autenticazione con ruolo ADMIN.</p>
    */
   public void list(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
-    List<OperatorDTO> operators;
     List<HashMap<String, Object>> out;
     OperatorDAO dao;
 
     session.require(Role.ADMIN, Permission.READ);
     dao = new OperatorDAO(db);
-    operators = dao.findAll();
-    out = new ArrayList<>();
-    for (OperatorDTO op : operators) {
-      out.add(toMap(op));
-    }
+    out = dao.findAllForAdmin();
     res.status(200)
        .contentType("application/json")
        .err(false)
        .log(null)
        .out(out)
        .send();
+  }
+
+  /**
+   * GET /api/cti/vonage/admin/accounts — lista gli account utente disponibili
+   * per l'assegnazione a un operatore CTI.
+   *
+   * <p>Esclude gli account già assegnati ad altri operatori. Se il parametro
+   * {@code operatorId} è presente, l'account attualmente assegnato a quell'operatore
+   * viene incluso (per consentire la riassegnazione o la conferma).</p>
+   *
+   * <p>Richiede autenticazione con ruolo ADMIN.</p>
+   *
+   * <p>Query param opzionale: {@code operatorId} — id dell'operatore a cui si sta assegnando.</p>
+   */
+  public void accounts(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    String operatorIdParam;
+    String sql;
+    List<HashMap<String, Object>> rows;
+
+    session.require(Role.ADMIN, Permission.READ);
+    operatorIdParam = req.queryParam("operatorId");
+    if (operatorIdParam != null && !operatorIdParam.isBlank()) {
+      sql = "SELECT a.id, a.username FROM jms_user_accounts a "
+          + "WHERE a.id NOT IN ("
+          + "  SELECT account_id FROM jms_cti_operatori "
+          + "  WHERE account_id IS NOT NULL AND id != ?"
+          + ") ORDER BY a.username";
+      rows = db.select(sql, Long.parseLong(operatorIdParam));
+    } else {
+      sql = "SELECT a.id, a.username FROM jms_user_accounts a "
+          + "WHERE a.id NOT IN ("
+          + "  SELECT account_id FROM jms_cti_operatori WHERE account_id IS NOT NULL"
+          + ") ORDER BY a.username";
+      rows = db.select(sql);
+    }
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(rows)
+       .send();
+  }
+
+  /**
+   * PUT /api/cti/vonage/admin/operator/{id}/account — assegna un account utente
+   * all'operatore come associazione permanente.
+   *
+   * <p>Richiede autenticazione con ruolo ADMIN.</p>
+   * <p>Body JSON: {@code {"accountId": 123}}.</p>
+   */
+  public void assignAccount(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    long operatoreId;
+    HashMap<String, Object> body;
+    Integer accountId;
+    OperatorDAO dao;
+    OperatorDTO op;
+
+    session.require(Role.ADMIN, Permission.WRITE);
+    operatoreId = Long.parseLong(req.urlArgs().get("id"));
+    body = req.body();
+    accountId = DB.toInteger(body.get("accountId"));
+
+    if (accountId == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("accountId obbligatorio")
+         .out(null)
+         .send();
+    } else {
+      dao = new OperatorDAO(db);
+      op = dao.findById(operatoreId);
+      if (op == null) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Operatore non trovato")
+           .out(null)
+           .send();
+      } else {
+        dao.assignAccount(operatoreId, accountId);
+        log.info("[CTI] assignAccount: operatoreId={}, accountId={}", operatoreId, accountId);
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(null)
+           .send();
+      }
+    }
+  }
+
+  /**
+   * DELETE /api/cti/vonage/admin/operator/{id}/account — rimuove l'associazione
+   * permanente tra account utente e operatore.
+   *
+   * <p>Richiede autenticazione con ruolo ADMIN.</p>
+   */
+  public void unassignAccount(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    long operatoreId;
+    OperatorDAO dao;
+    OperatorDTO op;
+
+    session.require(Role.ADMIN, Permission.WRITE);
+    operatoreId = Long.parseLong(req.urlArgs().get("id"));
+    dao = new OperatorDAO(db);
+    op = dao.findById(operatoreId);
+    if (op == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Operatore non trovato")
+         .out(null)
+         .send();
+    } else {
+      dao.assignAccount(operatoreId, null);
+      log.info("[CTI] unassignAccount: operatoreId={}", operatoreId);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
+    }
   }
 
   /**
@@ -148,16 +267,15 @@ public class OperatorHandler
   }
 
   /**
-   * PUT /api/cti/vonage/admin/operator/{id} — aggiorna nome e stato attivo di un operatore.
+   * PUT /api/cti/vonage/admin/operator/{id} — aggiorna lo stato attivo di un operatore.
    *
    * <p>Richiede autenticazione con ruolo ADMIN.</p>
-   * <p>Body JSON: {@code {"nome": "...", "attivo": true|false}}.</p>
+   * <p>Body JSON: {@code {"attivo": true|false}}.</p>
    */
   public void update(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
   {
     long id;
     HashMap<String, Object> body;
-    String nome;
     Boolean attivo;
     OperatorDAO dao;
     OperatorDTO op;
@@ -175,9 +293,8 @@ public class OperatorHandler
          .send();
     } else {
       body = req.body();
-      nome = body.containsKey("nome") ? DB.toString(body.get("nome")) : op.nome();
       attivo = body.containsKey("attivo") ? DB.toBoolean(body.get("attivo")) : op.attivo();
-      dao.update(id, nome, attivo);
+      dao.update(id, attivo);
       op = dao.findById(id);
       res.status(200)
          .contentType("application/json")
@@ -240,7 +357,6 @@ public class OperatorHandler
     OperatorDAO dao;
     List<HashMap<String, Object>> created;
     String name;
-    String displayName;
     OperatorDTO existing;
     long newId;
     HashMap<String, Object> entry;
@@ -251,14 +367,12 @@ public class OperatorHandler
     created = new ArrayList<>();
     for (HashMap<String, Object> u : vonageUsers) {
       name = DB.toString(u.get("name"));
-      displayName = DB.toString(u.get("displayName"));
       existing = dao.findByVonageUserId(name);
       if (existing == null) {
-        newId = dao.insert(name, displayName);
+        newId = dao.insert(name);
         entry = new HashMap<>();
         entry.put("id", newId);
         entry.put("vonageUserId", name);
-        entry.put("nome", displayName);
         entry.put("attivo", true);
         created.add(entry);
         log.info("[CTI] syncOperators: creato operatore locale vonageUserId={}", name);
@@ -286,7 +400,6 @@ public class OperatorHandler
     m.put("id", op.id());
     m.put("vonageUserId", op.vonageUserId());
     m.put("accountId", op.accountId());
-    m.put("nome", op.nome());
     m.put("attivo", op.attivo());
     return m;
   }

@@ -205,8 +205,10 @@ public class DB
   {
     Connection c;
     c = requireConnection();
-    c.rollback();
-    c.setAutoCommit(true);
+    if (!c.getAutoCommit()) {
+      c.rollback();
+      c.setAutoCommit(true);
+    }
   }
 
   // =========================

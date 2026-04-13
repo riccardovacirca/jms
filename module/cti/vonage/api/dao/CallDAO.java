@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * DAO per la persistenza delle chiamate Vonage.
- * Accede alla tabella jms_chiamate tramite il wrapper JDBC {@link DB}.
+ * Accede alla tabella jms_cti_chiamate tramite il wrapper JDBC {@link DB}.
  */
 public class CallDAO
 {
@@ -33,7 +33,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "INSERT INTO jms_chiamate "
+    sql = "INSERT INTO jms_cti_chiamate "
         + "(uuid, conversazione_uuid, direzione, stato, "
         + "tipo_mittente, numero_mittente, tipo_destinatario, numero_destinatario, "
         + "answer_url, event_url, operatore_id, chiamante_account_id, contatto_id, callback_url, data_creazione) "
@@ -59,7 +59,7 @@ public class CallDAO
     ArrayList<HashMap<String, Object>> rows;
     List<CallDTO> result;
 
-    sql = "SELECT * FROM jms_chiamate ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
+    sql = "SELECT * FROM jms_cti_chiamate ORDER BY data_creazione DESC LIMIT ? OFFSET ?";
     rows = db.select(sql, size, (page - 1) * size);
     result = new ArrayList<>();
     for (HashMap<String, Object> r : rows) {
@@ -78,7 +78,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM jms_chiamate";
+    sql = "SELECT COUNT(*) AS n FROM jms_cti_chiamate";
     rows = db.select(sql);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -93,7 +93,7 @@ public class CallDAO
   {
     String sql;
 
-    sql = "UPDATE jms_chiamate SET stato = ?, data_aggiornamento = NOW() WHERE uuid = ?";
+    sql = "UPDATE jms_cti_chiamate SET stato = ?, data_aggiornamento = NOW() WHERE uuid = ?";
     db.query(sql, stato, uuid);
   }
 
@@ -108,7 +108,7 @@ public class CallDAO
   {
     String sql;
 
-    sql = "UPDATE jms_chiamate SET stato = 'answered', ora_inizio = ?, "
+    sql = "UPDATE jms_cti_chiamate SET stato = 'answered', ora_inizio = ?, "
         + "data_aggiornamento = NOW() WHERE uuid = ?";
     db.query(sql, oraInizio, uuid);
   }
@@ -136,7 +136,7 @@ public class CallDAO
   {
     String sql;
 
-    sql = "UPDATE jms_chiamate SET stato = 'completed', "
+    sql = "UPDATE jms_cti_chiamate SET stato = 'completed', "
         + "ora_inizio = COALESCE(ora_inizio, ?), ora_fine = ?, "
         + "durata = ?, tariffa = ?, costo = ?, rete = ?, "
         + "data_aggiornamento = NOW() WHERE uuid = ?";
@@ -164,7 +164,7 @@ public class CallDAO
     sql = "SELECT c.id, c.uuid, c.stato, c.numero_mittente, c.numero_destinatario, "
         + "c.durata, c.tariffa, c.costo, c.ora_inizio, c.ora_fine, "
         + "c.data_creazione, c.errore_titolo, o.nome AS operatore_nome "
-        + "FROM jms_chiamate c "
+        + "FROM jms_cti_chiamate c "
         + "LEFT JOIN jms_cti_operatori o ON o.id = c.operatore_id "
         + "ORDER BY c.data_creazione DESC LIMIT ? OFFSET ?";
     return db.select(sql, size, (page - 1) * size);
@@ -185,7 +185,7 @@ public class CallDAO
     sql = "SELECT c.id, c.uuid, c.stato, c.numero_mittente, c.numero_destinatario, "
         + "c.durata, c.tariffa, c.costo, c.ora_inizio, c.ora_fine, "
         + "c.data_creazione, c.errore_titolo, o.nome AS operatore_nome "
-        + "FROM jms_chiamate c "
+        + "FROM jms_cti_chiamate c "
         + "LEFT JOIN jms_cti_operatori o ON o.id = c.operatore_id "
         + "WHERE c.chiamante_account_id = ? "
         + "ORDER BY c.data_creazione DESC LIMIT ? OFFSET ?";
@@ -202,7 +202,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT COUNT(*) AS n FROM jms_chiamate WHERE chiamante_account_id = ?";
+    sql = "SELECT COUNT(*) AS n FROM jms_cti_chiamate WHERE chiamante_account_id = ?";
     rows = db.select(sql, accountId);
     return DB.toInteger(rows.get(0).get("n"));
   }
@@ -218,7 +218,7 @@ public class CallDAO
     String sql;
     ArrayList<HashMap<String, Object>> rows;
 
-    sql = "SELECT * FROM jms_chiamate WHERE uuid = ?";
+    sql = "SELECT * FROM jms_cti_chiamate WHERE uuid = ?";
     rows = db.select(sql, uuid);
     if (rows.isEmpty()) {
       return null;

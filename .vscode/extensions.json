@@ -3,6 +3,8 @@
     "vscjava.vscode-java-pack",
     "firefox-devtools.vscode-firefox-debug",
     "echoapi.echoapi-for-vscode",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
     "mermaid.mermaidchart"
   ]
 }

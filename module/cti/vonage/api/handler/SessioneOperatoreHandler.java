@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * Handler per la lettura delle sessioni tecniche CTI ({@code jms_sessione_operatore}).
+ * Handler per la lettura delle sessioni tecniche CTI ({@code jms_cti_sessione_operatore}).
  *
  * <p>Le sessioni vengono aperte automaticamente all'accesso CTI dell'operatore.
  * La pianificazione dei turni è gestita dal modulo CRM.</p>

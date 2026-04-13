@@ -375,7 +375,7 @@ public class AccountHandler
     Validator.required(password, "password");
     Validator.required(email,    "email");
 
-    sql      = "SELECT id FROM jms_accounts WHERE username = ?";
+    sql      = "SELECT id FROM jms_user_accounts WHERE username = ?";
     existing = db.select(sql, ROOT_USERNAME);
 
     if (!existing.isEmpty()) {
@@ -385,7 +385,7 @@ public class AccountHandler
     }
 
     passwordHash = Auth.hashPassword(password);
-    sql          = "INSERT INTO jms_accounts (username, email, password_hash, ruolo, must_change_password) " +
+    sql          = "INSERT INTO jms_user_accounts (username, email, password_hash, ruolo, must_change_password) " +
                    "VALUES (?, ?, ?, 'root', false)";
     rows         = db.query(sql, ROOT_USERNAME, email, passwordHash);
 

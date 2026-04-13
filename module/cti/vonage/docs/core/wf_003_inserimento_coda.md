@@ -27,6 +27,20 @@ Caricare uno o più contatti da chiamare nella coda condivisa `jms_cti_coda_chia
 4. `CodaChiamateDAO.insert(contattoJson, priorita)` inserisce il record con `stato = 'pending'`
 5. Risposta: `{id: <id generato>}`
 
+```mermaid
+sequenceDiagram
+    participant Client as Browser/CRM
+    participant Handler as QueueHandler
+    participant DAO as CodaChiamateDAO
+
+    Client->>Handler: POST /api/cti/vonage/queue {contattoJson, priorita}
+    Handler->>Handler: session.require(USER, WRITE)
+    Handler->>Handler: Validator.required(contattoJson)
+    Handler->>DAO: insert(contattoJson, priorita)
+    DAO-->>Handler: id
+    Handler-->>Client: {id}
+```
+
 ### Flusso alternativo — Inserimento massivo
 
 1. Client invia `POST /api/cti/vonage/queue/bulk` con `{contatti: string[], priorita?: number}`
@@ -35,32 +49,12 @@ Caricare uno o più contatti da chiamare nella coda condivisa `jms_cti_coda_chia
 4. `CodaChiamateDAO.insertBulk(contatti, priorita)` inserisce tutti i record in un'unica operazione
 5. Risposta: `{count: <numero inseriti>}`
 
----
-
-### Postcondizioni
-
-* Contatti presenti in `jms_cti_coda_chiamate` con `stato = 'pending'`
-* Disponibili per estrazione tramite WF-CTI-004
-
----
-
-### Diagramma di sequenza
-
 ```mermaid
 sequenceDiagram
     participant Client as Browser/CRM
     participant Handler as QueueHandler
     participant DAO as CodaChiamateDAO
 
-    %% Singolo
-    Client->>Handler: POST /api/cti/vonage/queue {contattoJson, priorita}
-    Handler->>Handler: session.require(USER, WRITE)
-    Handler->>Handler: Validator.required(contattoJson)
-    Handler->>DAO: insert(contattoJson, priorita)
-    DAO-->>Handler: id
-    Handler-->>Client: {id}
-
-    %% Massivo
     Client->>Handler: POST /api/cti/vonage/queue/bulk {contatti[], priorita}
     Handler->>Handler: session.require(USER, WRITE)
     Handler->>Handler: valida lista non vuota
@@ -68,3 +62,10 @@ sequenceDiagram
     DAO-->>Handler: count
     Handler-->>Client: {count}
 ```
+
+---
+
+### Postcondizioni
+
+* Contatti presenti in `jms_cti_coda_chiamate` con `stato = 'pending'`
+* Disponibili per estrazione tramite WF-CTI-004

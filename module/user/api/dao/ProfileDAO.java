@@ -25,7 +25,7 @@ public class ProfileDAO
     sql =
       "SELECT u.id, u.account_id, u.nome, u.cognome, u.nickname, u.immagine, " +
       "       u.flags, u.attivo, u.created_at, a.username " +
-      "FROM jms_users u JOIN jms_accounts a ON a.id = u.account_id " +
+      "FROM jms_users u JOIN jms_user_accounts a ON a.id = u.account_id " +
       "WHERE u.account_id = ?";
     rows = db.select(sql, accountId);
     return rows.isEmpty() ? null : rows.get(0);

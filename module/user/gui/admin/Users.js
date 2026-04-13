@@ -6,6 +6,7 @@ const PAGE_SIZE = 20;
 /**
  * Interfaccia amministrativa per la gestione degli account utente.
  * Consente a admin e root di creare, modificare, resettare la password ed eliminare account.
+ * Le azioni avvengono tramite pannello inline sopra la tabella, senza modal.
  */
 class Users extends LitElement {
 
@@ -19,7 +20,7 @@ class Users extends LitElement {
     _total:    { state: true },
     _page:     { state: true },
     _search:   { state: true },
-    _modal:    { state: true },
+    _panel:    { state: true },
     _selected: { state: true },
     _form:     { state: true },
     _myLevel:  { state: true },
@@ -38,7 +39,7 @@ class Users extends LitElement {
     this._total    = 0;
     this._page     = 1;
     this._search   = '';
-    this._modal    = null;
+    this._panel    = null;
     this._selected = null;
     this._form     = {};
     this._myLevel  = user.get()?.ruolo_level ?? 0;
@@ -74,7 +75,7 @@ class Users extends LitElement {
   _openCreate() {
     this._form    = { username: '', email: '', password: '', ruolo: 'user', must_change_password: false };
     this._formErr = null;
-    this._modal   = 'create';
+    this._panel   = 'create';
   }
 
   _openEdit(item) {
@@ -87,23 +88,23 @@ class Users extends LitElement {
       must_change_password: item.must_change_password ?? false,
     };
     this._formErr = null;
-    this._modal   = 'edit';
+    this._panel   = 'edit';
   }
 
   _openPassword(item) {
     this._selected = item;
     this._form     = { new_password: '' };
     this._formErr  = null;
-    this._modal    = 'password';
+    this._panel    = 'password';
   }
 
   _openDelete(item) {
     this._selected = item;
-    this._modal    = 'delete';
+    this._panel    = 'delete';
   }
 
-  _closeModal() {
-    this._modal    = null;
+  _closePanel() {
+    this._panel    = null;
     this._selected = null;
     this._formErr  = null;
   }
@@ -116,7 +117,7 @@ class Users extends LitElement {
     const r    = await fetch('/api/user/auth/generate-password');
     const data = await r.json();
     if (!data.err) {
-      const key  = this._modal === 'password' ? 'new_password' : 'password';
+      const key  = this._panel === 'password' ? 'new_password' : 'password';
       this._form = { ...this._form, [key]: data.out.password };
     }
   }
@@ -125,7 +126,7 @@ class Users extends LitElement {
     this._saving  = true;
     this._formErr = null;
     let r, data;
-    if (this._modal === 'create') {
+    if (this._panel === 'create') {
       r    = await fetch('/api/user/accounts', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,7 +142,7 @@ class Users extends LitElement {
     data         = await r.json();
     this._saving = false;
     if (!data.err) {
-      this._closeModal();
+      this._closePanel();
       this._load();
     } else {
       this._formErr = data.log;
@@ -159,7 +160,7 @@ class Users extends LitElement {
     const data    = await r.json();
     this._saving  = false;
     if (!data.err) {
-      this._closeModal();
+      this._closePanel();
     } else {
       this._formErr = data.log;
     }
@@ -171,11 +172,11 @@ class Users extends LitElement {
     const data     = await r.json();
     this._deleting = false;
     if (!data.err) {
-      this._closeModal();
+      this._closePanel();
       this._load();
     } else {
       this._error = data.log;
-      this._closeModal();
+      this._closePanel();
     }
   }
 
@@ -206,116 +207,122 @@ class Users extends LitElement {
     return html`<span class="badge ${cls[ruolo] ?? 'bg-secondary'}">${ruolo}</span>`;
   }
 
-  _renderModal() {
-    if (!this._modal) return '';
-    let title, body, footer;
+  _renderPanel() {
+    if (!this._panel) return '';
 
-    if (this._modal === 'create' || this._modal === 'edit') {
-      const isCreate = this._modal === 'create';
-      title = isCreate ? 'Nuovo utente' : `Modifica: ${this._selected?.username}`;
-      body  = html`
-        ${this._formErr ? html`<div class="alert alert-danger py-2">${this._formErr}</div>` : ''}
-        <div class="mb-3">
-          <label class="form-label">Username *</label>
-          <input class="form-control" .value=${this._form.username ?? ''}
-                 @input=${e => this._field('username', e.target.value)}>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Email</label>
-          <input class="form-control" type="email" .value=${this._form.email ?? ''}
-                 @input=${e => this._field('email', e.target.value)}>
-        </div>
-        ${isCreate ? html`
-          <div class="mb-3">
-            <label class="form-label">Password *</label>
-            <div class="input-group">
-              <input class="form-control" type="text" .value=${this._form.password ?? ''}
-                     @input=${e => this._field('password', e.target.value)}>
-              <button class="btn btn-outline-secondary" type="button"
-                      @click=${this._generatePassword}>Genera</button>
+    if (this._panel === 'create' || this._panel === 'edit') {
+      const isCreate = this._panel === 'create';
+      return html`
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>${isCreate ? 'Nuovo utente' : `Modifica: ${this._selected?.username}`}</span>
+            <button type="button" class="btn-close" @click=${this._closePanel}></button>
+          </div>
+          <div class="card-body">
+            ${this._formErr ? html`<div class="alert alert-danger py-2">${this._formErr}</div>` : ''}
+            <div class="mb-3">
+              <label class="form-label">Username *</label>
+              <input class="form-control" .value=${this._form.username ?? ''}
+                     @input=${e => this._field('username', e.target.value)}>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Email</label>
+              <input class="form-control" type="email" .value=${this._form.email ?? ''}
+                     @input=${e => this._field('email', e.target.value)}>
+            </div>
+            ${isCreate ? html`
+              <div class="mb-3">
+                <label class="form-label">Password *</label>
+                <div class="input-group">
+                  <input class="form-control" type="text" .value=${this._form.password ?? ''}
+                         @input=${e => this._field('password', e.target.value)}>
+                  <button class="btn btn-outline-secondary" type="button"
+                          @click=${this._generatePassword}>Genera</button>
+                </div>
+              </div>
+            ` : ''}
+            <div class="mb-3">
+              <label class="form-label">Ruolo *</label>
+              <select class="form-select" @change=${e => this._field('ruolo', e.target.value)}>
+                <option value="user" ?selected=${this._form.ruolo === 'user'}>user</option>
+                ${this._myLevel >= 3
+                  ? html`<option value="admin" ?selected=${this._form.ruolo === 'admin'}>admin</option>`
+                  : ''}
+              </select>
+            </div>
+            ${!isCreate ? html`
+              <div class="mb-2 form-check">
+                <input type="checkbox" class="form-check-input" id="chk-attivo"
+                       .checked=${this._form.attivo ?? true}
+                       @change=${e => this._field('attivo', e.target.checked)}>
+                <label class="form-check-label" for="chk-attivo">Account attivo</label>
+              </div>
+            ` : ''}
+            <div class="mb-3 form-check">
+              <input type="checkbox" class="form-check-input" id="chk-mcp"
+                     .checked=${this._form.must_change_password ?? false}
+                     @change=${e => this._field('must_change_password', e.target.checked)}>
+              <label class="form-check-label" for="chk-mcp">Forza cambio password al prossimo accesso</label>
+            </div>
+            <div class="d-flex gap-2 justify-content-end">
+              <button class="btn btn-secondary btn-sm" @click=${this._closePanel}>Annulla</button>
+              <button class="btn btn-primary btn-sm" @click=${this._save} ?disabled=${this._saving}>
+                ${this._saving ? 'Salvataggio...' : 'Salva'}
+              </button>
             </div>
           </div>
-        ` : ''}
-        <div class="mb-3">
-          <label class="form-label">Ruolo *</label>
-          <select class="form-select" @change=${e => this._field('ruolo', e.target.value)}>
-            <option value="user" ?selected=${this._form.ruolo === 'user'}>user</option>
-            ${this._myLevel >= 3
-              ? html`<option value="admin" ?selected=${this._form.ruolo === 'admin'}>admin</option>`
-              : ''}
-          </select>
         </div>
-        ${!isCreate ? html`
-          <div class="mb-2 form-check">
-            <input type="checkbox" class="form-check-input" id="chk-attivo"
-                   .checked=${this._form.attivo ?? true}
-                   @change=${e => this._field('attivo', e.target.checked)}>
-            <label class="form-check-label" for="chk-attivo">Account attivo</label>
-          </div>
-        ` : ''}
-        <div class="mb-1 form-check">
-          <input type="checkbox" class="form-check-input" id="chk-mcp"
-                 .checked=${this._form.must_change_password ?? false}
-                 @change=${e => this._field('must_change_password', e.target.checked)}>
-          <label class="form-check-label" for="chk-mcp">Forza cambio password al prossimo accesso</label>
-        </div>
-      `;
-      footer = html`
-        <button class="btn btn-secondary" @click=${this._closeModal}>Annulla</button>
-        <button class="btn btn-primary" @click=${this._save} ?disabled=${this._saving}>
-          ${this._saving ? 'Salvataggio...' : 'Salva'}
-        </button>
-      `;
-    } else if (this._modal === 'password') {
-      title = `Reset password: ${this._selected?.username}`;
-      body  = html`
-        ${this._formErr ? html`<div class="alert alert-danger py-2">${this._formErr}</div>` : ''}
-        <div class="mb-2">
-          <label class="form-label">Nuova password *</label>
-          <div class="input-group">
-            <input class="form-control" type="text" .value=${this._form.new_password ?? ''}
-                   @input=${e => this._field('new_password', e.target.value)}>
-            <button class="btn btn-outline-secondary" type="button"
-                    @click=${this._generatePassword}>Genera</button>
-          </div>
-          <div class="form-text">L'utente dovrà cambiare la password al prossimo accesso.</div>
-        </div>
-      `;
-      footer = html`
-        <button class="btn btn-secondary" @click=${this._closeModal}>Annulla</button>
-        <button class="btn btn-warning" @click=${this._savePassword} ?disabled=${this._saving}>
-          ${this._saving ? 'Salvataggio...' : 'Reset password'}
-        </button>
-      `;
-    } else if (this._modal === 'delete') {
-      title  = 'Elimina account';
-      body   = html`
-        <p>Sei sicuro di voler disattivare l'account <strong>${this._selected?.username}</strong>?</p>
-        <p class="text-muted small mb-0">L'account verrà disattivato e non potrà più accedere.</p>
-      `;
-      footer = html`
-        <button class="btn btn-secondary" @click=${this._closeModal}>Annulla</button>
-        <button class="btn btn-danger" @click=${this._confirmDelete} ?disabled=${this._deleting}>
-          ${this._deleting ? 'Eliminazione...' : 'Disattiva'}
-        </button>
       `;
     }
 
-    return html`
-      <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1040"></div>
-      <div class="modal d-block" style="z-index:1050" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">${title}</h5>
-              <button type="button" class="btn-close" @click=${this._closeModal}></button>
+    if (this._panel === 'password') {
+      return html`
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Reset password: ${this._selected?.username}</span>
+            <button type="button" class="btn-close" @click=${this._closePanel}></button>
+          </div>
+          <div class="card-body">
+            ${this._formErr ? html`<div class="alert alert-danger py-2">${this._formErr}</div>` : ''}
+            <div class="mb-3">
+              <label class="form-label">Nuova password *</label>
+              <div class="input-group">
+                <input class="form-control" type="text" .value=${this._form.new_password ?? ''}
+                       @input=${e => this._field('new_password', e.target.value)}>
+                <button class="btn btn-outline-secondary" type="button"
+                        @click=${this._generatePassword}>Genera</button>
+              </div>
+              <div class="form-text">L'utente dovrà cambiare la password al prossimo accesso.</div>
             </div>
-            <div class="modal-body">${body}</div>
-            <div class="modal-footer">${footer}</div>
+            <div class="d-flex gap-2 justify-content-end">
+              <button class="btn btn-secondary btn-sm" @click=${this._closePanel}>Annulla</button>
+              <button class="btn btn-warning btn-sm" @click=${this._savePassword} ?disabled=${this._saving}>
+                ${this._saving ? 'Salvataggio...' : 'Reset password'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
+    }
+
+    if (this._panel === 'delete') {
+      return html`
+        <div class="card mb-3 border-danger">
+          <div class="card-body">
+            <p class="mb-1">Disattivare l'account <strong>${this._selected?.username}</strong>?</p>
+            <p class="text-muted small mb-3">L'account verrà disattivato e non potrà più accedere.</p>
+            <div class="d-flex gap-2 justify-content-end">
+              <button class="btn btn-secondary btn-sm" @click=${this._closePanel}>Annulla</button>
+              <button class="btn btn-danger btn-sm" @click=${this._confirmDelete} ?disabled=${this._deleting}>
+                ${this._deleting ? 'Eliminazione...' : 'Disattiva'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return '';
   }
 
   _renderPagination() {
@@ -345,12 +352,16 @@ class Users extends LitElement {
     return html`
       <div class="container-fluid py-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h4 class="mb-0">Gestione utenti</h4>
-          <button class="btn btn-primary btn-sm" @click=${this._openCreate}>
-            <i class="bi bi-plus-lg me-1"></i>Nuovo utente
+          <h4 class="mb-0">Utenti</h4>
+          <button class="btn btn-primary btn-sm"
+                  @click=${this._panel === 'create' ? this._closePanel : this._openCreate}>
+            ${this._panel === 'create'
+              ? html`<i class="bi bi-x-lg me-1"></i>Annulla`
+              : html`<i class="bi bi-plus-lg me-1"></i>Nuovo utente`}
           </button>
         </div>
         ${this._error ? html`<div class="alert alert-danger">${this._error}</div>` : ''}
+        ${this._renderPanel()}
         <div class="mb-3">
           <input class="form-control form-control-sm"
                  style="max-width:300px"
@@ -361,7 +372,7 @@ class Users extends LitElement {
         ${this._loading ? html`<div class="text-muted">Caricamento...</div>` : html`
           <div class="table-responsive">
             <table class="table table-hover table-sm align-middle">
-              <thead class="table-light">
+              <thead>
                 <tr>
                   <th>#</th>
                   <th>Username</th>
@@ -423,7 +434,6 @@ class Users extends LitElement {
             ${this._renderPagination()}
           </div>
         `}
-        ${this._renderModal()}
       </div>
     `;
   }

@@ -33,6 +33,7 @@ import javax.sql.DataSource;
  */
 public class Scheduler
 {
+  private static final Log log = Log.get(Scheduler.class);
   private static JobRunrConfigurationResult jobRunr;
 
   /**
@@ -62,9 +63,9 @@ public class Scheduler
         )
         .initialize();
 
-      System.out.println("[info] Scheduler inizializzato (poll interval: " + pollInterval + "s)");
+      log.info("Scheduler inizializzato (poll interval: {}s)", pollInterval);
     } else {
-      System.out.println("[info] Scheduler disabilitato (scheduler.enabled=false)");
+      log.info("Scheduler disabilitato (scheduler.enabled=false)");
     }
   }
 
@@ -96,7 +97,7 @@ public class Scheduler
   {
     if (jobRunr != null) {
       BackgroundJob.scheduleRecurrently(id, cron, job);
-      System.out.println("[info] Scheduler: job '" + id + "' registrato (" + cron + ")");
+      log.info("Scheduler: job '{}' registrato ({})", id, cron);
     }
   }
 
@@ -113,7 +114,7 @@ public class Scheduler
       if (server != null) {
         server.stop();
       }
-      System.out.println("[info] Scheduler terminato");
+      log.info("Scheduler terminato");
     }
   }
 }

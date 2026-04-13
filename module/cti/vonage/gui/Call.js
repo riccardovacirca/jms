@@ -21,6 +21,7 @@ import { LitElement, html } from 'lit';
 import { VonageClient } from '@vonage/client-sdk';
 import { callState, targetNumber, currentContact } from './store.js';
 import { authorized, user } from '../../../store.js';
+import { Logger } from '../../../util/Logger.js';
 import './cti-bar.css';
 
 const REFRESH_DELAY_MS = 13 * 60 * 1000;
@@ -42,15 +43,6 @@ class Bar extends LitElement
     _netStats:           { state: true },
     _callSeconds:        { state: true },
     _showMenu:           { state: true },
-    _showOperatorDialog: { state: true },
-    _operators:          { state: true },
-    _operatorsLoading:   { state: true },
-    _operatorsSyncing:   { state: true },
-    _showNewOperator:    { state: true },
-    _newOperatorName:    { state: true },
-    _newOperatorDisplay: { state: true },
-    _newOperatorSaving:  { state: true },
-    _newOperatorError:   { state: true },
     _showContactModal:   { state: true },
     _pendingContact:     { state: true },
     _contactLoading:     { state: true },
@@ -66,6 +58,15 @@ class Bar extends LitElement
     _user:               { state: true },
     _authorized:         { state: true },
     _autoDialerActive:   { state: true },
+    _showScheduleModal:  { state: true },
+    _scheduleDateInput:  { state: true },
+    _showQueueModal:     { state: true },
+    _queueItems:         { state: true },
+    _queueLoading:       { state: true },
+    _queueError:         { state: true },
+    _queueEditId:        { state: true },
+    _queueEditDate:      { state: true },
+    _queueSaving:        { state: true },
   };
 
   createRenderRoot()
@@ -88,18 +89,19 @@ class Bar extends LitElement
     this._netStats      = { packetLoss: null, latency: null };
     this._callSeconds        = 0;
     this._showMenu           = false;
-    this._showOperatorDialog = false;
-    this._operators          = [];
-    this._operatorsLoading   = false;
-    this._operatorsSyncing   = false;
-    this._showNewOperator    = false;
-    this._newOperatorName    = '';
-    this._newOperatorDisplay = '';
-    this._newOperatorSaving  = false;
-    this._newOperatorError   = null;
     this._showContactModal   = false;
     this._pendingContact     = null;
+    this._pendingCodaId      = null;
     this._contactLoading     = false;
+    this._showScheduleModal  = false;
+    this._scheduleDateInput  = '';
+    this._showQueueModal     = false;
+    this._queueItems         = [];
+    this._queueLoading       = false;
+    this._queueError         = null;
+    this._queueEditId        = null;
+    this._queueEditDate      = '';
+    this._queueSaving        = false;
     this._connecting         = false;
     this._dtmfInput          = '';
     this._showAddModal       = false;
@@ -186,6 +188,8 @@ class Bar extends LitElement
     this._sessionError = null;
     this._connecting   = true;
 
+    Logger.debug('[CTI] Connessione operatore: avvio');
+
     try {
       token = await this._fetchToken();
       await this._client.createSession(token);
@@ -194,9 +198,12 @@ class Bar extends LitElement
       this._registerListeners();
       this._scheduleRefresh();
       this._startCallTimer();
+      this._restoreContact();
+      Logger.debug('[CTI] Connessione operatore: sessione WebRTC attiva');
     } catch (e) {
       this._sessionError  = e.message;
       this._sessionActive = false;
+      Logger.error('[CTI] Connessione operatore: errore', { message: e.message });
     }
 
     this._connecting = false;
@@ -239,8 +246,13 @@ class Bar extends LitElement
    */
   _onCallHangup(callId)
   {
+    Logger.debug('[CTI] Fine chiamata: evento callHangup ricevuto', { callId });
     this._stopNetStatsPolling();
     callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
+    targetNumber.set(null);
+    if (this._autoDialerActive) {
+      this._fetchAndCallDirect();
+    }
   }
 
   /**
@@ -250,6 +262,7 @@ class Bar extends LitElement
    */
   _onCallAnswered(callId)
   {
+    Logger.debug('[CTI] Conversazione: cliente risposto', { callId, customerNumber: this._callState.customerNumber });
     callState.set({
       active: true,
       callId: callId,
@@ -266,11 +279,13 @@ class Bar extends LitElement
    */
   _onSessionError(reason)
   {
+    Logger.error('[CTI] Errore sessione WebRTC', { reason: String(reason) });
     this._sessionActive = false;
     this._sessionError  = String(reason);
     this._stopCallTimer();
     this._stopNetStatsPolling();
     callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
+    targetNumber.set(null);
   }
 
   /**
@@ -281,21 +296,29 @@ class Bar extends LitElement
   {
     let contact;
 
-    this._sessionError   = null;
+    this._sessionError = null;
+
+    if (this._pendingContact) {
+      this._showContactModal = true;
+      return;
+    }
+
     this._contactLoading = true;
 
     try {
-      contact = await this._fetchNextContact();
-      
-      if (!contact) {
+      let result;
+      result = await this._fetchNextContact();
+
+      if (!result) {
         this._sessionError = 'Coda vuota: nessun contatto disponibile';
         this._contactLoading = false;
         return;
       }
-      
-      this._pendingContact   = contact;
+
+      this._pendingContact   = result.contatto;
+      this._pendingCodaId    = result.codaId;
       this._showContactModal = true;
-      currentContact.set(contact);
+      currentContact.set(result.contatto);
     } catch (e) {
       this._sessionError = 'Errore recupero contatto: ' + e.message;
     }
@@ -326,12 +349,41 @@ class Bar extends LitElement
       return null;
     }
 
-    return data.out.contatto;
+    return { contatto: data.out.contatto, codaId: data.out.codaId };
+  }
+
+  /**
+   * Al reconnect, verifica se il backend ha un contatto corrente assegnato all'operatore
+   * (rimasto in DB da un'estrazione precedente non confermata). Se presente, ripristina
+   * {@code _pendingContact} e mostra il dialog di conferma senza riestrarre dalla coda.
+   */
+  async _restoreContact()
+  {
+    let response;
+    let data;
+
+    try {
+      response = await fetch('/api/cti/vonage/queue/contact');
+      data = await response.json();
+      if (data.err) {
+        Logger.warn('[CTI] Ripristino contatto: errore API', { log: data.log });
+      } else if (data.out && data.out.contatto) {
+        this._pendingContact   = data.out.contatto;
+        this._pendingCodaId    = data.out.codaId;
+        this._showContactModal = true;
+        currentContact.set(data.out.contatto);
+        Logger.debug('[CTI] Ripristino contatto: trovato', { codaId: data.out.codaId, phone: data.out.contatto.phone });
+      } else {
+        Logger.debug('[CTI] Ripristino contatto: nessun contatto in sospeso');
+      }
+    } catch (e) {
+      Logger.error('[CTI] Ripristino contatto: errore rete', { message: e.message });
+    }
   }
 
   /**
    * Toggle auto-dialer on/off.
-   * L'auto-dialer chiama automaticamente il prossimo contatto dalla coda ogni N secondi.
+   * L'auto-dialer chiama automaticamente il prossimo contatto dalla coda senza dialogo di conferma.
    */
   _toggleAutoDialer()
   {
@@ -343,36 +395,63 @@ class Bar extends LitElement
   }
 
   /**
-   * Avvia l'auto-dialer con intervallo configurabile (default 20 secondi).
+   * Avvia l'auto-dialer in modalità hands-free.
+   * Estrae e chiama immediatamente il prossimo contatto senza mostrare il dialogo di conferma.
    */
   _startAutoDialer()
   {
-    const intervalMs = 20 * 1000;
-    
     this._autoDialerActive = true;
-    
-    // Prima chiamata immediata
-    this._fetchAndShowContact();
-    
-    // Successivamente ogni N secondi
-    this._autoDialerTimer = setInterval(() => {
-      if (!this._callState.active && this._sessionActive) {
-        this._fetchAndShowContact();
-      }
-    }, intervalMs);
+    this._fetchAndCallDirect();
   }
 
   /**
-   * Ferma l'auto-dialer e pulisce il timer.
+   * Ferma l'auto-dialer e cancella l'eventuale timer di retry.
    */
   _stopAutoDialer()
   {
     this._autoDialerActive = false;
-    
     if (this._autoDialerTimer) {
-      clearInterval(this._autoDialerTimer);
+      clearTimeout(this._autoDialerTimer);
       this._autoDialerTimer = null;
     }
+  }
+
+  /**
+   * Estrae il prossimo contatto dalla coda e avvia la chiamata direttamente, senza dialogo di conferma.
+   * Se la coda è vuota, pianifica un nuovo tentativo dopo 30 secondi.
+   * Usato dall'auto-dialer hands-free.
+   */
+  async _fetchAndCallDirect()
+  {
+    let contact;
+
+    if (!this._autoDialerActive || !this._sessionActive || this._callState.active) {
+      return;
+    }
+
+    this._sessionError   = null;
+    this._contactLoading = true;
+
+    try {
+      let result;
+      result = await this._fetchNextContact();
+      if (!result) {
+        this._autoDialerTimer = setTimeout(() => {
+          this._autoDialerTimer = null;
+          this._fetchAndCallDirect();
+        }, 30 * 1000);
+        this._contactLoading = false;
+        return;
+      }
+      this._pendingContact = result.contatto;
+      this._pendingCodaId  = result.codaId;
+      currentContact.set(result.contatto);
+      await this._confirmCall();
+    } catch (e) {
+      this._sessionError = 'Errore auto-dialer: ' + e.message;
+    }
+
+    this._contactLoading = false;
   }
 
   /**
@@ -404,6 +483,7 @@ class Bar extends LitElement
     let callId;
     let contactId;
     let callbackUrl;
+    let codaId;
 
     this._showContactModal = false;
     number = this._pendingContact ? this._pendingContact.phone : null;
@@ -415,9 +495,12 @@ class Bar extends LitElement
 
     contactId   = this._pendingContact ? (this._pendingContact.id       ?? null) : null;
     callbackUrl = this._pendingContact ? (this._pendingContact.callback ?? null) : null;
+    codaId      = this._pendingCodaId;
 
     targetNumber.set(number.trim());
     this._sessionError = null;
+
+    Logger.debug('[CTI] Avvio chiamata', { number: number.trim(), contactId, callbackUrl });
 
     try {
       callId = await this._client.serverCall({
@@ -431,9 +514,20 @@ class Bar extends LitElement
         customerNumber: number.trim(),
         status: 'waiting_customer'
       });
+      this._pendingContact = null;
+      this._pendingCodaId  = null;
+      Logger.debug('[CTI] Avvio chiamata: in attesa risposta cliente', { callId, number: number.trim() });
+      if (codaId) {
+        fetch('/api/cti/vonage/queue/contatto/' + codaId, { method: 'DELETE' })
+          .then(r => r.json())
+          .then(r => { if (r.err) Logger.warn('[CTI] Rimozione contatto coda: errore API', { codaId, log: r.log }); })
+          .catch(e => Logger.error('[CTI] Rimozione contatto coda: errore rete', { codaId, message: e.message }));
+      }
     } catch (e) {
       this._sessionError = 'Errore avvio chiamata: ' + e.message;
       callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
+      targetNumber.set(null);
+      Logger.error('[CTI] Avvio chiamata: errore serverCall', { message: e.message });
     }
   }
 
@@ -447,32 +541,95 @@ class Bar extends LitElement
    */
   _renderContactDataItem(item)
   {
+    let label;
+
+    label = item.key.replaceAll('_', ' ');
+
     if (item.type === 'text') {
       return html`
         <tr>
-          <th class="text-secondary fw-normal w-25 align-top small">${item.key}</th>
+          <th class="text-secondary fw-normal w-25 align-top small">${label}</th>
           <td class="small" style="white-space:pre-wrap">${item.value}</td>
         </tr>`;
     }
     if (item.type === 'number') {
       return html`
         <tr>
-          <th class="text-secondary fw-normal w-25 small">${item.key}</th>
+          <th class="text-secondary fw-normal w-25 small">${label}</th>
           <td class="font-monospace">${item.value}</td>
         </tr>`;
     }
     return html`
       <tr>
-        <th class="text-secondary fw-normal w-25 small">${item.key}</th>
+        <th class="text-secondary fw-normal w-25 small">${label}</th>
         <td>${item.value}</td>
       </tr>`;
   }
 
-  /** Annulla il dialog senza avviare la chiamata. */
+  /** Chiude il dialog senza avviare la chiamata. Il contatto rimane in attesa per il prossimo tentativo. */
   _cancelCall()
   {
     this._showContactModal = false;
-    this._pendingContact   = null;
+  }
+
+  /**
+   * Apre il dialog di pianificazione per il contatto corrente.
+   * Pre-imposta la data/ora a domani alle 09:00.
+   */
+  _openScheduleModal()
+  {
+    let tomorrow;
+    let pad;
+
+    pad = n => String(n).padStart(2, '0');
+    tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+
+    this._scheduleDateInput = tomorrow.getFullYear() + '-'
+      + pad(tomorrow.getMonth() + 1) + '-'
+      + pad(tomorrow.getDate()) + 'T'
+      + pad(tomorrow.getHours()) + ':' + pad(tomorrow.getMinutes());
+
+    this._showContactModal  = false;
+    this._showScheduleModal = true;
+  }
+
+  /**
+   * Conferma la pianificazione: aggiorna pianificato_al nel DB e passa al prossimo contatto.
+   */
+  async _confirmSchedule()
+  {
+    let response;
+    let data;
+
+    if (!this._scheduleDateInput || !this._pendingCodaId) {
+      Logger.warn('[CTI] Pianificazione: dati mancanti', { codaId: this._pendingCodaId, date: this._scheduleDateInput });
+      return;
+    }
+
+    Logger.debug('[CTI] Pianificazione contatto', { codaId: this._pendingCodaId, pianificatoAl: this._scheduleDateInput });
+
+    try {
+      response = await fetch('/api/cti/vonage/queue/contatto/' + this._pendingCodaId + '/pianifica', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pianificatoAl: this._scheduleDateInput + ':00' })
+      });
+      data = await response.json();
+      if (data.err) {
+        this._sessionError = data.log || 'Errore pianificazione';
+        Logger.warn('[CTI] Pianificazione contatto: errore API', { codaId: this._pendingCodaId, log: data.log });
+        return;
+      }
+      Logger.debug('[CTI] Pianificazione contatto: confermata', { codaId: this._pendingCodaId, pianificatoAl: this._scheduleDateInput });
+      this._showScheduleModal = false;
+      this._pendingContact    = null;
+      this._pendingCodaId     = null;
+    } catch (e) {
+      this._sessionError = 'Errore pianificazione: ' + e.message;
+      Logger.error('[CTI] Pianificazione contatto: errore rete', { codaId: this._pendingCodaId, message: e.message });
+    }
   }
 
   /**
@@ -487,6 +644,8 @@ class Bar extends LitElement
 
     currentCallId = this._callState.callId;
 
+    Logger.debug('[CTI] Riaggiancio operatore', { callId: currentCallId });
+
     try {
       response = await fetch('/api/cti/vonage/call/' + currentCallId + '/hangup', {
         method: 'PUT'
@@ -497,8 +656,11 @@ class Bar extends LitElement
       }
       this._stopNetStatsPolling();
       callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
+      targetNumber.set(null);
+      Logger.debug('[CTI] Riaggiancio operatore: completato', { callId: currentCallId });
     } catch (e) {
       this._sessionError = 'Errore riagganciare: ' + e.message;
+      Logger.error('[CTI] Riaggiancio operatore: errore', { callId: currentCallId, message: e.message });
     }
   }
 
@@ -694,10 +856,12 @@ class Bar extends LitElement
         token = await this._fetchToken();
         await this._client.refreshSession(token);
         this._lastToken = token;
+        Logger.debug('[CTI] Refresh sessione: token rinnovato');
         this._scheduleRefresh();
       } catch (e) {
         this._sessionActive = false;
         this._sessionError  = 'Errore refresh sessione: ' + e.message;
+        Logger.error('[CTI] Refresh sessione: errore', { message: e.message });
       }
     }, REFRESH_DELAY_MS);
   }
@@ -716,21 +880,26 @@ class Bar extends LitElement
     this._stopNetStatsPolling();
     this._stopAutoDialer();
     if (this._sessionActive) {
+      Logger.debug('[CTI] Disconnessione operatore: rilascio sessione');
       try {
         await fetch('/api/cti/vonage/sdk/auth', { method: 'DELETE' });
       } catch (e) {
+        Logger.error('[CTI] Disconnessione operatore: errore release operatore', { message: e.message });
         console.error('[CTI] Errore release operatore:', e);
       }
       if (this._lastToken) {
         try {
           await this._client.deleteSession(this._lastToken);
         } catch (e) {
+          Logger.error('[CTI] Disconnessione operatore: errore deleteSession', { message: e.message });
           console.error('[CTI] Errore deleteSession:', e);
         }
       }
     }
     this._sessionActive = false;
     callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
+    targetNumber.set(null);
+    Logger.debug('[CTI] Disconnessione operatore: completata');
   }
 
   /** Disconnessione manuale dell'operatore. */
@@ -781,116 +950,6 @@ class Bar extends LitElement
         this._menuClickOutside = null;
       }
     }
-  }
-
-  /**
-   * Apre il dialog lista operatori e recupera i dati dal backend.
-   */
-  async _openOperatorList(e)
-  {
-    let response;
-    let data;
-
-    e.stopPropagation();
-    this._showMenu           = false;
-    this._showOperatorDialog = true;
-    this._operatorsLoading   = true;
-    this._operators          = [];
-
-    try {
-      response = await fetch('/api/cti/vonage/admin/operator');
-      data = await response.json();
-      if (data.err) {
-        throw new Error(data.log || 'Errore caricamento operatori');
-      }
-      this._operators = data.out || [];
-    } catch (e) {
-      this._sessionError       = 'Errore operatori: ' + e.message;
-      this._showOperatorDialog = false;
-    }
-
-    this._operatorsLoading = false;
-  }
-
-  /** Chiude il dialog lista operatori. */
-  _closeOperatorDialog()
-  {
-    this._showOperatorDialog = false;
-  }
-
-  /**
-   * Esegue la sincronizzazione degli operatori da Vonage, poi ricarica la lista locale.
-   */
-  async _syncOperators()
-  {
-    let response;
-    let data;
-
-    this._operatorsSyncing = true;
-
-    try {
-      response = await fetch('/api/cti/vonage/admin/operator/sync', { method: 'POST' });
-      data = await response.json();
-      if (data.err) {
-        throw new Error(data.log || 'Errore sincronizzazione');
-      }
-      this._operatorsLoading = true;
-      response = await fetch('/api/cti/vonage/admin/operator');
-      data = await response.json();
-      if (data.err) {
-        throw new Error(data.log || 'Errore ricaricamento operatori');
-      }
-      this._operators = data.out || [];
-    } catch (e) {
-      this._sessionError = 'Errore sync operatori: ' + e.message;
-    }
-
-    this._operatorsLoading = false;
-    this._operatorsSyncing = false;
-  }
-
-  /**
-   * Crea un nuovo operatore Vonage e lo registra localmente, poi ricarica la lista.
-   */
-  async _createOperator()
-  {
-    let response;
-    let data;
-
-    if (!this._newOperatorName.trim()) {
-      this._newOperatorError = 'Il nome utente Vonage è obbligatorio';
-      return;
-    }
-
-    this._newOperatorSaving = true;
-    this._newOperatorError  = null;
-
-    try {
-      response = await fetch('/api/cti/vonage/admin/operator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this._newOperatorName.trim(), displayName: this._newOperatorDisplay.trim() || null })
-      });
-      data = await response.json();
-      if (data.err) {
-        throw new Error(data.log || 'Errore creazione operatore');
-      }
-      this._showNewOperator    = false;
-      this._newOperatorName    = '';
-      this._newOperatorDisplay = '';
-      this._operatorsLoading   = true;
-      response = await fetch('/api/cti/vonage/admin/operator');
-      data = await response.json();
-      if (data.err) {
-        throw new Error(data.log || 'Errore ricaricamento operatori');
-      }
-      this._operators = data.out || [];
-    } catch (e) {
-      this._newOperatorError = e.message;
-    }
-
-    this._operatorsLoading = false;
-    this._newOperatorSaving = false;
   }
 
   /**
@@ -1018,6 +1077,162 @@ class Bar extends LitElement
   _closeCallLog()
   {
     this._showCallLog = false;
+  }
+
+  /**
+   * Apre la modal "Coda chiamate" e carica i contatti della coda personale.
+   *
+   * @param {Event} e evento click
+   */
+  async _openQueueModal(e)
+  {
+    e.stopPropagation();
+    this._showMenu      = false;
+    this._showQueueModal = true;
+    await this._loadQueueItems();
+  }
+
+  /** Chiude la modal "Coda chiamate". */
+  _closeQueueModal()
+  {
+    this._showQueueModal = false;
+    this._queueEditId    = null;
+    this._queueEditDate  = '';
+    this._queueError     = null;
+  }
+
+  /** Carica i contatti della coda personale dell'operatore. */
+  async _loadQueueItems()
+  {
+    let response;
+    let data;
+
+    this._queueLoading = true;
+    this._queueError   = null;
+
+    try {
+      response = await fetch('/api/cti/vonage/queue/contatti');
+      data = await response.json();
+      if (data.err) {
+        throw new Error(data.log || 'Errore caricamento coda');
+      }
+      this._queueItems = data.out || [];
+    } catch (e) {
+      this._queueError = e.message;
+    }
+
+    this._queueLoading = false;
+  }
+
+  /**
+   * Avvia la modalità di ripianificazione per un contatto.
+   * Pre-imposta la data al valore corrente di pianificatoAl o a domani alle 09:00.
+   *
+   * @param {{ id: number, pianificatoAl: string|null }} item elemento da ripianificare
+   */
+  _startReschedule(item)
+  {
+    let d;
+    let pad;
+
+    this._queueEditId = item.id;
+    if (item.pianificatoAl) {
+      this._queueEditDate = this._toDatetimeLocalValue(item.pianificatoAl);
+    } else {
+      pad = n => String(n).padStart(2, '0');
+      d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(9, 0, 0, 0);
+      this._queueEditDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+                          + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+  }
+
+  /** Annulla la modalità di ripianificazione. */
+  _cancelReschedule()
+  {
+    this._queueEditId   = null;
+    this._queueEditDate = '';
+  }
+
+  /**
+   * Salva la nuova data di pianificazione per un contatto.
+   *
+   * @param {number} id id del contatto nella coda personale
+   */
+  async _saveReschedule(id)
+  {
+    let response;
+    let data;
+
+    if (!this._queueEditDate) {
+      return;
+    }
+
+    this._queueSaving = true;
+
+    try {
+      response = await fetch('/api/cti/vonage/queue/contatto/' + id + '/pianifica', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pianificatoAl: this._queueEditDate + ':00' })
+      });
+      data = await response.json();
+      if (data.err) {
+        throw new Error(data.log || 'Errore pianificazione');
+      }
+      this._queueEditId   = null;
+      this._queueEditDate = '';
+      await this._loadQueueItems();
+    } catch (e) {
+      this._queueError = 'Errore pianificazione: ' + e.message;
+    }
+
+    this._queueSaving = false;
+  }
+
+  /**
+   * Rimette un contatto pianificato nella coda globale CTI.
+   *
+   * @param {number} id id del contatto nella coda personale
+   */
+  async _remettiInCoda(id)
+  {
+    let response;
+    let data;
+
+    try {
+      response = await fetch('/api/cti/vonage/queue/contatto/' + id + '/rimetti', {
+        method: 'DELETE'
+      });
+      data = await response.json();
+      if (data.err) {
+        throw new Error(data.log || 'Errore rimessa in coda');
+      }
+      await this._loadQueueItems();
+    } catch (e) {
+      this._queueError = 'Errore rimessa in coda: ' + e.message;
+    }
+  }
+
+  /**
+   * Converte una stringa ISO datetime nel formato richiesto da input[type=datetime-local].
+   *
+   * @param {string} isoStr stringa ISO 8601 (es. "2026-04-15T09:30:00")
+   * @returns {string} stringa nel formato "YYYY-MM-DDTHH:MM" o '' se non valida
+   */
+  _toDatetimeLocalValue(isoStr)
+  {
+    let d;
+    let pad;
+
+    pad = n => String(n).padStart(2, '0');
+    d = new Date(isoStr);
+    if (isNaN(d.getTime())) {
+      return '';
+    }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+         + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
   /**
@@ -1285,9 +1500,7 @@ class Bar extends LitElement
           ><i class="bi bi-three-dots-vertical"></i></button>
           ${this._showMenu ? html`
             <div class="cti-ctx-menu dropdown-menu show">
-              ${this._user?.ruolo_level >= 2 ? html`
-                <button class="dropdown-item" @click=${this._openOperatorList.bind(this)}><i class="bi bi-people-fill"></i>&nbsp; Lista operatori</button>
-              ` : ''}
+              <button class="dropdown-item" @click=${this._openQueueModal.bind(this)}><i class="bi bi-list-task"></i>&nbsp; Coda chiamate</button>
               <button class="dropdown-item" @click=${this._openCallLog.bind(this)}><i class="bi bi-clock-history"></i>&nbsp; Storico chiamate</button>
             </div>
           ` : ''}
@@ -1295,102 +1508,11 @@ class Bar extends LitElement
 
       </div>
 
-      <!-- Dialog lista operatori -->
-      ${this._showOperatorDialog ? html`
-        <div class="modal-backdrop fade show"></div>
-        <div class="modal d-block" tabindex="-1" @click=${this._closeOperatorDialog.bind(this)}>
-          <div class="modal-dialog modal-lg modal-dialog-scrollable" @click=${e => e.stopPropagation()}>
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-people-fill"></i>&nbsp; Operatori CTI</h5>
-                <button type="button" class="btn-close" @click=${this._closeOperatorDialog.bind(this)} aria-label="Chiudi"></button>
-              </div>
-              <div class="modal-body p-0">
-                ${this._operatorsLoading
-                  ? html`<div class="text-center text-secondary py-4">Caricamento...</div>`
-                  : this._operators.length === 0
-                    ? html`<div class="text-center text-secondary py-4">Nessun operatore registrato.</div>`
-                    : html`
-                      <table class="table table-sm mb-0">
-                        <thead class="table-light">
-                          <tr>
-                            <th>ID</th>
-                            <th>Vonage User ID</th>
-                            <th>Nome</th>
-                            <th>Attivo</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          ${this._operators.map(op => html`
-                            <tr>
-                              <td>${op.id}</td>
-                              <td class="font-monospace small">${op.vonageUserId}</td>
-                              <td>${op.nome || '—'}</td>
-                              <td><span class="badge ${op.attivo ? 'text-bg-success' : 'text-bg-secondary'}">${op.attivo ? 'Attivo' : 'Inattivo'}</span></td>
-                            </tr>
-                          `)}
-                        </tbody>
-                      </table>
-                    `
-                }
-              </div>
-              ${this._showNewOperator ? html`
-                <div class="border-top p-3">
-                  ${this._newOperatorError ? html`
-                    <div class="alert alert-danger alert-sm py-1 px-2 mb-2 small">${this._newOperatorError}</div>
-                  ` : ''}
-                  <div class="mb-2">
-                    <label class="form-label small mb-1">Nome utente Vonage <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm"
-                      placeholder="es. operatore_03"
-                      .value=${this._newOperatorName}
-                      @input=${e => { this._newOperatorName = e.target.value; this._newOperatorError = null; }}
-                      ?disabled=${this._newOperatorSaving}
-                    >
-                    <div class="form-text">Identificatore univoco su Vonage (solo lettere minuscole, numeri, underscore)</div>
-                  </div>
-                  <div class="mb-2">
-                    <label class="form-label small mb-1">Nome visualizzato</label>
-                    <input type="text" class="form-control form-control-sm"
-                      placeholder="es. Operatore 03"
-                      .value=${this._newOperatorDisplay}
-                      @input=${e => { this._newOperatorDisplay = e.target.value; }}
-                      ?disabled=${this._newOperatorSaving}
-                    >
-                  </div>
-                  <div class="d-flex gap-2 justify-content-end">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" ?disabled=${this._newOperatorSaving} @click=${() => { this._showNewOperator = false; this._newOperatorError = null; }}>Annulla</button>
-                    <button type="button" class="btn btn-sm btn-success" ?disabled=${this._newOperatorSaving} @click=${this._createOperator.bind(this)}>
-                      ${this._newOperatorSaving
-                        ? html`<span class="spinner-border spinner-border-sm me-1"></span> Creazione...`
-                        : html`<i class="bi bi-person-plus-fill"></i>&nbsp; Crea operatore`
-                      }
-                    </button>
-                  </div>
-                </div>
-              ` : ''}
-              <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-outline-secondary" @click=${this._closeOperatorDialog.bind(this)}>Chiudi</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" ?disabled=${this._operatorsSyncing || this._operatorsLoading || this._showNewOperator} @click=${this._syncOperators.bind(this)}>
-                  ${this._operatorsSyncing
-                    ? html`<span class="spinner-border spinner-border-sm me-1"></span> Sincronizzazione...`
-                    : html`<i class="bi bi-arrow-repeat"></i>&nbsp; Sincronizza...`
-                  }
-                </button>
-                <button type="button" class="btn btn-sm btn-primary" ?disabled=${this._operatorsSyncing || this._operatorsLoading || this._newOperatorSaving} @click=${() => { this._showNewOperator = !this._showNewOperator; this._newOperatorError = null; }}>
-                  <i class="bi bi-person-plus-fill"></i>&nbsp; Nuovo...
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
       <!-- Dialog conferma chiamata -->
       ${this._showContactModal && this._pendingContact ? html`
         <div class="modal-backdrop fade show"></div>
         <div class="modal d-block" tabindex="-1" @click=${this._cancelCall.bind(this)}>
-          <div class="modal-dialog" @click=${e => e.stopPropagation()}>
+          <div class="modal-dialog modal-lg" @click=${e => e.stopPropagation()}>
             <div class="modal-content">
               <div class="modal-header">
                 <h5 class="modal-title"><i class="bi bi-telephone-fill"></i>&nbsp; Prossimo contatto</h5>
@@ -1408,8 +1530,38 @@ class Bar extends LitElement
                 </table>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click=${this._cancelCall.bind(this)}>Annulla</button>
+                <button type="button" class="btn btn-secondary" @click=${this._openScheduleModal.bind(this)}>Pianifica...</button>
                 <button type="button" class="btn btn-success" @click=${this._confirmCall.bind(this)}><i class="bi bi-telephone-fill"></i>&nbsp; Chiama</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Dialog pianificazione richiamata -->
+      ${this._showScheduleModal ? html`
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal d-block" tabindex="-1">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calendar-event"></i>&nbsp; Pianifica richiamata</h5>
+                <button type="button" class="btn-close"
+                  @click=${() => { this._showScheduleModal = false; this._showContactModal = true; }}
+                  aria-label="Annulla"></button>
+              </div>
+              <div class="modal-body">
+                <label class="form-label text-secondary small mb-1">Data e ora richiamata</label>
+                <input type="datetime-local" class="form-control"
+                  .value=${this._scheduleDateInput}
+                  @change=${e => { this._scheduleDateInput = e.target.value; }}>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                  @click=${() => { this._showScheduleModal = false; this._showContactModal = true; }}>Annulla</button>
+                <button type="button" class="btn btn-primary" @click=${this._confirmSchedule.bind(this)}>
+                  <i class="bi bi-calendar-check"></i>&nbsp; Conferma
+                </button>
               </div>
             </div>
           </div>
@@ -1513,6 +1665,123 @@ class Bar extends LitElement
                   </div>
                 </div>
               ` : ''}
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Modal coda chiamate -->
+      ${this._showQueueModal ? html`
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal d-block" tabindex="-1" @click=${this._closeQueueModal.bind(this)}>
+          <div class="modal-dialog modal-lg modal-dialog-scrollable" @click=${e => e.stopPropagation()}>
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-list-task"></i>&nbsp; Coda chiamate</h5>
+                <button type="button" class="btn-close" @click=${this._closeQueueModal.bind(this)} aria-label="Chiudi"></button>
+              </div>
+              <div class="modal-body">
+                ${this._queueLoading
+                  ? html`<div class="text-center text-secondary py-4">Caricamento...</div>`
+                  : this._queueError
+                    ? html`<div class="alert alert-danger py-2 small">${this._queueError}</div>`
+                    : html`
+                      ${(() => {
+                        const next = this._queueItems.find(i => i.disponibile);
+                        if (!next) {
+                          return html``;
+                        }
+                        return html`
+                          <h6 class="text-secondary fw-semibold mb-2 small text-uppercase"><i class="bi bi-telephone"></i>&nbsp; Prossima chiamata</h6>
+                          <div class="border rounded p-2 mb-3 small d-flex align-items-baseline gap-2 flex-wrap">
+                            <span class="font-monospace fw-semibold">${next.contatto?.phone || '—'}</span>
+                            ${(next.contatto?.data || []).slice(0, 4).map(d => html`
+                              <span class="text-secondary">${d.key.replaceAll('_', ' ')}: <span class="text-body">${d.value}</span></span>
+                            `)}
+                          </div>
+                        `;
+                      })()}
+                      <h6 class="text-secondary fw-semibold mb-2 small text-uppercase"><i class="bi bi-calendar-event"></i>&nbsp; Pianificati</h6>
+                      ${(() => {
+                        const planned = this._queueItems.filter(i => !i.disponibile);
+                        if (planned.length === 0) {
+                          return html`<p class="text-secondary small">Nessuna chiamata pianificata.</p>`;
+                        }
+                        return html`
+                          <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th class="small">Telefono</th>
+                                <th class="small">Dati</th>
+                                <th class="small">Pianificato al</th>
+                                <th></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              ${planned.map(item => html`
+                                <tr>
+                                  <td class="font-monospace small align-middle">${item.contatto?.phone || '—'}</td>
+                                  <td class="small text-secondary align-middle">
+                                    ${(item.contatto?.data || []).slice(0, 2).map(d => html`
+                                      <div>${d.key.replaceAll('_', ' ')}: ${d.value}</div>
+                                    `)}
+                                  </td>
+                                  <td class="small align-middle">
+                                    ${this._queueEditId === item.id
+                                      ? html`
+                                        <input type="datetime-local" class="form-control form-control-sm"
+                                          .value=${this._queueEditDate}
+                                          @change=${e => { this._queueEditDate = e.target.value; }}>
+                                      `
+                                      : this._formatCallDate(item.pianificatoAl)
+                                    }
+                                  </td>
+                                  <td class="text-end align-middle" style="white-space:nowrap">
+                                    ${this._queueEditId === item.id
+                                      ? html`
+                                        <button class="btn btn-sm btn-primary me-1"
+                                          ?disabled=${this._queueSaving}
+                                          @click=${() => this._saveReschedule(item.id)}
+                                          title="Salva">
+                                          <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary"
+                                          @click=${this._cancelReschedule.bind(this)}
+                                          title="Annulla">
+                                          <i class="bi bi-x-lg"></i>
+                                        </button>
+                                      `
+                                      : html`
+                                        <button class="btn btn-sm btn-outline-secondary me-1"
+                                          @click=${() => this._startReschedule(item)}
+                                          title="Ripianifica">
+                                          <i class="bi bi-calendar-event"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                          @click=${() => this._remettiInCoda(item.id)}
+                                          title="Rimetti in coda globale">
+                                          <i class="bi bi-arrow-return-left"></i>
+                                        </button>
+                                      `
+                                    }
+                                  </td>
+                                </tr>
+                              `)}
+                            </tbody>
+                          </table>
+                        `;
+                      })()}
+                    `
+                }
+              </div>
+              <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-auto"
+                  @click=${this._loadQueueItems.bind(this)}
+                  ?disabled=${this._queueLoading}>
+                  <i class="bi bi-arrow-clockwise"></i>&nbsp; Aggiorna
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" @click=${this._closeQueueModal.bind(this)}>Chiudi</button>
+              </div>
             </div>
           </div>
         </div>
