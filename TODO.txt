@@ -1,11 +1,9 @@
 ================================================================================
 TODO
 ================================================================================
-CORE: NAMING TABELLE MIGRAZIONI [OK]
-Le migrazioni dei moduli devono avere il prefisso jms_<module_name>_
+[OK] Le migrazioni dei moduli devono avere il prefisso jms_<module_name>_
 --------------------------------------------------------------------------------
-CTI/VONAGE: CLEANUP CONTATTI ORFANI [OK]
-Cleanup contatti orfani in jms_cti_operatore_contatti: se un operatore si
+[OK] Cleanup contatti orfani in jms_cti_operatore_contatti: se un operatore si
 disconnette (sessione_ttl scaduta) senza aver chiamato il contatto che aveva
 estratto dalla coda, quel contatto rimane bloccato nella sua coda personale e
 non è più raggiungibile da altri operatori.
@@ -14,18 +12,10 @@ dashboard con un nuovo pulsante nell'elenco degli operatori che visualizza le
 i contatti nella coda di ciascun operatore specificando per ogni copntatto anche
 il ttl.
 --------------------------------------------------------------------------------
-CMD: MODULE IMPORT [BUG] [OK]
-Il post-install script dei moduli chiama l'API prima che l'app venga ricompilata
-e riavviata con il nuovo modulo.
+[OK] Il post-install script dei moduli chiama l'API prima che l'app venga
+ricompilata e riavviata con il nuovo modulo.
 --------------------------------------------------------------------------------
-CMD: MODULE IMPORT [FEAT]
-[OPEN]
-Se l'importazione di un modulo prevede una installazione di un pacchetto
-npm deve essere verificata la presenza di node e di npm e in caso di assenza
-deve essere dato un messaggio amichevola all'utente
---------------------------------------------------------------------------------
-HEADER: MENU DINAMICO [OK]
-Verificare che il modulo header consenta a ogni modulo di aggiungere alla
+[OK] Verificare che il modulo header consenta a ogni modulo di aggiungere alla
 barra header un proprio elemento ad esempio uno o più link o un menu dropdown.
 Rimuovi il link contatti hardcoded. Non è obbligatorio per un modulo
 aggiungere voci al menu. se lo fa devo potere scegliere tra diverse aree dello
@@ -40,16 +30,14 @@ dropdown dell'utente è definito e da cui è importato. ovviamente il modulo
 user non è privilegiato altri moduli possono usare la area user ma non due
 moduli contemporaneamente.
 --------------------------------------------------------------------------------
-
-TODO:
 Ogni modulo potrebbe avere un file config.js con parametri di configurazione
 custom importabili quando il modulo viene caricato.
-
+--------------------------------------------------------------------------------
 TODO: Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
 essere configurabile e potrebbe star enella config.js del modulo header
-
-TODO: La barra CTI dovebbe avere un padding minimale max 2px.
-
+--------------------------------------------------------------------------------
+[OK] La barra CTI dovebbe avere un padding minimale max 2px tb 6px rl.
+--------------------------------------------------------------------------------
 TODO: Attualmente esiste una azione nel menu di contesto della barra CTI per
 importare tutti gli operatori vonage disponibili e associarli a operatori CTI.
 Vorrei capire il contesto generale di questo comportamento.
@@ -73,29 +61,29 @@ consiste nel mantenimento della storia. Uno stesso operatore CTI potrebbe
 essere connesso a operatori vonage diversi ad ogni sessione ma deve conservare
 una storia relativa alla propria attività.
 
-TODO: [ok] Attualmente il click sul pulsante chiama della barra CTI esegue una chaimata
-a un endpoint del crm che fornisce il prossimo contatto da chiamare.
-Voglio modificare questo comportamento. Il CTI dovrebbe avere una coda di
-chiamata contenente contatti. La coda deve essere persistente. Il formato di
-un contatto nella coda è lo stesso formato che attualmente viene inviato dal
-crm al cti quando si esegue una chiamata. il cti espone un endpoint per
-scrivere nella coda. Il crm usa l'endpoint per scrivere nella coda.
-il crm può scrivere anche in modo massivo sulla coda.
-il click sul pulsante chiama estrae il prossimo contatto dalla coda e lo mette
-nella sessione dell'operatore, quindi il contatto viene letto dalla sessione
-per eseguire la chiamata.
-Il cti ha una funzione di chiamata alternativa al pulsante chiama ovvero una
-chiamata continua che potrebbe essere implementata in una sezione
+[OK] Il CTI dovrebbe avere una coda di chiamata contenente contatti. La coda
+deve essere persistente. Il formato di un contatto nella coda è lo stesso
+formato che attualmente viene inviato dal crm al cti quando si esegue una
+chiamata. il cti espone un endpoint per scrivere nella coda. Il crm usa
+l'endpoint per scrivere nella coda. il crm può scrivere anche in modo massivo
+sulla coda. il click sul pulsante chiama estrae il prossimo contatto dalla coda
+e lo mette nella sessione dell'operatore, quindi il contatto viene letto dalla
+sessione per eseguire la chiamata.
+La coda a livello di database è condivisa tra gli operatori. Un contatto può
+essare messo nella sessione di qualsiasi operatore.
+
+[OK] Il cti ha una funzione di chiamata alternativa al pulsante chiama ovvero
+una chiamata continua che potrebbe essere implementata in una sezione
 della barra cti con i simboli Play/Pause per prelevare dalla coda un contatto,
 metterlo in sessione e avviare la chiamata a intervalli regolari ad esempio
 uno ogni 20 secondi.
-La coda a livello di database è condivisa tra gli operatori. Un contatto può
-essare messo nella sessione di qualsiasi operatore.
 
 Verifica che lo Stato attuale del modulo CTI sia il seguente e proponi interventi per i punti A,B,C,D:
 
 Coda di chiamata
-Tabella jms_cti_coda_chiamate, introdotta dalla migrazione V20260407_080000__cti_queue.sql è condivisa tra tutti gli operatori. Il formato di un contatto nella coda, campo contatto_json è JSONB.
+Tabella jms_cti_coda_chiamate, introdotta dalla migrazione
+V20260407_080000__cti_queue.sql è condivisa tra tutti gli operatori.
+Il formato di un contatto nella coda, campo contatto_json è JSONB.
 Il formato atteso (documentato nel commento della migrazione) è:
 {
   "id": <bigint|null>,
@@ -126,27 +114,41 @@ non l'accountId utente. L'operatoreId corretto andrebbe prima recuperato tramite
 OperatorDAO.findByClaimAccountId(accountId), come fa correttamente CallHandler.sdkToken.
 Il contatto viene poi salvato in jms_cti_operatori.contatto_corrente via setContattoCorrente().
 
-Questa è una ipotesi operativa ma non sono sicuro del flusso vorrei dettagliarlo meglio per renderlo più chiaro e lineare. Chiamiamo questo punto da definire il PUNTO A.
+Questa è una ipotesi operativa ma non sono sicuro del flusso vorrei dettagliarlo
+meglio per renderlo più chiaro e lineare.
+Chiamiamo questo punto da definire il PUNTO A.
 
 Il contatto viene letto dalla sessione per eseguire la chiamatasolo parzialmente.
 getNext persiste il contatto in jms_cti_operatori.contatto_corrente (DB), ma la chiamata viene avviata
 leggendo _pendingContact dallo stato del componente frontend (memoria).
 
-Il DB non viene riletto al momento di _confirmCall. Se il browser venisse ricaricato tra l'estrazione e la conferma, il contatto andrebbe perso dal frontend (anche se rimane in DB).
+Il DB non viene riletto al momento di _confirmCall. Se il browser venisse
+ricaricato tra l'estrazione e la conferma, il contatto andrebbe perso dal
+frontend (anche se rimane in DB).
 Chiamiamo questo punto da definire il PUNTO B.
 
-Il CTI ha una funzione di chiamata continua a intervalli regolari, un auto-dialer (_toggleAutoDialer). Ogni 20 secondi esegue _fetchAndShowContact(), ma mostra sempre il dialog di conferma — non avvia la chiamata in modo completamente automatico senza interazione. L'operatore deve
+Il CTI ha una funzione di chiamata continua a intervalli regolari,
+un auto-dialer (_toggleAutoDialer). Ogni 20 secondi esegue 
+fetchAndShowContact(), ma mostra sempre il dialog di conferma — non avvia la
+chiamata in modo completamente automatico senza interazione. L'operatore deve
 comunque cliccare "Conferma" per ogni chiamata.
 Chiamiamo questo punto da definire il PUNTO C.
 
-Un contatto NON può essere messo nella sessione di qualsiasi operatore, non tramite l'attuale implementazione. getNext assegna sempre il contatto all'operatore autenticato che fa la richiesta. Non esiste un endpoint per spingere un contatto nella sessione di un operatore specifico. Chiunque vuole un contatto deve chiamare getNext per sé stesso. Questo è corretto e anche in caso di chiamata autom,atica non modificherei questo flusso. verifica solo che non ci siano bug o problemi non noti. Chiamiamo questo punto da definire il PUNTO D.
+Un contatto NON può essere messo nella sessione di qualsiasi operatore, non
+tramite l'attuale implementazione. getNext assegna sempre il contatto
+all'operatore autenticato che fa la richiesta. Non esiste un endpoint per
+spingere un contatto nella sessione di un operatore specifico. Chiunque vuole
+un contatto deve chiamare getNext per sé stesso. Questo è corretto e anche in
+caso di chiamata automatica non modificherei questo flusso. verifica solo che
+non ci siano bug o problemi non noti.
+Chiamiamo questo punto da definire il PUNTO D.
 
 TODO: La gui dei moduli che richiedono una gestione deve fornire una interfaccia
-utente e una interfaccia amministrativa. Dobbiamo aggiungere al modulo user una
+utente e una interfaccia amministrativa. Aggiungere al modulo user una
 interfaccia amministrativa che ha accesso alla API completa e consente
 all'operatore di creare/modificare/eliminare utenti
 
-TODO: [ok] Implementiamo un nuovo modulo dashboard che si sviluppi nel contesto
+[OK] Implementare un nuovo modulo dashboard che si sviluppi nel contesto
 <div id="main"></div> del layout principale e sia organizzato in due aree: una
 sidebar e un main content. esattamente come avviene con il modulo header 
 nel quale ogni altro modulo può aggiungere un link o un menu, anche alla sidebar
@@ -261,15 +263,16 @@ SDK: com.vonage server-sdk 9.10.2 —
   RecordAction (ncco), VoiceClient.downloadRecordingRaw(String url)
   EventWebhook.getRecordingUrl(), EventWebhook.getRecordingUuid()
 --------------------------------------------------------------------------------
-CTI BAR: ICONA VOLUME/MICROFONO
-[FEAT]
-Verifica che sia possibile usare icone audio e microfono di dimensioni diverse
-per indicare incremento e descremento volume/guadagno o la stessa icona con uno
+[OK] Verifica che sia possibile indicare incremento e descremento
+volume/guadagno di audio e microfono nella barra cti con la stessa icona con uno
 stile relativo alle dimensioni proporzionale al valore del volume/guadagno
+lo spazio riservato alla icona dovrebbe essere quello della sua dimensione
+maggiore in modo che i pulsanti non si allontanino o sia avvicinino durante la
+selezione
 --------------------------------------------------------------------------------
-SCRIPT POST INSTALL E PRE REMOVE
-[FEAT]
-Rinominare gli script di post importarione e pre rimozione di un modulo mediante
-cmd in: _install.sh e _uninstall.sh in modo da evidenziare che si tratta di
-script speciali. aggiornare tutti i riferimenti ad essi e propagare le modifiche
-in jm se necessario
+[OK] Rinominare gli script di post importarione e pre rimozione di un modulo
+mediante cmd in: install.sh e uninstall.sh. aggiornare tutti i riferimenti ad
+essi e propagare le modifiche in jms se necessario
+--------------------------------------------------------------------------------
+[OK] Rinominare i comandi di import e remove dei moduli di cmd in install e
+uninstall. es. cmd module install

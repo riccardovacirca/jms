@@ -60,12 +60,12 @@ Usage: cmd COMMAND [OPTIONS]
   db setup                         Create user and database from .env file
   db reset                         Reset database (drop and recreate)
 
-  module import <path>              Install module from path relative to jms/module/ (folder or .tar.gz)
-  module import <path> --force      Bypass missing dependency check
-  module export --name <n> [-v x]   Export current project module to jms/module/<name>[-version]/
-  module dist <path>                Package module folder (relative to jms/module/) → dist/<name>-<version>.tar.gz
-  module remove --name <name>       Remove installed module (blocked if other modules depend on it)
-  module remove --name <name> --force  Bypass reverse dependency check
+  module install <path>              Install module from path relative to jms/module/ (folder or .tar.gz)
+  module install <path> --force      Bypass missing dependency check
+  module export --name <n> [-v x]    Export current project module to jms/module/<name>[-version]/
+  module dist <path>                 Package module folder (relative to jms/module/) → dist/<name>-<version>.tar.gz
+  module uninstall --name <name>     Remove installed module (blocked if other modules depend on it)
+  module uninstall --name <name> --force  Bypass reverse dependency check
   module cli <module> <script> [OPTIONS]            Run jms/module/<module>/cli/<script>.sh [OPTIONS]
 
   ngrok run                        Start ngrok tunnel in foreground (Ctrl+C to stop)
@@ -1124,7 +1124,7 @@ for root, dirs, files in os.walk(java_dir):
 }
 
 # ============================================================================
-# module_install — installa un modulo dalla sua cartella sorgente
+# _module_install — installa un modulo dalla sua cartella sorgente
 #
 # Argomenti: MODULE_DIR  (path assoluto della cartella modulo)
 #            MODULE_KEY  (path relativo a module/, es. "user" o "cti/vonage")
@@ -1133,7 +1133,7 @@ for root, dirs, files in os.walk(java_dir):
 # ============================================================================
 # _module_manifest_update — rigenera src/main/resources/module/installed.json
 # con la mappa key→{name,version,dependencies} di tutti i moduli installati.
-# Chiamato automaticamente da module_install e module_remove.
+# Chiamato automaticamente da _module_install e module_remove.
 # ============================================================================
 
 _module_manifest_update() {
@@ -1169,7 +1169,7 @@ with open('$MANIFEST', 'w') as f:
 " 2>/dev/null || true
 }
 
-module_install() {
+_module_install() {
     local MODULE_DIR="$1"
     local MODULE_KEY="$2"
     [ -d "$MODULE_DIR" ]        || error "Cartella modulo non trovata: $MODULE_DIR"
@@ -1460,23 +1460,23 @@ print(m.get('install_script', ''))
 }
 
 # ============================================================================
-# module_import — accetta archivio .tar.gz oppure cartella già estratta
+# module_install — accetta archivio .tar.gz oppure cartella già estratta
 #
 # Il path è relativo a module/ e può includere namespace (es. cti/vonage).
 # ============================================================================
 
-module_import() {
+module_install() {
     local INPUT=""
     local FORCE=false
 
     while [ $# -gt 0 ]; do
         case "$1" in
             --force) FORCE=true; shift ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module import <path> [--force]" ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module install <path> [--force]" ;;
             *) INPUT="$1"; shift ;;
         esac
     done
-    [ -n "$INPUT" ] || error "Usage: cmd module import <path> [--force]"
+    [ -n "$INPUT" ] || error "Usage: cmd module install <path> [--force]"
 
     # Normalizza: rimuovi slash iniziale/finale
     local REL_PATH="${INPUT#/}"
@@ -1580,13 +1580,13 @@ print(len(m.get('dependencies', {})))
             warn "  Installazione forzata con --force"
         else
             if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
-            error "Installa prima i moduli mancanti con: cmd module import <modulo>"
+            error "Installa prima i moduli mancanti con: cmd module install <modulo>"
         fi
     elif [ "$DEP_COUNT" -gt 0 ]; then
         success "Tutte le dipendenze sono soddisfatte"
     fi
 
-    module_install "$MODULE_DIR" "$MODULE_KEY"
+    _module_install "$MODULE_DIR" "$MODULE_KEY"
 
     if [ -n "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
 }
@@ -1852,8 +1852,8 @@ except Exception:
     cfg = None
 
 import os
-install_script  = 'cli/setup.sh'  if os.path.isfile('$OUTPUT/cli/setup.sh')  else None
-uninstall_script = 'cli/remove.sh' if os.path.isfile('$OUTPUT/cli/remove.sh') else None
+install_script   = 'cli/install.sh'   if os.path.isfile('$OUTPUT/cli/install.sh')   else None
+uninstall_script = 'cli/uninstall.sh' if os.path.isfile('$OUTPUT/cli/uninstall.sh') else None
 
 module_data = {
     'name': '$MODULE_NAME',
@@ -1917,12 +1917,12 @@ module_remove() {
                 [ -n "$2" ] || error "--name richiede un valore"
                 MODULE_KEY="$2"; shift 2 ;;
             --force) FORCE=true; shift ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module remove --name <key> [--force]" ;;
-            *) error "Usage: cmd module remove --name <key> [--force]" ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module uninstall --name <key> [--force]" ;;
+            *) error "Usage: cmd module uninstall --name <key> [--force]" ;;
         esac
     done
 
-    [ -n "$MODULE_KEY" ] || error "Usage: cmd module remove --name <key> [--force]"
+    [ -n "$MODULE_KEY" ] || error "Usage: cmd module uninstall --name <key> [--force]"
     MODULE_KEY="${MODULE_KEY%/}"
 
     local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
@@ -2406,7 +2406,7 @@ Lista dei moduli installati con le rispettive versioni (formato: `key@version`).
 ```bash
 # Installa ogni modulo manualmente
 while IFS=@ read -r key version; do
-    cmd module import "$key"
+    cmd module install "$key"
 done < modules.txt
 ```
 
@@ -2446,7 +2446,7 @@ cp pom.xml /workspace/pom.xml
 3. **Installa moduli:**
    ```bash
    while IFS=@ read -r key version; do
-       cmd module import "$key"
+       cmd module install "$key"
    done < modules.txt
    ```
 
@@ -2671,13 +2671,13 @@ case "$1" in
         ;;
     module)
         case "$2" in
-            export) shift 2; module_export "$@" ;;
-            import) shift 2; module_import "$@" ;;
-            dist)   shift 2; module_dist "$@" ;;
-            remove) shift 2; module_remove "$@" ;;
-            cli)    shift 2; module_cli "$@" ;;
-            test)   shift 2; module_test "$@" ;;
-            *) error "Unknown module command: $2. Use: export, import, dist, remove, cli, test" ;;
+            export)    shift 2; module_export "$@" ;;
+            install)   shift 2; module_install "$@" ;;
+            dist)      shift 2; module_dist "$@" ;;
+            uninstall) shift 2; module_remove "$@" ;;
+            cli)       shift 2; module_cli "$@" ;;
+            test)      shift 2; module_test "$@" ;;
+            *) error "Unknown module command: $2. Use: export, install, dist, uninstall, cli, test" ;;
         esac
         ;;
     snap) shift; snap_create "$@" ;;

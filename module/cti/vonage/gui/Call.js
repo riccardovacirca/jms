@@ -696,6 +696,18 @@ class Bar extends LitElement
   }
 
   /**
+   * Calcola la dimensione in px dell'icona volume/guadagno proporzionale al valore.
+   * Range: 9px (valore 0) → 20px (valore 10).
+   *
+   * @param {number} value valore corrente (0–10)
+   * @returns {number} dimensione in px
+   */
+  _iconSize(value)
+  {
+    return Math.round(9 + (value / 10) * 11);
+  }
+
+  /**
    * Regola il guadagno del microfono tramite Web Audio GainNode.
    * Il GainNode deve essere collegato dallo stream locale prima che sia efficace.
    *
@@ -1401,7 +1413,9 @@ class Bar extends LitElement
           <button class="btn btn-sm btn-outline-secondary cti-btn-vol"
             @click=${() => this._adjustOutputVolume(-1)}
             ?disabled=${this._outputVolume <= 0}>−</button>
-          <i class="bi bi-volume-up-fill text-secondary small"></i>
+          <span class="cti-vol-icon-wrap">
+            <i class="bi bi-volume-up-fill text-secondary" style="font-size:${this._iconSize(this._outputVolume)}px"></i>
+          </span>
           <button class="btn btn-sm btn-outline-secondary cti-btn-vol"
             @click=${() => this._adjustOutputVolume(1)}
             ?disabled=${this._outputVolume >= 10}>+</button>
@@ -1418,7 +1432,9 @@ class Bar extends LitElement
           <button class="btn btn-sm btn-outline-secondary cti-btn-vol"
             @click=${() => this._adjustInputGain(-1)}
             ?disabled=${this._inputGain <= 0}>−</button>
-          <i class="bi bi-mic text-secondary small"></i>
+          <span class="cti-vol-icon-wrap">
+            <i class="bi bi-mic text-secondary" style="font-size:${this._iconSize(this._inputGain)}px"></i>
+          </span>
           <button class="btn btn-sm btn-outline-secondary cti-btn-vol"
             @click=${() => this._adjustInputGain(1)}
             ?disabled=${this._inputGain >= 10}>+</button>
