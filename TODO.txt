@@ -142,12 +142,10 @@ un contatto deve chiamare getNext per sé stesso. Questo è corretto e anche in
 caso di chiamata automatica non modificherei questo flusso. verifica solo che
 non ci siano bug o problemi non noti.
 Chiamiamo questo punto da definire il PUNTO D.
-
-TODO: La gui dei moduli che richiedono una gestione deve fornire una interfaccia
-utente e una interfaccia amministrativa. Aggiungere al modulo user una
-interfaccia amministrativa che ha accesso alla API completa e consente
-all'operatore di creare/modificare/eliminare utenti
-
+--------------------------------------------------------------------------------
+[OK] La gui dei moduli che richiedono una gestione deve fornire una interfaccia
+amministrativa.
+--------------------------------------------------------------------------------
 [OK] Implementare un nuovo modulo dashboard che si sviluppi nel contesto
 <div id="main"></div> del layout principale e sia organizzato in due aree: una
 sidebar e un main content. esattamente come avviene con il modulo header 
@@ -156,42 +154,41 @@ del modulo ogni modulo che richiede amministrazione e dispone di una interfaccia
 amministrativa deve poter aggiungere un elementdo di accesso. un eventuale sub
 menu della voce di menu se necessario, verrà organizzato nel contesto
 visualizzato nel main content.
-
+--------------------------------------------------------------------------------
+[OK] Aggiungere al modulo user una interfaccia amministrativa che ha
+accesso alla API completa e consente all'operatore di
+creare/modificare/eliminare utenti
+--------------------------------------------------------------------------------
 TODO: [cti/vonage]
 Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
 eventi. La politica generale è che se un modulo vuole accedere agli eventi
 generati dal modulo CTI deve sottoscriversi come observer. il gestore di
 eventi del modulo CTI notifica a tutti gli observer gli eventi generati
 durante la propria operatività.
-
+--------------------------------------------------------------------------------
 TODO:  [cti/vonage] [crm]
 Deve esistere una tabella settings del cti e una tabella setting del crm che
 sono gestite da admin e root per definire tutti gli aspetti configurabili
 dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
 funzione di chiamata continua). A questa tabella deve corrispondere una pagina
 di gestione del crm e una pagina di gestione del cti.
-
-TODO:
-Che cosa succede se è stata avviata una sessione cti e viene ricaricata
+--------------------------------------------------------------------------------
+Verificare cosa succede se è stata avviata una sessione cti e viene ricaricata
 la pagina? cosa succede se l'operatore è in conversazione e viene ricaricata
 la pagina? quale dovrebbe essere il comportamento più stabile e conservativo?
-
+--------------------------------------------------------------------------------
 TODO: Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
 eventi. La politica generale è che se un modulo vuole accedere agli eventi
 generati dal modulo CTI deve sottoscriversi come observer. il gestore di
 eventi del modulo CTI notifica a tutti gli observer gli eventi generati
 durante la propria operatività.
-
+--------------------------------------------------------------------------------
 TODO: Deve esistere una tabella settings del cti e una tabella setting del crm che
 sono gestite da admin e root per definire tutti gli aspetti configurabili
 dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
 funzione di chiamata continua). A questa tabella deve corrispondere una pagina
 di gestione del crm e una pagina di gestione del cti.
-
-TODO: Che cosa succede se è stata avviata una sessione cti e viene ricaricata
-la pagina? Cosa succede se l'operatore è in conversazione e viene ricaricata
-la pagina? Quale dovrebbe essere il comportamento più stabile e conservativo?
-
+--------------------------------------------------------------------------------
 TODO: La cartella /workspace/jms/docs/core contiene un insieme di file che
 documentano tutti i workflow che è possibile isolare dal flusso applicativo
 della classe /workspace/jms/src/main/java/dev/jms/app/App.java. Per ciascuno è
@@ -201,8 +198,9 @@ isolare dal flusso applicativo del modulo CTI. Il livello di granularità di
 questa analisi deve essere ragionevole ovvero non troppo grossolano ne troppo
 fine. Tutti i workflow vanno numerati in modo da rendere esplicita la
 timeline dell'intero processo.
-
-TODO: [ok] Supponiamo di avere due installazioni jms su due macchine diverse. Queste
+--------------------------------------------------------------------------------
+[OK] Sync del core e della libreira util.
+Supponiamo di avere due installazioni jms su due macchine diverse. Queste
 installazioni potrebbero avere nomi di progetto diversi esempio hello e hola.
 supponiamo che nel progetto hello io esegua delle modifiche alle classi della
 libreria /workspace/src/main/java/dev/jms/util e che propaghi queste modifiche
@@ -217,20 +215,18 @@ possibile perchè App.java, viene modificato dai moduli. Il mio dubbio riguarda
 il fatto che una modifica a una libreria di util potrebbe implicare anche una
 modifica delle dipendenze del file pom.xml. fai un quadro di questa situazione
 [RISPOSTA]: Situazione frammentata. Sovrascrittura sicura solo per alcuni file
-
-TODO: cmd appa clean dovrebbe ripulire anche il contenuto della cartella
+--------------------------------------------------------------------------------
+Il comando cmd app clean dovrebbe ripulire anche il contenuto della cartella
 /workspace/src/main/resources/static
-
-
-In questo scenario non viene mai eseguita la chiamata.
+--------------------------------------------------------------------------------
+[OK/DA TESTARE] Gestione contatti orfani/pianificati.
 Esempio con 3 contatti A, B, C con ordine inserimenti A, B, C.
 Clicco su connetti, vedo A, annullo, clicco su chiama, vedo A e continuo a
 vedere A fino a quando non chiamo A oppure pianifico A. Se chiamo A, A viene
 rimosso dalla coda operatore e dalla coda CTI. se pianifico A, A rimane nella
 coda operatore. Al prossimo click su chiama viene mostrato B
 fino a quando la pianificazione di A consente di vedere A.
-
-disonnessione da CTI con contatti nella coda operatore: A pianificato,
+Disonnessione da CTI con contatti nella coda operatore: A pianificato,
 B non pianificato perchè la connessione è stata chiusa senza prendere una
 decisione su B. Poichè l'operatore non ha avviato la chiamata verso B, allora
 B va considerato orfano, mentre A è pianificato. nella dashboard B va mostrato
@@ -240,8 +236,6 @@ rimuovere entrambi dalla coda operatore qualunque sia il loro stato. La sessione
 operatore dovrebbe sempre essere allineata con lo stato della tabella 
 della coda operatori
 --------------------------------------------------------------------------------
-CTI/VONAGE: REGISTRAZIONE CONVERSAZIONE
-[FEAT]
 Implementare la registrazione audio delle conversazioni CTI con:
 1. NCCO: aggiungere RecordAction alla conversazione in VoiceHelper
    (RecordAction.builder().format(MP3).split(CONVERSATION).channels(2)
