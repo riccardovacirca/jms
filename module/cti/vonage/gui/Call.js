@@ -58,6 +58,8 @@ class Bar extends LitElement
     _user:               { state: true },
     _authorized:         { state: true },
     _autoDialerActive:   { state: true },
+    _autoDialerModal:    { state: true },
+    _autoDialerElapsed:  { state: true },
     _showScheduleModal:  { state: true },
     _scheduleDateInput:  { state: true },
     _showQueueModal:     { state: true },
@@ -67,6 +69,10 @@ class Bar extends LitElement
     _queueEditId:        { state: true },
     _queueEditDate:      { state: true },
     _queueSaving:        { state: true },
+    _prefissi:           { state: true },
+    _prefissiLoading:    { state: true },
+    _addPrefisso:        { state: true },
+    _addScheduledAt:     { state: true },
   };
 
   createRenderRoot()
@@ -106,6 +112,10 @@ class Bar extends LitElement
     this._dtmfInput          = '';
     this._showAddModal       = false;
     this._addFormData        = { nome: '', cognome: '', phone: '', note: '' };
+    this._prefissi           = [];
+    this._prefissiLoading    = false;
+    this._addPrefisso        = '+39';
+    this._addScheduledAt     = '';
     this._showCallLog        = false;
     this._callLog            = [];
     this._callLogLoading     = false;
@@ -119,8 +129,11 @@ class Bar extends LitElement
     this._refreshTimer       = null;
     this._callTimer          = null;
     this._netStatsTimer      = null;
-    this._autoDialerActive  = false;
-    this._autoDialerTimer   = null;
+    this._autoDialerActive        = false;
+    this._autoDialerModal         = false;
+    this._autoDialerElapsed       = 0;
+    this._autoDialerTimer         = null;
+    this._autoDialerCountInterval = null;
     this._unsubCall          = null;
     this._unsubTarget        = null;
     this._unsubUser          = null;
@@ -251,7 +264,7 @@ class Bar extends LitElement
     callState.set({ active: false, callId: null, customerNumber: null, status: 'idle' });
     targetNumber.set(null);
     if (this._autoDialerActive) {
-      this._fetchAndCallDirect();
+      this._startAutoDialerCycle();
     }
   }
 
@@ -395,36 +408,77 @@ class Bar extends LitElement
   }
 
   /**
-   * Avvia l'auto-dialer in modalità hands-free.
-   * Estrae e chiama immediatamente il prossimo contatto senza mostrare il dialogo di conferma.
+   * Avvia l'auto-dialer: mostra la modal e avvia il ciclo di attesa.
    */
   _startAutoDialer()
   {
     this._autoDialerActive = true;
-    this._fetchAndCallDirect();
+    this._autoDialerModal  = true;
+    this._startAutoDialerCycle();
   }
 
   /**
-   * Ferma l'auto-dialer e cancella l'eventuale timer di retry.
+   * Ferma l'auto-dialer, chiude la modal e azzera tutti i timer.
    */
   _stopAutoDialer()
   {
-    this._autoDialerActive = false;
+    this._autoDialerActive  = false;
+    this._autoDialerModal   = false;
+    this._autoDialerElapsed = 0;
     if (this._autoDialerTimer) {
       clearTimeout(this._autoDialerTimer);
       this._autoDialerTimer = null;
     }
+    if (this._autoDialerCountInterval) {
+      clearInterval(this._autoDialerCountInterval);
+      this._autoDialerCountInterval = null;
+    }
   }
 
   /**
-   * Estrae il prossimo contatto dalla coda e avvia la chiamata direttamente, senza dialogo di conferma.
-   * Se la coda è vuota, pianifica un nuovo tentativo dopo 30 secondi.
+   * Avvia il ciclo di attesa: resetta il contatore, incrementa ogni secondo,
+   * dopo 20 secondi esegue la chiamata.
+   */
+  _startAutoDialerCycle()
+  {
+    this._autoDialerElapsed = 0;
+    if (this._autoDialerCountInterval) {
+      clearInterval(this._autoDialerCountInterval);
+    }
+    this._autoDialerCountInterval = setInterval(() => {
+      this._autoDialerElapsed += 1;
+    }, 1000);
+    if (this._autoDialerTimer) {
+      clearTimeout(this._autoDialerTimer);
+    }
+    this._autoDialerTimer = setTimeout(() => {
+      this._autoDialerTimer = null;
+      clearInterval(this._autoDialerCountInterval);
+      this._autoDialerCountInterval = null;
+      this._fetchAndCallDirect();
+    }, 20 * 1000);
+  }
+
+  /**
+   * Formatta i secondi come MM:SS per il cronometro dell'auto-dialer.
+   *
+   * @param {number} s secondi trascorsi
+   * @returns {string} stringa MM:SS
+   */
+  _formatElapsed(s)
+  {
+    let m;
+    m = Math.floor(s / 60);
+    return String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  /**
+   * Estrae il prossimo contatto dalla coda e avvia la chiamata direttamente,
+   * senza dialogo di conferma. Se la coda è vuota, riavvia il ciclo di attesa.
    * Usato dall'auto-dialer hands-free.
    */
   async _fetchAndCallDirect()
   {
-    let contact;
-
     if (!this._autoDialerActive || !this._sessionActive || this._callState.active) {
       return;
     }
@@ -436,11 +490,8 @@ class Bar extends LitElement
       let result;
       result = await this._fetchNextContact();
       if (!result) {
-        this._autoDialerTimer = setTimeout(() => {
-          this._autoDialerTimer = null;
-          this._fetchAndCallDirect();
-        }, 30 * 1000);
         this._contactLoading = false;
+        this._startAutoDialerCycle();
         return;
       }
       this._pendingContact = result.contatto;
@@ -1020,11 +1071,25 @@ class Bar extends LitElement
   /**
    * Apre la modal "Aggiungi contatto" pre-compilando il numero digitato.
    */
-  _openAddModal()
+  async _openAddModal()
   {
-    this._showDtmf   = false;
-    this._addFormData = { nome: '', cognome: '', phone: this._dtmfInput, note: '' };
-    this._showAddModal = true;
+    this._showDtmf       = false;
+    this._addFormData    = { nome: '', cognome: '', phone: this._dtmfInput, note: '' };
+    this._addScheduledAt = '';
+    this._showAddModal   = true;
+
+    if (this._prefissi.length === 0 && !this._prefissiLoading) {
+      this._prefissiLoading = true;
+      try {
+        const res  = await fetch('/api/cti/vonage/prefissi');
+        const data = await res.json();
+        this._prefissi = data.err ? [] : (data.out || []);
+      } catch (_) {
+        this._prefissi = [];
+      } finally {
+        this._prefissiLoading = false;
+      }
+    }
   }
 
   /** Chiude la modal "Aggiungi contatto". */
@@ -1034,44 +1099,97 @@ class Bar extends LitElement
   }
 
   /**
-   * Avvia la chiamata leggendo i dati dal form "Aggiungi contatto".
-   * Popola {@code _pendingContact} e delega a {@code _confirmCall}.
+   * Legge e valida i campi comuni della modal "Nuovo contatto".
+   * Restituisce {@code null} e imposta {@code _sessionError} se la validazione fallisce.
+   *
+   * @returns {{ phone, nome, cognome, note, data } | null}
    */
-  async _confirmAdd()
+  _readAddForm()
   {
-    let contact;
+    let localNumber;
     let phone;
     let nome;
     let cognome;
     let note;
     let data;
 
-    phone = (this.querySelector('#cti-add-tel')?.value || '').trim();
-    if (!phone) {
+    nome        = (this.querySelector('#cti-add-nome')?.value    || '').trim();
+    cognome     = (this.querySelector('#cti-add-cognome')?.value || '').trim();
+    localNumber = (this.querySelector('#cti-add-tel')?.value     || '').trim();
+    note        = (this.querySelector('#cti-add-note')?.value    || '').trim();
+
+    if (!nome || !cognome) {
+      this._sessionError = 'Nome e cognome obbligatori';
+      return null;
+    }
+    if (!localNumber) {
       this._sessionError = 'Numero di telefono obbligatorio';
-      return;
+      return null;
     }
 
-    nome    = (this.querySelector('#cti-add-nome')?.value    || '').trim();
-    cognome = (this.querySelector('#cti-add-cognome')?.value || '').trim();
-    note    = (this.querySelector('#cti-add-note')?.value    || '').trim();
+    phone = this._addPrefisso + localNumber;
+    data  = [
+      { key: 'Nome',    value: nome,    type: 'string' },
+      { key: 'Cognome', value: cognome, type: 'string' },
+      ...(note ? [{ key: 'Note', value: note, type: 'text' }] : []),
+    ];
 
-    data = [
-      nome    ? { key: 'Nome',    value: nome,    type: 'string' } : null,
-      cognome ? { key: 'Cognome', value: cognome, type: 'string' } : null,
-      note    ? { key: 'Note',    value: note,    type: 'text'   } : null,
-    ].filter(Boolean);
+    return { phone, nome, cognome, note, data };
+  }
 
-    contact = {
-      id:       null,
-      phone:    phone,
-      callback: null,
-      data:     data.length ? data : null,
-    };
+  /**
+   * Avvia la chiamata immediata dal form "Nuovo contatto".
+   * Popola {@code _pendingContact} e delega a {@code _confirmCall}.
+   */
+  async _callFromModal()
+  {
+    let form;
+    let contact;
+
+    form = this._readAddForm();
+    if (!form) return;
+
+    contact = { id: null, phone: form.phone, callback: null, data: form.data };
 
     this._showAddModal   = false;
     this._pendingContact = contact;
     await this._confirmCall();
+  }
+
+  /**
+   * Aggiunge il contatto alla coda personale dell'operatore.
+   * Se {@code _addScheduledAt} è valorizzato usa quella data/ora come {@code pianificato_al},
+   * altrimenti inserisce come prossimo da chiamare (MIN esistente − 1 s).
+   */
+  async _confirmAdd()
+  {
+    let form;
+    let body;
+    let res;
+    let json;
+
+    form = this._readAddForm();
+    if (!form) return;
+
+    body = { phone: form.phone, data: form.data };
+    if (this._addScheduledAt) {
+      body.pianificato_al = this._addScheduledAt;
+    }
+
+    res  = await fetch('/api/cti/vonage/queue/contatti', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    json = await res.json();
+
+    if (json.err) {
+      this._sessionError = json.log || 'Errore aggiunta contatto';
+      return;
+    }
+
+    this._showAddModal = false;
+    this._dtmfInput    = '';
   }
 
   /**
@@ -1404,7 +1522,7 @@ class Bar extends LitElement
           @click=${this._toggleAutoDialer.bind(this)}
           title="${this._autoDialerActive ? 'Ferma auto-dialer' : 'Avvia auto-dialer'}"
           ?disabled=${!this._sessionActive || inCall}
-        >${this._autoDialerActive ? html`<i class="bi bi-pause-fill"></i>` : html`<i class="bi bi-play-fill"></i>`}</button>
+        >${this._autoDialerActive ? html`<i class="bi bi-stop-fill"></i>` : html`<i class="bi bi-play-fill"></i>`}</button>
 
         <div class="cti-sep"></div>
 
@@ -1584,6 +1702,38 @@ class Bar extends LitElement
         </div>
       ` : ''}
 
+      <!-- Modal auto-dialer — cronometro e stato chiamata -->
+      ${this._autoDialerModal ? html`
+        <div class="modal d-block" tabindex="-1" style="pointer-events:none; z-index:1060"
+          data-bs-theme=${document.documentElement.dataset.bsTheme === 'dark' ? 'light' : 'dark'}>
+          <div class="modal-dialog modal-sm modal-dialog-centered" style="pointer-events:auto">
+            <div class="modal-content text-center shadow-lg">
+              <div class="modal-body py-4 px-3">
+                ${this._callState?.active
+                  ? html`
+                    <div class="text-success mb-3">
+                      <i class="bi bi-telephone-fill fs-3"></i>
+                    </div>
+                    <p class="fw-semibold text-success mb-0">Chiamata in corso...</p>
+                  `
+                  : html`
+                    <div class="text-secondary small mb-2">Auto-dialer attivo</div>
+                    <div class="font-monospace fw-bold mb-2" style="font-size:4rem;line-height:1">
+                      ${this._formatElapsed(this._autoDialerElapsed)}
+                    </div>
+                  `
+                }
+                <button class="btn btn-sm btn-outline-danger mt-4"
+                  ?disabled=${this._callState?.active}
+                  @click=${this._stopAutoDialer.bind(this)}>
+                  <i class="bi bi-stop-fill"></i>&nbsp; Ferma auto-dialer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Modal aggiungi contatto e chiama -->
       ${this._showAddModal ? html`
         <div class="modal-backdrop fade show"></div>
@@ -1597,26 +1747,53 @@ class Bar extends LitElement
               <div class="modal-body">
                 <div class="row g-2">
                   <div class="col-6">
-                    <label class="form-label text-secondary small mb-1">Nome</label>
+                    <label class="form-label text-secondary small mb-1">Nome <span class="text-danger">*</span></label>
                     <input id="cti-add-nome" class="form-control form-control-sm" type="text" placeholder="Nome">
                   </div>
                   <div class="col-6">
-                    <label class="form-label text-secondary small mb-1">Cognome</label>
+                    <label class="form-label text-secondary small mb-1">Cognome <span class="text-danger">*</span></label>
                     <input id="cti-add-cognome" class="form-control form-control-sm" type="text" placeholder="Cognome">
                   </div>
                   <div class="col-12">
-                    <label class="form-label text-secondary small mb-1">Telefono</label>
-                    <input id="cti-add-tel" class="form-control form-control-sm font-monospace" type="text" placeholder="Telefono" .value=${this._addFormData.phone}>
+                    <label class="form-label text-secondary small mb-1">Telefono <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
+                      <select class="form-select form-select-sm" style="max-width:180px"
+                        .value=${this._addPrefisso}
+                        @change=${e => { this._addPrefisso = e.target.value; }}>
+                        ${this._prefissiLoading
+                          ? html`<option>Caricamento...</option>`
+                          : this._prefissi.map(p => html`
+                            <option value=${p.prefisso} ?selected=${p.prefisso === this._addPrefisso}>
+                              ${p.paese} (${p.prefisso})
+                            </option>
+                          `)
+                        }
+                      </select>
+                      <input id="cti-add-tel" class="form-control font-monospace" type="text" placeholder="Numero" .value=${this._addFormData.phone}>
+                    </div>
                   </div>
                   <div class="col-12">
                     <label class="form-label text-secondary small mb-1">Note</label>
                     <textarea id="cti-add-note" class="form-control form-control-sm" rows="2" placeholder="Note"></textarea>
                   </div>
+                  <div class="col-12">
+                    <hr class="my-1">
+                    <label class="form-label text-secondary small mb-1">Pianifica per</label>
+                    <input type="datetime-local" class="form-control form-control-sm"
+                      .value=${this._addScheduledAt}
+                      @change=${e => { this._addScheduledAt = e.target.value; }}>
+                    <div class="form-text">Lascia vuoto per aggiungere come prossimo da chiamare.</div>
+                  </div>
                 </div>
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @click=${this._closeAddModal.bind(this)}>Annulla</button>
-                <button type="button" class="btn btn-success" @click=${this._confirmAdd.bind(this)}><i class="bi bi-telephone-fill"></i>&nbsp; Chiama</button>
+                <button type="button" class="btn btn-primary" @click=${this._callFromModal.bind(this)}>
+                  <i class="bi bi-telephone-fill"></i>&nbsp; Chiama
+                </button>
+                <button type="button" class="btn btn-success" @click=${this._confirmAdd.bind(this)}>
+                  <i class="bi bi-plus-circle-fill"></i>&nbsp; Aggiungi in coda
+                </button>
               </div>
             </div>
           </div>

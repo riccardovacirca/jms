@@ -133,6 +133,17 @@ public class App
       }
     });
 
+    // Config endpoint pubblico — restituisce le proprietà marcate public.* in application.properties.
+    router.route(HttpMethod.GET, "/api/config", (req, res, session, db) ->
+    {
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(config.getPublic())
+         .send();
+    });
+
     // Frontend log endpoint — raccoglie log dal browser e li scrive nel file di log del backend.
     router.route(HttpMethod.POST, "/api/log", (req, res, session, db) ->
     {

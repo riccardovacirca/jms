@@ -17,21 +17,17 @@ ricompilata e riavviata con il nuovo modulo.
 --------------------------------------------------------------------------------
 [OK] Verificare che il modulo header consenta a ogni modulo di aggiungere alla
 barra header un proprio elemento ad esempio uno o più link o un menu dropdown.
-Rimuovi il link contatti hardcoded. Non è obbligatorio per un modulo
-aggiungere voci al menu. se lo fa devo potere scegliere tra diverse aree dello
-header. la gui del modulo header dovrebbe prevedere a partire da sinistra le
-seguenti aree: logo, link, tema, user. le aree link e user sono vuote. l'area
-logo dovrebbe essere localmente configurabile. l'area tema contiene il
-pulsante light/dark, l'area link può essere usata da tutti i moduli per
-aggiungere un proprio menu dropdown o un singolo link (1 link o menu per
-modulo). l'area user può essere usata da un solo modulo ovvero allo stato
-attuale dal modulo user che dovrebbe essere il contesto in cui il menu
-dropdown dell'utente è definito e da cui è importato. ovviamente il modulo
-user non è privilegiato altri moduli possono usare la area user ma non due
-moduli contemporaneamente.
---------------------------------------------------------------------------------
-Ogni modulo potrebbe avere un file config.js con parametri di configurazione
-custom importabili quando il modulo viene caricato.
+Non è obbligatorio per un modulo aggiungere voci al menu. se lo fa devo potere
+scegliere tra diverse aree dello header. la gui del modulo header dovrebbe
+prevedere a partire da sinistra le seguenti aree: logo, link, tema, user.
+Le aree link e user sono vuote. l'area logo dovrebbe essere localmente
+configurabile. l'area tema contiene il pulsante light/dark, l'area link può
+essere usata da tutti i moduli per aggiungere un proprio menu dropdown o un
+singolo link (1 link o menu per modulo). l'area user può essere usata da un
+solo modulo ovvero allo stato attuale dal modulo user che dovrebbe essere il
+contesto in cui il menu dropdown dell'utente è definito e da cui è importato.
+ovviamente il modulo user non è privilegiato altri moduli possono usare la area
+user ma non due moduli contemporaneamente.
 --------------------------------------------------------------------------------
 TODO: Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
 essere configurabile e potrebbe star enella config.js del modulo header
@@ -270,3 +266,8 @@ essi e propagare le modifiche in jms se necessario
 --------------------------------------------------------------------------------
 [OK] Rinominare i comandi di import e remove dei moduli di cmd in install e
 uninstall. es. cmd module install
+--------------------------------------------------------------------------------
+TODO: [cti/vonage] Sezione "Chiamate" nella dashboard admin.
+Nuovo file js Admin (es. Calls.js) che visualizza lo storico delle chiamate
+con paginazione e filtro per operatore. Per ogni chiamata è possibile
+visualizzare i dettagli della chiamata in un pannello o modal dedicato.

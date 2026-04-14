@@ -430,6 +430,70 @@ public class QueueHandler
   }
 
   /**
+   * POST /api/cti/vonage/queue/contatti — Aggiunge un contatto direttamente alla coda personale.
+   *
+   * <p>Inserisce il contatto come prossimo da chiamare: {@code pianificato_al} viene impostato
+   * a un secondo prima del minimo esistente, in modo che risulti primo nell'ordinamento.</p>
+   *
+   * <p>Body: {@code {phone: string, data: [{key, value, type}]}}</p>
+   * <p>Risposta: {@code {id: long}}</p>
+   */
+  public void aggiungiPersonale(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    session.require(Role.USER, Permission.WRITE);
+
+    OperatorDTO operator;
+    HashMap<String, Object> body;
+    String phone;
+    Object dataField;
+    String contattoJson;
+    long id;
+    HashMap<String, Object> contatto;
+    ObjectMapper mapper;
+
+    operator = new OperatorDAO(db).findByAccountId((int) session.sub());
+
+    if (operator == null) {
+      res.status(200).contentType("application/json")
+         .err(true).log("Nessun operatore assegnato all'account").out(null).send();
+      return;
+    }
+
+    body      = req.body();
+    phone     = DB.toString(body.get("phone"));
+    dataField = body.get("data");
+
+    Validator.required(phone, "phone");
+
+    contatto = new HashMap<>();
+    contatto.put("id",       null);
+    contatto.put("phone",    phone);
+    contatto.put("callback", null);
+    contatto.put("data",     dataField);
+
+    mapper       = new ObjectMapper();
+    contattoJson = mapper.writeValueAsString(contatto);
+
+    String pianificatoAlStr;
+    LocalDateTime pianificatoAl;
+    pianificatoAlStr = DB.toString(body.get("pianificato_al"));
+    pianificatoAl    = pianificatoAlStr != null && !pianificatoAlStr.isBlank()
+      ? LocalDateTime.parse(pianificatoAlStr)
+      : null;
+
+    id = new OperatoreContattiDAO(db).aggiungiPersonale(operator.id(), contattoJson, pianificatoAl);
+
+    HashMap<String, Object> out;
+    out = new HashMap<>();
+    out.put("id", id);
+
+    log.info("[CTI Queue] Contatto {} aggiunto direttamente alla coda personale operatore {}", phone, operator.id());
+
+    res.status(200).contentType("application/json")
+       .err(false).log(null).out(out).send();
+  }
+
+  /**
    * DELETE /api/cti/vonage/queue/contatto/{id}/rimetti — Rimette in coda globale (operatore).
    *
    * <p>Reinserisce il contatto nella coda globale ({@code jms_cti_coda_contatti}) e poi

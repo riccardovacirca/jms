@@ -53,4 +53,29 @@ public class Config
       return defaultValue;
     }
   }
+
+  /**
+   * Restituisce tutte le proprietà con prefisso {@code public.} come mappa,
+   * strippando il prefisso dalle chiavi.
+   * Supporta override via variabile d'ambiente (es. {@code PUBLIC_APP_TITLE}
+   * sovrascrive {@code public.app_title}).
+   *
+   * @return mappa delle proprietà pubbliche (chiave senza prefisso → valore)
+   */
+  public java.util.Map<String, String> getPublic()
+  {
+    java.util.Map<String, String> result;
+    String stripped;
+    String value;
+
+    result = new java.util.LinkedHashMap<>();
+    for (String key : props.stringPropertyNames()) {
+      if (key.startsWith("public.")) {
+        stripped = key.substring("public.".length());
+        value = get(key, "");
+        result.put(stripped, value);
+      }
+    }
+    return result;
+  }
 }

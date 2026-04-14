@@ -78,6 +78,7 @@ public class Routes
     // Coda contatti — prefissi più specifici prima di quelli generici
     router.route(HttpMethod.GET,    "/api/cti/vonage/queue/contact",                   queue::getCurrentContact);
     router.route(HttpMethod.GET,    "/api/cti/vonage/queue/contatti",                  queue::listPersonal);
+    router.route(HttpMethod.POST,   "/api/cti/vonage/queue/contatti",                  queue::aggiungiPersonale);
     router.route(HttpMethod.GET,    "/api/cti/vonage/queue/next",                      queue::getNext);
     router.route(HttpMethod.GET,    "/api/cti/vonage/queue/stats",                     queue::getStats);
     router.route(HttpMethod.PUT,    "/api/cti/vonage/queue/contatto/{id}/pianifica",   queue::pianifica);

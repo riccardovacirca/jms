@@ -44,7 +44,7 @@ public class OperatoreContattiDAO
 
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? AND pianificato_al <= NOW() "
-        + "ORDER BY data_inserimento ASC LIMIT 1";
+        + "ORDER BY pianificato_al ASC, data_inserimento ASC LIMIT 1";
     rows = db.select(sql, operatoreId);
 
     if (!rows.isEmpty()) {
@@ -99,13 +99,59 @@ public class OperatoreContattiDAO
 
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? AND pianificato_al <= NOW() "
-        + "ORDER BY data_inserimento ASC LIMIT 1";
+        + "ORDER BY pianificato_al ASC, data_inserimento ASC LIMIT 1";
     rows = db.select(sql, operatoreId);
 
     if (rows.isEmpty()) {
       return null;
     }
     return mapRow(rows.get(0));
+  }
+
+  /**
+   * Aggiunge direttamente un contatto alla coda personale dell'operatore
+   * come prossimo da chiamare.
+   *
+   * <p>Inserisce il contatto con {@code pianificato_al} impostato a un secondo
+   * prima del minimo esistente, in modo che risulti primo nell'ordinamento
+   * {@code pianificato_al ASC}. Se la coda è vuota imposta {@code NOW()}.</p>
+   *
+   * @param operatoreId id dell'operatore
+   * @param contattoJson JSON del contatto (formato {@code {id, phone, callback, data:[]}})
+   * @return id del record inserito
+   */
+  /**
+   * Aggiunge direttamente un contatto alla coda personale dell'operatore.
+   *
+   * <p>Se {@code pianificatoAl} è {@code null} inserisce il contatto come prossimo
+   * da chiamare: {@code pianificato_al} = MIN esistente − 1 s (o NOW() se coda vuota).
+   * Se {@code pianificatoAl} è valorizzato, usa quella data/ora come pianificazione.</p>
+   *
+   * @param operatoreId  id dell'operatore
+   * @param contattoJson JSON del contatto
+   * @param pianificatoAl data/ora pianificazione, o {@code null} per inserire come prossimo
+   * @return id del record inserito
+   */
+  public long aggiungiPersonale(long operatoreId, String contattoJson, LocalDateTime pianificatoAl) throws Exception
+  {
+    String sql;
+    List<HashMap<String, Object>> rows;
+
+    if (pianificatoAl != null) {
+      sql  = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
+           + "VALUES (?, ?::jsonb, ?) RETURNING id";
+      rows = db.select(sql, operatoreId, contattoJson, pianificatoAl);
+    } else {
+      sql  = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
+           + "VALUES (?, ?::jsonb, "
+           + "  COALESCE("
+           + "    (SELECT MIN(pianificato_al) FROM jms_cti_operatore_contatti WHERE operatore_id = ?) - INTERVAL '1 second',"
+           + "    NOW()"
+           + "  )"
+           + ") RETURNING id";
+      rows = db.select(sql, operatoreId, contattoJson, operatoreId);
+    }
+    return DB.toLong(rows.get(0).get("id"));
   }
 
   /**
