@@ -249,7 +249,7 @@ _app_run_common() {
     _dev_start() {
         printf '\n=== %s restart ===\n' "$(date '+%H:%M:%S')" >> "$DEV_LOG"
         local CP="$WORKSPACE/target/classes:$(cat "$DEV_CP_FILE")"
-        java $JAVA_DEBUG_OPTS -cp "$CP" dev.jms.app.App > /dev/null 2>&1 &
+        java $JAVA_DEBUG_OPTS -cp "$CP" dev.jms.app.App >> "$DEV_LOG" 2>&1 &
         DEV_PID=$!
         echo "$DEV_PID" > "$APP_PID_FILE"
         sleep 1
