@@ -29,12 +29,12 @@ contesto in cui il menu dropdown dell'utente è definito e da cui è importato.
 ovviamente il modulo user non è privilegiato altri moduli possono usare la area
 user ma non due moduli contemporaneamente.
 --------------------------------------------------------------------------------
-TODO: Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
-essere configurabile e potrebbe star enella config.js del modulo header
+[OK] Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
+essere configurabile e potrebbe stare
 --------------------------------------------------------------------------------
 [OK] La barra CTI dovebbe avere un padding minimale max 2px tb 6px rl.
 --------------------------------------------------------------------------------
-TODO: Attualmente esiste una azione nel menu di contesto della barra CTI per
+Attualmente esiste una azione nel menu di contesto della barra CTI per
 importare tutti gli operatori vonage disponibili e associarli a operatori CTI.
 Vorrei capire il contesto generale di questo comportamento.
 Quando un utente esegue il login se il modulo cti è installato viene mostrata
@@ -56,7 +56,7 @@ stato di connessione. La differenza tra operatore vonage e operatore CTI
 consiste nel mantenimento della storia. Uno stesso operatore CTI potrebbe
 essere connesso a operatori vonage diversi ad ogni sessione ma deve conservare
 una storia relativa alla propria attività.
-
+--------------------------------------------------------------------------------
 [OK] Il CTI dovrebbe avere una coda di chiamata contenente contatti. La coda
 deve essere persistente. Il formato di un contatto nella coda è lo stesso
 formato che attualmente viene inviato dal crm al cti quando si esegue una
@@ -67,12 +67,13 @@ e lo mette nella sessione dell'operatore, quindi il contatto viene letto dalla
 sessione per eseguire la chiamata.
 La coda a livello di database è condivisa tra gli operatori. Un contatto può
 essare messo nella sessione di qualsiasi operatore.
-
+--------------------------------------------------------------------------------
 [OK] Il cti ha una funzione di chiamata alternativa al pulsante chiama ovvero
 una chiamata continua che potrebbe essere implementata in una sezione
 della barra cti con i simboli Play/Pause per prelevare dalla coda un contatto,
 metterlo in sessione e avviare la chiamata a intervalli regolari ad esempio
 uno ogni 20 secondi.
+--------------------------------------------------------------------------------
 
 Verifica che lo Stato attuale del modulo CTI sia il seguente e proponi interventi per i punti A,B,C,D:
 
@@ -155,19 +156,11 @@ visualizzato nel main content.
 accesso alla API completa e consente all'operatore di
 creare/modificare/eliminare utenti
 --------------------------------------------------------------------------------
-TODO: [cti/vonage]
 Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
 eventi. La politica generale è che se un modulo vuole accedere agli eventi
 generati dal modulo CTI deve sottoscriversi come observer. il gestore di
 eventi del modulo CTI notifica a tutti gli observer gli eventi generati
 durante la propria operatività.
---------------------------------------------------------------------------------
-TODO:  [cti/vonage] [crm]
-Deve esistere una tabella settings del cti e una tabella setting del crm che
-sono gestite da admin e root per definire tutti gli aspetti configurabili
-dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
-funzione di chiamata continua). A questa tabella deve corrispondere una pagina
-di gestione del crm e una pagina di gestione del cti.
 --------------------------------------------------------------------------------
 Verificare cosa succede se è stata avviata una sessione cti e viene ricaricata
 la pagina? cosa succede se l'operatore è in conversazione e viene ricaricata
@@ -179,13 +172,13 @@ generati dal modulo CTI deve sottoscriversi come observer. il gestore di
 eventi del modulo CTI notifica a tutti gli observer gli eventi generati
 durante la propria operatività.
 --------------------------------------------------------------------------------
-TODO: Deve esistere una tabella settings del cti e una tabella setting del crm che
+Deve esistere una tabella settings del cti e una tabella setting del crm che
 sono gestite da admin e root per definire tutti gli aspetti configurabili
 dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
 funzione di chiamata continua). A questa tabella deve corrispondere una pagina
 di gestione del crm e una pagina di gestione del cti.
 --------------------------------------------------------------------------------
-TODO: La cartella /workspace/jms/docs/core contiene un insieme di file che
+La cartella /workspace/jms/docs/core contiene un insieme di file che
 documentano tutti i workflow che è possibile isolare dal flusso applicativo
 della classe /workspace/jms/src/main/java/dev/jms/app/App.java. Per ciascuno è
 definito anche un diagramma di sequenza UML con la sintassi Mermaid.
@@ -210,6 +203,7 @@ Credo che per App.java, una semplice copia in entrambe le direzioni, non sia
 possibile perchè App.java, viene modificato dai moduli. Il mio dubbio riguarda
 il fatto che una modifica a una libreria di util potrebbe implicare anche una
 modifica delle dipendenze del file pom.xml. fai un quadro di questa situazione
+
 [RISPOSTA]: Situazione frammentata. Sovrascrittura sicura solo per alcuni file
 --------------------------------------------------------------------------------
 Il comando cmd app clean dovrebbe ripulire anche il contenuto della cartella
@@ -267,7 +261,7 @@ essi e propagare le modifiche in jms se necessario
 [OK] Rinominare i comandi di import e remove dei moduli di cmd in install e
 uninstall. es. cmd module install
 --------------------------------------------------------------------------------
-TODO: [cti/vonage] Sezione "Chiamate" nella dashboard admin.
+Sezione "Chiamate" nella dashboard admin del modulo cti.
 Nuovo file js Admin (es. Calls.js) che visualizza lo storico delle chiamate
 con paginazione e filtro per operatore. Per ogni chiamata è possibile
 visualizzare i dettagli della chiamata in un pannello o modal dedicato.
