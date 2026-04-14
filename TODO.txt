@@ -188,7 +188,8 @@ questa analisi deve essere ragionevole ovvero non troppo grossolano ne troppo
 fine. Tutti i workflow vanno numerati in modo da rendere esplicita la
 timeline dell'intero processo.
 --------------------------------------------------------------------------------
-[OK] Sync del core e della libreira util.
+[OK Situazione frammentata. Sovrascrittura sicura solo per alcuni file]
+Sync del core e della libreira util.
 Supponiamo di avere due installazioni jms su due macchine diverse. Queste
 installazioni potrebbero avere nomi di progetto diversi esempio hello e hola.
 supponiamo che nel progetto hello io esegua delle modifiche alle classi della
@@ -203,8 +204,6 @@ Credo che per App.java, una semplice copia in entrambe le direzioni, non sia
 possibile perchè App.java, viene modificato dai moduli. Il mio dubbio riguarda
 il fatto che una modifica a una libreria di util potrebbe implicare anche una
 modifica delle dipendenze del file pom.xml. fai un quadro di questa situazione
-
-[RISPOSTA]: Situazione frammentata. Sovrascrittura sicura solo per alcuni file
 --------------------------------------------------------------------------------
 Il comando cmd app clean dovrebbe ripulire anche il contenuto della cartella
 /workspace/src/main/resources/static
@@ -265,3 +264,29 @@ Sezione "Chiamate" nella dashboard admin del modulo cti.
 Nuovo file js Admin (es. Calls.js) che visualizza lo storico delle chiamate
 con paginazione e filtro per operatore. Per ogni chiamata è possibile
 visualizzare i dettagli della chiamata in un pannello o modal dedicato.
+--------------------------------------------------------------------------------
+Verificare se è necessario aggiungere storage al git ignore della installazione
+--------------------------------------------------------------------------------
+stabilire una procedura di gestione del repo della installazione
+--------------------------------------------------------------------------------
+verificare che l'installazione sia possijbile anche se il repo di jms è privato
+--------------------------------------------------------------------------------
+aggiungere alla dashboard root/admin al vista dei logs
+--------------------------------------------------------------------------------
+aggiungere a dashboardadmin gestione storage
+--------------------------------------------------------------------------------
+implementare caricamenteo liste/contatti in crm
+--------------------------------------------------------------------------------
+il modulo crm sostituise home
+--------------------------------------------------------------------------------
+il click sul titolo non deve avere l'effetto di ricaricare la pagina come gli
+altri link della applicazione in modo da non resettare la sessione nella barra
+cti.
+--------------------------------------------------------------------------------
+implementare una gestione più robusta della sessione nella barra cti per cercare
+di evitare la caduta accidentale della connessione
+--------------------------------------------------------------------------------
+testare su chrome l'installazione
+--------------------------------------------------------------------------------
+aggiungere creazione/gestione campagne a crm
+--------------------------------------------------------------------------------
