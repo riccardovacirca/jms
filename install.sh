@@ -475,14 +475,19 @@ install_claude() {
     echo "Installing Claude Code in container '$DEV_CONTAINER'..."
     docker exec "$DEV_CONTAINER" bash -c "curl -fsSL https://claude.ai/install.sh | bash"
 
+    echo "Setting up Claude Code..."
+    docker exec "$DEV_CONTAINER" bash -c "
+        grep -qxF 'export PATH=\"\$HOME/.local/bin:\$PATH\"' /root/.bashrc \
+            || echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> /root/.bashrc
+    "
+
     echo ""
     echo "Done"
     echo "Claude Code installed in container '$DEV_CONTAINER'"
     echo ""
     echo "Next steps:"
     echo "  1. Run: docker exec -it $DEV_CONTAINER bash"
-    echo "  2. Run: claude auth login"
-    echo "  3. Start using Claude Code with: claude"
+    echo "  2. Run: claude"
 }
 
 # install_ngrok — ngrok dentro il container di sviluppo
