@@ -149,7 +149,8 @@ class Header extends LitElement {
       <nav class="navbar navbar-expand-md bg-body border-bottom px-3">
 
         <!-- area: logo -->
-        <a class="navbar-brand fw-bold" href="/" @click=${this._closeMenu}>
+        <a class="navbar-brand fw-bold" href="#"
+           @click=${e => { e.preventDefault(); window.location.hash = ''; this._closeMenu(); }}>
           ${this['app-name']}
         </a>
 

@@ -7,6 +7,8 @@ import com.vonage.client.users.UsersResponseException;
 import com.vonage.client.voice.Call;
 import com.vonage.client.voice.CallEvent;
 import com.vonage.client.voice.ncco.ConversationAction;
+import com.vonage.client.voice.ncco.RecordAction;
+import com.vonage.client.voice.ncco.RecordingFormat;
 import com.vonage.jwt.Jwt;
 import dev.jms.app.module.cti.vonage.dao.CallDAO;
 import dev.jms.app.module.cti.vonage.dto.CallDTO;
@@ -126,15 +128,17 @@ public class VoiceHelper
    *
    * @param conversationName nome univoco della conversazione
    * @param musicOnHoldUrl   URL audio per la musica di attesa
+   * @param eventUrl         URL evento per la registrazione, o vuoto per disabilitarla
    * @return stringa JSON del NCCO da restituire a Vonage
    *
    * TODO: verificare cosa viene ascoltato dall'operatore durante l'attesa
    *       in assenza di musica configurata
    */
   public String buildOperatorNccoJson(String conversationName,
-                                      String musicOnHoldUrl)
+                                      String musicOnHoldUrl,
+                                      String eventUrl)
   {
-    List<Map<String, Object>> ncco;
+    List<Object> ncco;
     Map<String, Object> conversation;
     List<String> musicList;
 
@@ -154,22 +158,43 @@ public class VoiceHelper
     ncco = new ArrayList<>();
     ncco.add(conversation);
 
+    if (eventUrl != null && !eventUrl.isBlank()) {
+      RecordAction record;
+      record = RecordAction.builder()
+          .format(RecordingFormat.MP3)
+          .channels(2)
+          .eventUrl(eventUrl)
+          .build();
+      ncco.add(record);
+    }
+
     return Json.encode(ncco);
   }
 
   /**
-   * Chiama il cliente tramite il Vonage Java SDK.
-   * Il cliente entra nella stessa conversazione dell'operatore con
-   * {@code startOnEnter: true} (default), avviando la conversazione.
+   * Costruisce e serializza l'NCCO per un ascoltatore silenzioso.
+   * L'admin entra nella conversazione già attiva con {@code mute: true} — trasmette
+   * audio che nessuno può sentire — e {@code endOnExit: false} — la sua uscita non
+   * termina la conversazione tra operatore e cliente.
    *
-   * <p>Registra la relazione operatorUuid → customerUuid nella mappa in-memory
-   * e persiste il record nel database.</p>
-   *
-   * @param customerNumber   numero telefonico del cliente
-   * @param conversationName nome della conversazione (condiviso con l'operatore)
-   * @param operatorUuid     UUID della chiamata dell'operatore
-   * @param db               connessione DB per persistenza
+   * @param conversationName nome della conversazione attiva (da {@code conversation_name}
+   *                         in {@code jms_cti_chiamate})
+   * @return stringa JSON del NCCO da restituire a Vonage
    */
+  public String buildListenerNccoJson(String conversationName)
+  {
+    Map<String, Object> conversation;
+
+    conversation = new HashMap<>();
+    conversation.put("action", "conversation");
+    conversation.put("name", conversationName);
+    conversation.put("startOnEnter", false);
+    conversation.put("endOnExit", false);
+    conversation.put("mute", true);
+
+    return Json.encode(List.of(conversation));
+  }
+
   /**
    * Chiama il cliente tramite il Vonage Java SDK.
    * Il cliente entra nella stessa conversazione dell'operatore con
@@ -243,12 +268,15 @@ public class VoiceHelper
     }
 
     dto = new CallDTO(
-        null, customerUuid, conversationUuid, direction, status,
+        null, customerUuid, conversationUuid, conversationName, direction, status,
         "phone", fromNumber,
         "phone", customerNumber,
         null, null, null, null, null, null,
         answerUrl, eventUrl,
-        null, null, operatoreId, chiamanteAccountId, contattoId, callbackUrl, null, null);
+        null, null,
+        operatoreId, chiamanteAccountId, contattoId, callbackUrl,
+        null, null, null,
+        null, null);
 
     dao = new CallDAO(db);
     dao.insert(dto);
@@ -353,6 +381,17 @@ public class VoiceHelper
           sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
           sessioneDao.registraFineChiamata(op.id(), durata != null ? durata : 0);
         }
+      }
+    } else if ("recording".equals(status)) {
+      String recordingUrl;
+      String recordingUuid;
+      recordingUrl  = DB.toString(body.get("recording_url"));
+      recordingUuid = DB.toString(body.get("recording_uuid"));
+      if (recordingUrl != null && !recordingUrl.isBlank()) {
+        dao.updateRecording(uuid, recordingUrl, recordingUuid);
+        log.info("[CTI] processEvent: recording uuid={} recordingUuid={}", uuid, recordingUuid);
+      } else {
+        log.warn("[CTI] processEvent: recording senza url uuid={}", uuid);
       }
     } else if ("failed".equals(status)    || "rejected".equals(status)
             || "busy".equals(status)      || "timeout".equals(status)
@@ -539,6 +578,17 @@ public class VoiceHelper
     } else {
       log.warn("[CTI] deleteVonageUser: utente non trovato su Vonage: {}", name);
     }
+  }
+
+  /**
+   * Scarica il file audio di una registrazione tramite il Vonage Voice SDK.
+   *
+   * @param url URL della registrazione (da {@code recording_url} nel webhook)
+   * @return contenuto binario del file MP3
+   */
+  public byte[] downloadRecordingRaw(String url) throws Exception
+  {
+    return vonageClient.getVoiceClient().downloadRecordingRaw(url);
   }
 
   public String generateSdkJwt(String userId) throws Exception

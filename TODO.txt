@@ -15,64 +15,44 @@ il ttl.
 [OK] Il post-install script dei moduli chiama l'API prima che l'app venga
 ricompilata e riavviata con il nuovo modulo.
 --------------------------------------------------------------------------------
-[OK] Verificare che il modulo header consenta a ogni modulo di aggiungere alla
-barra header un proprio elemento ad esempio uno o più link o un menu dropdown.
-Non è obbligatorio per un modulo aggiungere voci al menu. se lo fa devo potere
-scegliere tra diverse aree dello header. la gui del modulo header dovrebbe
-prevedere a partire da sinistra le seguenti aree: logo, link, tema, user.
-Le aree link e user sono vuote. l'area logo dovrebbe essere localmente
-configurabile. l'area tema contiene il pulsante light/dark, l'area link può
-essere usata da tutti i moduli per aggiungere un proprio menu dropdown o un
-singolo link (1 link o menu per modulo). l'area user può essere usata da un
-solo modulo ovvero allo stato attuale dal modulo user che dovrebbe essere il
-contesto in cui il menu dropdown dell'utente è definito e da cui è importato.
-ovviamente il modulo user non è privilegiato altri moduli possono usare la area
-user ma non due moduli contemporaneamente.
+[OK] Il modulo header consente a ogni modulo di aggiungere alla barra header un
+proprio elemento ad esempio uno o più link o un menu dropdown.
+Non è obbligatorio per un modulo aggiungere voci al menu. Se lo fa devo potere
+scegliere tra diverse aree dello header.
+La gui del modulo header dovrebbe prevedere a partire da sinistra le seguenti
+aree: logo, link, tema, user.
+Le aree link e user sono vuote.
+L'area logo è localmente configurabile.
+L'area tema contiene il pulsante light/dark
+L'area link può essere usata da tutti i moduli per aggiungere un proprio menu
+dropdown o un singolo link (1 link o menu per modulo).
+L'area user può essere usata da un solo modulo ovvero allo stato attuale dal
+modulo user che dovrebbe essere il contesto in cui il menu dropdown
+dell'utente è definito e da cui è importato. Il modulo user non è privilegiato
+altri moduli possono usare la area user ma non due moduli contemporaneamente.
 --------------------------------------------------------------------------------
-[OK] Il titolo visualizzato alla estrema sinistra della barra header dovrebbe
-essere configurabile e potrebbe stare
+[OK] Il titolo visualizzato alla estrema sinistra della barra header deve essere
+configurabile
 --------------------------------------------------------------------------------
 [OK] La barra CTI dovebbe avere un padding minimale max 2px tb 6px rl.
 --------------------------------------------------------------------------------
-Attualmente esiste una azione nel menu di contesto della barra CTI per
-importare tutti gli operatori vonage disponibili e associarli a operatori CTI.
-Vorrei capire il contesto generale di questo comportamento.
-Quando un utente esegue il login se il modulo cti è installato viene mostrata
-la barra CTI. Un utente corrisponde a un operatore CTI e un operatore CTI
-corrisponde a un operatore vonage. Il modulo CTI dovrebbe eseguire questo
-controllo e creare questa associazione quando si clicca sul pulsante
-Connetti... al termine della sessione di lavoro o se l'utente perde lo stato
-di autenticazione dovrebbe avvenire una disconnessione anche dall'operatore
-CTI e qundi Vonage. Il link elenco operatori visibile all'utente admin o root
-dovrebbe mostrare lo stato di associazione tra operatore cti e operatore
-vonage relativo a tutti gli operatori che hanno cliccato su Connetti...
-pertanto lo stato di connessione dovrebbe essere persistente. Un utente admin
-o root dovrebbe anche avere un proprio operatore associato sia CTI che vonage.
-La voce elenco operatori non è presente nel menu di contesto di un operatore.
-Al suo posto dovrebbe essere presente una voce 'Stato operatore' che mostra
-statistiche di connessione dell'operatore corrente. Se per qualche ragione si
-perde la connessione con l'operatore vonage bisogna interrompere anche lo
-stato di connessione. La differenza tra operatore vonage e operatore CTI
-consiste nel mantenimento della storia. Uno stesso operatore CTI potrebbe
-essere connesso a operatori vonage diversi ad ogni sessione ma deve conservare
-una storia relativa alla propria attività.
+[OK] Il CTI dovrebbe avere una coda di chiamata contenente contatti.
+La coda deve essere persistente.
+Il formato di un contatto nella coda è lo stesso formato che attualmente viene
+inviato dal CRM al CTI quando si esegue una chiamata.
+Il CTI espone un endpoint per scrivere nella coda.
+Il CRM usa l'endpoint per scrivere nella coda.
+Il CRM può scrivere anche in modo massivo nella coda del CTI.
+Il click sul pulsante Chiama estrae il prossimo contatto dalla coda e lo mette
+nella sessione dell'operatore, quindi il contatto viene letto dalla sessione
+per eseguire la chiamata.
+La coda a livello di database è condivisa tra gli operatori.
+Un contatto può essare messo nella sessione di qualsiasi operatore.
 --------------------------------------------------------------------------------
-[OK] Il CTI dovrebbe avere una coda di chiamata contenente contatti. La coda
-deve essere persistente. Il formato di un contatto nella coda è lo stesso
-formato che attualmente viene inviato dal crm al cti quando si esegue una
-chiamata. il cti espone un endpoint per scrivere nella coda. Il crm usa
-l'endpoint per scrivere nella coda. il crm può scrivere anche in modo massivo
-sulla coda. il click sul pulsante chiama estrae il prossimo contatto dalla coda
-e lo mette nella sessione dell'operatore, quindi il contatto viene letto dalla
-sessione per eseguire la chiamata.
-La coda a livello di database è condivisa tra gli operatori. Un contatto può
-essare messo nella sessione di qualsiasi operatore.
---------------------------------------------------------------------------------
-[OK] Il cti ha una funzione di chiamata alternativa al pulsante chiama ovvero
-una chiamata continua che potrebbe essere implementata in una sezione
-della barra cti con i simboli Play/Pause per prelevare dalla coda un contatto,
-metterlo in sessione e avviare la chiamata a intervalli regolari ad esempio
-uno ogni 20 secondi.
+[OK] Il CTI ha una funzione di chiamata continua implementata in una sezione
+della barra del CTI con i simboli Play/Stop per prelevare dalla coda un
+contatto, metterlo in sessione e avviare la chiamata a intervalli regolari ad
+esempio uno ogni 20 secondi.
 --------------------------------------------------------------------------------
 
 Verifica che lo Stato attuale del modulo CTI sia il seguente e proponi interventi per i punti A,B,C,D:
@@ -95,12 +75,12 @@ type può essere string, number, o text.
 I campi id, callback e data sono opzionali; phone è obbligatorio per eseguire la chiamata.
 
 Il CTI espone endpoint per scrivere nella coda. Due endpoint:
-  • POST /api/cti/vonage/queue — inserimento singolo ({contattoJson: string, priorita?: number})
-  • POST /api/cti/vonage/queue/bulk — inserimento massivo ({contatti: string[], priorita?:number})
+  • POST /api/CTI/vonage/queue — inserimento singolo ({contattoJson: string, priorita?: number})
+  • POST /api/CTI/vonage/queue/bulk — inserimento massivo ({contatti: string[], priorita?:number})
 
 Entrambi richiedono ruolo USER.
 
-Il modulo crm attualmente NON implementa metodi per scrivere sulla coda del CTI. Il crm ha ancora il vecchio meccanismo: TurnoHandler cerca l'operatore tramite jms_cti_operatori.claim_account_id e gli passa il contatto direttamente via targetNumber nello store del frontend.
+Il modulo CRM attualmente NON implementa metodi per scrivere sulla coda del CTI. Il CRM ha ancora il vecchio meccanismo: TurnoHandler cerca l'operatore tramite jms_cti_operatori.claim_account_id e gli passa il contatto direttamente via targetNumber nello store del frontend.
 Non chiama nessuno degli endpoint della coda.
 Quando i contatti sono messi nella coda di chiamata sono a disposizione di tutti gli operatori.
 Il click su "Chiama" nella barra del CTI estrae il prossimo contatto dalla coda e lo mette nella
@@ -140,8 +120,8 @@ caso di chiamata automatica non modificherei questo flusso. verifica solo che
 non ci siano bug o problemi non noti.
 Chiamiamo questo punto da definire il PUNTO D.
 --------------------------------------------------------------------------------
-[OK] La gui dei moduli che richiedono una gestione deve fornire una interfaccia
-amministrativa.
+[OK]
+- La gui dei moduli che richiedono una gestione fornsce una interfaccia admin.
 --------------------------------------------------------------------------------
 [OK] Implementare un nuovo modulo dashboard che si sviluppi nel contesto
 <div id="main"></div> del layout principale e sia organizzato in due aree: una
@@ -152,9 +132,8 @@ amministrativa deve poter aggiungere un elementdo di accesso. un eventuale sub
 menu della voce di menu se necessario, verrà organizzato nel contesto
 visualizzato nel main content.
 --------------------------------------------------------------------------------
-[OK] Aggiungere al modulo user una interfaccia amministrativa che ha
-accesso alla API completa e consente all'operatore di
-creare/modificare/eliminare utenti
+[OK] Aggiungere al modulo user una interfaccia amministrativa che ha accesso
+alla API completa e consente all'operatore di creare/modificare/eliminare utenti
 --------------------------------------------------------------------------------
 Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
 eventi. La politica generale è che se un modulo vuole accedere agli eventi
@@ -162,23 +141,18 @@ generati dal modulo CTI deve sottoscriversi come observer. il gestore di
 eventi del modulo CTI notifica a tutti gli observer gli eventi generati
 durante la propria operatività.
 --------------------------------------------------------------------------------
-Verificare cosa succede se è stata avviata una sessione cti e viene ricaricata
-la pagina? cosa succede se l'operatore è in conversazione e viene ricaricata
-la pagina? quale dovrebbe essere il comportamento più stabile e conservativo?
+[OK da testare] Verificare cosa succede se è stata avviata una sessione CTI e
+viene ricaricata la pagina? cosa succede se l'operatore è in conversazione e
+viene ricaricata la pagina? quale dovrebbe essere il comportamento più stabile
+e conservativo?
 --------------------------------------------------------------------------------
-TODO: Tutte le operazioni del CTI che riguardano una chiamata dovrebbero generare
-eventi. La politica generale è che se un modulo vuole accedere agli eventi
-generati dal modulo CTI deve sottoscriversi come observer. il gestore di
-eventi del modulo CTI notifica a tutti gli observer gli eventi generati
-durante la propria operatività.
+Ogni modulo deve avere una tabella settings che sono gestite da admin e root per
+definire tutti gli aspetti configurabili dinamicamente. A questa tabella deve
+corrispondere una pagina di gestione nella dashboard con un file relatvo
+settings.js nella cartella admin della gui del modulo. i settings sono coppie
+chiave/valore
 --------------------------------------------------------------------------------
-Deve esistere una tabella settings del cti e una tabella setting del crm che
-sono gestite da admin e root per definire tutti gli aspetti configurabili
-dinamicamente (ad esempio il tempo di attesa tra una chiamata e l'altra nella
-funzione di chiamata continua). A questa tabella deve corrispondere una pagina
-di gestione del crm e una pagina di gestione del cti.
---------------------------------------------------------------------------------
-La cartella /workspace/jms/docs/core contiene un insieme di file che
+[OK] La cartella /workspace/jms/docs/core contiene un insieme di file che
 documentano tutti i workflow che è possibile isolare dal flusso applicativo
 della classe /workspace/jms/src/main/java/dev/jms/app/App.java. Per ciascuno è
 definito anche un diagramma di sequenza UML con la sintassi Mermaid.
@@ -228,26 +202,26 @@ della coda operatori
 Implementare la registrazione audio delle conversazioni CTI con:
 1. NCCO: aggiungere RecordAction alla conversazione in VoiceHelper
    (RecordAction.builder().format(MP3).split(CONVERSATION).channels(2)
-   .eventUrl("/api/cti/vonage/event").build())
+   .eventUrl("/api/CTI/vonage/event").build())
 2. DB: aggiungere colonne recording_url VARCHAR(500) e recording_uuid VARCHAR(64)
    a jms_cti_chiamate tramite nuova migration
 3. EVENT: intercettare status="recording" in VoiceHelper.processEvent,
    salvare recording_url e recording_uuid sulla riga chiamata corrispondente
-4. DOWNLOAD: endpoint GET /api/cti/vonage/call/{id}/recording che:
+4. DOWNLOAD: endpoint GET /api/CTI/vonage/call/{id}/recording che:
    - legge recording_url da jms_cti_chiamate
    - scarica l'audio tramite VoiceClient.downloadRecordingRaw(url)
    - salva il file in storage nel percorso:
      recordings/<operatoreId>/<YYYY-MM-DD>/<timestamp>_<callId>.mp3
    - aggiorna jms_cti_chiamate con il path locale (colonna recording_path)
 5. STORAGE: il percorso recordings/ è configurabile tramite
-   cti.vonage.recordings.path in application.properties
-   (default: /app/data/cti/recordings)
+   CTI.vonage.recordings.path in application.properties
+   (default: /app/data/CTI/recordings)
 SDK: com.vonage server-sdk 9.10.2 —
   RecordAction (ncco), VoiceClient.downloadRecordingRaw(String url)
   EventWebhook.getRecordingUrl(), EventWebhook.getRecordingUuid()
 --------------------------------------------------------------------------------
 [OK] Verifica che sia possibile indicare incremento e descremento
-volume/guadagno di audio e microfono nella barra cti con la stessa icona con uno
+volume/guadagno di audio e microfono nella barra CTI con la stessa icona con uno
 stile relativo alle dimensioni proporzionale al valore del volume/guadagno
 lo spazio riservato alla icona dovrebbe essere quello della sua dimensione
 maggiore in modo che i pulsanti non si allontanino o sia avvicinino durante la
@@ -260,33 +234,34 @@ essi e propagare le modifiche in jms se necessario
 [OK] Rinominare i comandi di import e remove dei moduli di cmd in install e
 uninstall. es. cmd module install
 --------------------------------------------------------------------------------
-Sezione "Chiamate" nella dashboard admin del modulo cti.
+Sezione "Chiamate" nella dashboard admin del modulo CTI.
 Nuovo file js Admin (es. Calls.js) che visualizza lo storico delle chiamate
 con paginazione e filtro per operatore. Per ogni chiamata è possibile
 visualizzare i dettagli della chiamata in un pannello o modal dedicato.
 --------------------------------------------------------------------------------
-Verificare se è necessario aggiungere storage al git ignore della installazione
+Verificare se è necessario aggiungere storage al gitignore della installazione
 --------------------------------------------------------------------------------
-stabilire una procedura di gestione del repo della installazione
+Stabilire una procedura di gestione del repo del progetto corrente
 --------------------------------------------------------------------------------
-verificare che l'installazione sia possijbile anche se il repo di jms è privato
+Verificare che l'installazione sia possibile anche se il repo di jms è privato
 --------------------------------------------------------------------------------
-aggiungere alla dashboard root/admin al vista dei logs
+Aggiungere alla dashboard root/admin al vista dei logs
 --------------------------------------------------------------------------------
-aggiungere a dashboardadmin gestione storage
+Aggiungere a dashboard admin gestione storage
 --------------------------------------------------------------------------------
-implementare caricamenteo liste/contatti in crm
+Implementare caricamenteo liste/contatti in CRM
 --------------------------------------------------------------------------------
-il modulo crm sostituise home
+Il modulo CRM sostituise home
 --------------------------------------------------------------------------------
-il click sul titolo non deve avere l'effetto di ricaricare la pagina come gli
-altri link della applicazione in modo da non resettare la sessione nella barra
-cti.
+[OK] Il click sul titolo non deve avere l'effetto di ricaricare la pagina come
+gli altri link della applicazione in modo da non resettare la sessione nella
+barra CTI.
 --------------------------------------------------------------------------------
-implementare una gestione più robusta della sessione nella barra cti per cercare
+Implementare una gestione più robusta della sessione nella barra CTI per cercare
 di evitare la caduta accidentale della connessione
 --------------------------------------------------------------------------------
-testare su chrome l'installazione
+Testare su chrome l'installazione
 --------------------------------------------------------------------------------
-aggiungere creazione/gestione campagne a crm
+Aggiungere creazione/gestione campagne a CRM
 --------------------------------------------------------------------------------
+Verificare la possibilità di suddividere un modulo in componenti autonomi

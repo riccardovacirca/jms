@@ -212,6 +212,7 @@ class Bar extends LitElement
       this._scheduleRefresh();
       this._startCallTimer();
       this._restoreContact();
+      this._restoreCallState();
       Logger.debug('[CTI] Connessione operatore: sessione WebRTC attiva');
     } catch (e) {
       this._sessionError  = e.message;
@@ -363,6 +364,39 @@ class Bar extends LitElement
     }
 
     return { contatto: data.out.contatto, codaId: data.out.codaId };
+  }
+
+  /**
+   * Al reconnect, interroga il backend per verificare se esiste una chiamata
+   * con stato ringing o answered associata all'operatore corrente.
+   * Se presente, ripristina callState con uuid e numero del cliente, permettendo
+   * all'operatore di riagganciare la chiamata anche dopo un page reload avvenuto
+   * durante una conversazione.
+   */
+  async _restoreCallState()
+  {
+    let response;
+    let data;
+
+    try {
+      response = await fetch('/api/cti/vonage/call/active');
+      data = await response.json();
+      if (!data.err && data.out) {
+        callState.set({
+          active:         true,
+          callId:         data.out.uuid,
+          customerNumber: data.out.customerNumber,
+          status:         data.out.status === 'answered' ? 'connected' : 'waiting_customer',
+        });
+        targetNumber.set(data.out.customerNumber || '');
+        Logger.debug('[CTI] Ripristino chiamata attiva dopo reload', {
+          uuid:   data.out.uuid,
+          status: data.out.status,
+        });
+      }
+    } catch (e) {
+      Logger.error('[CTI] Ripristino stato chiamata: errore rete', { message: e.message });
+    }
   }
 
   /**
@@ -944,12 +978,9 @@ class Bar extends LitElement
     this._stopAutoDialer();
     if (this._sessionActive) {
       Logger.debug('[CTI] Disconnessione operatore: rilascio sessione');
-      try {
-        await fetch('/api/cti/vonage/sdk/auth', { method: 'DELETE' });
-      } catch (e) {
-        Logger.error('[CTI] Disconnessione operatore: errore release operatore', { message: e.message });
-        console.error('[CTI] Errore release operatore:', e);
-      }
+      // navigator.sendBeacon garantisce la consegna anche durante page unload,
+      // a differenza di fetch DELETE che viene annullato dal browser prima del completamento.
+      navigator.sendBeacon('/api/cti/vonage/sdk/auth/release');
       if (this._lastToken) {
         try {
           await this._client.deleteSession(this._lastToken);
@@ -1379,7 +1410,7 @@ class Bar extends LitElement
     this._callLogPage    = page;
 
     try {
-      response = await fetch('/api/cti/vonage/call?page=' + page + '&size=15');
+      response = await fetch('/api/cti/vonage/call/history?page=' + page + '&size=15');
       data = await response.json();
       if (data.err) {
         throw new Error(data.log || 'Errore caricamento chiamate');

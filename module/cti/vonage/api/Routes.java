@@ -38,16 +38,24 @@ public class Routes
 
     // assegna operatore e genera JWT SDK
     router.async(HttpMethod.POST, "/api/cti/vonage/sdk/auth", calls::sdkToken);
-    // rilascia operatore a fine sessione
+    // rilascia operatore a fine sessione (DELETE da JS normale)
     router.route(HttpMethod.DELETE, "/api/cti/vonage/sdk/auth", calls::releaseSession);
+    // rilascia operatore via navigator.sendBeacon (POST, usato su page unload)
+    router.route(HttpMethod.POST,   "/api/cti/vonage/sdk/auth/release", calls::releaseBeacon);
+    // genera JWT SDK per ascolto silenzioso (solo ADMIN/ROOT)
+    router.async(HttpMethod.POST,   "/api/cti/vonage/sdk/auth/listen", calls::sdkAuthListen);
     // webhook Vonage: NCCO operatore + avvio chiamata cliente
     router.async(HttpMethod.POST, "/api/cti/vonage/answer", calls::answer);
     // hangup operatore e cliente
     router.async(HttpMethod.PUT, "/api/cti/vonage/call/{uuid}/hangup", calls::hangup);
     // webhook Vonage: eventi Voice e RTC
     router.route(HttpMethod.POST, "/api/cti/vonage/event", calls::event);
+    // chiamata attiva dell'operatore corrente (per ripristino stato dopo reload)
+    router.route(HttpMethod.GET,  "/api/cti/vonage/call/active", calls::activeCall);
     // storico chiamate (paginato)
-    router.route(HttpMethod.GET,  "/api/cti/vonage/call",  calls::list);
+    router.route(HttpMethod.GET,  "/api/cti/vonage/call/history",  calls::list);
+    // scarica e archivia registrazione audio (admin)
+    router.async(HttpMethod.GET,  "/api/cti/vonage/call/{id}/recording", calls::downloadRecording);
 
     // CRUD operatori (admin)
     router.route(HttpMethod.GET,    "/api/cti/vonage/admin/operator",                  operators::list);

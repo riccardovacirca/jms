@@ -59,7 +59,12 @@ class Router
         .filter(([_, c]) => c.init)
         .map(([_, c]) => {
           if (typeof c.init === 'function') return c.init();
-          return moduleInit[`./module/${c.path}/init.js`]().then(m => m.default());
+          const factory = moduleInit[`./module/${c.path}/init.js`];
+          if (typeof factory !== 'function') {
+            console.warn(`[Router] init.js not found for module path "${c.path}" — skipping`);
+            return Promise.resolve();
+          }
+          return factory().then(m => m.default());
         })
     );
 

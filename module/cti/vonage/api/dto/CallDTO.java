@@ -10,6 +10,7 @@ public record CallDTO(
   Long          id,
   String        uuid,
   String        conversazioneUuid,
+  String        conversationName,
   String        direzione,
   String        stato,
   String        tipoMittente,
@@ -30,6 +31,9 @@ public record CallDTO(
   Long          chiamanteAccountId,
   Long          contattoId,
   String        callbackUrl,
+  String        recordingUrl,
+  String        recordingUuid,
+  String        recordingPath,
   LocalDateTime dataCreazione,
   LocalDateTime dataAggiornamento
 ) {}

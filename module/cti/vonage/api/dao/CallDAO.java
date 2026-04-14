@@ -34,13 +34,13 @@ public class CallDAO
     ArrayList<HashMap<String, Object>> rows;
 
     sql = "INSERT INTO jms_cti_chiamate "
-        + "(uuid, conversazione_uuid, direzione, stato, "
+        + "(uuid, conversazione_uuid, conversation_name, direzione, stato, "
         + "tipo_mittente, numero_mittente, tipo_destinatario, numero_destinatario, "
         + "answer_url, event_url, operatore_id, chiamante_account_id, contatto_id, callback_url, data_creazione) "
-        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) "
+        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) "
         + "RETURNING id";
     rows = db.select(sql,
-        dto.uuid(), dto.conversazioneUuid(), dto.direzione(), dto.stato(),
+        dto.uuid(), dto.conversazioneUuid(), dto.conversationName(), dto.direzione(), dto.stato(),
         dto.tipoMittente(), dto.numeroMittente(), dto.tipoDestinatario(), dto.numeroDestinatario(),
         dto.answerUrl(), dto.eventUrl(), dto.operatoreId(), dto.chiamanteAccountId(),
         dto.contattoId(), dto.callbackUrl());
@@ -226,6 +226,82 @@ public class CallDAO
     return toDTO(rows.get(0));
   }
 
+  /**
+   * Restituisce la prima chiamata con stato {@code ringing} o {@code answered}
+   * associata all'operatore indicato, o {@code null} se non ne esiste alcuna.
+   * Usato dal frontend al reconnect per ripristinare lo stato in caso di page reload
+   * avvenuto durante una conversazione.
+   *
+   * @param operatoreId id dell'operatore in jms_cti_operatori
+   * @return riga grezza (uuid, stato, numero_destinatario) o null
+   */
+  public HashMap<String, Object> findActiveByOperatore(long operatoreId) throws Exception
+  {
+    String sql;
+    ArrayList<HashMap<String, Object>> rows;
+
+    sql = "SELECT uuid, stato, numero_destinatario, conversation_name FROM jms_cti_chiamate "
+        + "WHERE operatore_id = ? AND stato IN ('ringing', 'answered') "
+        + "ORDER BY data_creazione DESC LIMIT 1";
+    rows = db.select(sql, operatoreId);
+    if (rows.isEmpty()) {
+      return null;
+    }
+    return rows.get(0);
+  }
+
+  /**
+   * Restituisce la chiamata identificata dal suo id, o {@code null} se non trovata.
+   *
+   * @param id id della chiamata in {@code jms_cti_chiamate}
+   * @return DTO della chiamata, o null
+   */
+  public CallDTO findById(long id) throws Exception
+  {
+    String sql;
+    ArrayList<HashMap<String, Object>> rows;
+
+    sql = "SELECT * FROM jms_cti_chiamate WHERE id = ?";
+    rows = db.select(sql, id);
+    if (rows.isEmpty()) {
+      return null;
+    }
+    return toDTO(rows.get(0));
+  }
+
+  /**
+   * Aggiorna {@code recording_url} e {@code recording_uuid} quando Vonage notifica
+   * il completamento della registrazione tramite evento {@code recording}.
+   *
+   * @param uuid          UUID Vonage della chiamata
+   * @param recordingUrl  URL di download della registrazione su Vonage
+   * @param recordingUuid UUID della registrazione su Vonage
+   */
+  public void updateRecording(String uuid, String recordingUrl, String recordingUuid)
+      throws Exception
+  {
+    String sql;
+
+    sql = "UPDATE jms_cti_chiamate SET recording_url = ?, recording_uuid = ?, "
+        + "data_aggiornamento = NOW() WHERE uuid = ?";
+    db.query(sql, recordingUrl, recordingUuid, uuid);
+  }
+
+  /**
+   * Aggiorna {@code recording_path} dopo che il file audio è stato scaricato e salvato
+   * in storage locale.
+   *
+   * @param id   id della chiamata in {@code jms_cti_chiamate}
+   * @param path percorso assoluto del file salvato
+   */
+  public void updateRecordingPath(long id, String path) throws Exception
+  {
+    String sql;
+
+    sql = "UPDATE jms_cti_chiamate SET recording_path = ?, data_aggiornamento = NOW() WHERE id = ?";
+    db.query(sql, path, id);
+  }
+
   /** Mappa un record del ResultSet nel DTO corrispondente. */
   private CallDTO toDTO(HashMap<String, Object> r)
   {
@@ -233,6 +309,7 @@ public class CallDAO
         DB.toLong(r.get("id")),
         DB.toString(r.get("uuid")),
         DB.toString(r.get("conversazione_uuid")),
+        DB.toString(r.get("conversation_name")),
         DB.toString(r.get("direzione")),
         DB.toString(r.get("stato")),
         DB.toString(r.get("tipo_mittente")),
@@ -253,6 +330,9 @@ public class CallDAO
         DB.toLong(r.get("chiamante_account_id")),
         DB.toLong(r.get("contatto_id")),
         DB.toString(r.get("callback_url")),
+        DB.toString(r.get("recording_url")),
+        DB.toString(r.get("recording_uuid")),
+        DB.toString(r.get("recording_path")),
         DB.toLocalDateTime(r.get("data_creazione")),
         DB.toLocalDateTime(r.get("data_aggiornamento")));
   }
