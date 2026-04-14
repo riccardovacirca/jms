@@ -654,7 +654,8 @@ GITIGNORE
     fi
 
     echo "Removing template artifacts..."
-    rm -rf docker docs module TODO bin
+    rm -rf docker docs module bin
+    rm -f TODO.txt
 
     echo "Done"
 }
