@@ -836,10 +836,10 @@ git_init() {
 
     cd "$WORKSPACE"
 
+    git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
     git init || error "git init fallito"
     git config user.name "$GIT_USER"
     git config user.email "$GIT_EMAIL"
-    git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
 
     info "  Staging di tutti i file..."
     git add .

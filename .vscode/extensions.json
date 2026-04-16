@@ -5,6 +5,9 @@
     "echoapi.echoapi-for-vscode",
     "mtxr.sqltools",
     "mtxr.sqltools-driver-pg",
-    "mermaid.mermaidchart"
+    "MermaidChart.vscode-mermaid-chart"
+  ],
+  "hostOnly": [
+    "firefox-devtools.vscode-firefox-debug"
   ]
 }

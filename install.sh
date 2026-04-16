@@ -11,6 +11,7 @@
 #   --mailpit               Installa/ricrea il container Mailpit del progetto
 #   --ngrok                 Installa ngrok nel container di sviluppo
 #   --claude                Installa Claude Code nel container di sviluppo
+#   --vscode                Installa le estensioni VSCode da .vscode/extensions.json
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
@@ -19,6 +20,7 @@
 #   ./install.sh --mailpit   # Installa/ricrea Mailpit
 #   ./install.sh --claude    # Installa Claude Code
 #   ./install.sh --ngrok     # Installa ngrok nel container
+#   ./install.sh --vscode    # Installa estensioni VSCode
 #
 # -----------------------------------------------------------------------------
 # PROCEDURA DI INSTALL (primo avvio) — due fasi
@@ -185,6 +187,7 @@ Options:
   --mailpit               Install/recreate project Mailpit container
   --claude                Install Claude Code inside the dev container
   --ngrok                 Install ngrok inside the dev container
+  --vscode                Install VSCode extensions from .vscode/extensions.json
   --help, -h              Show this message
 
 Examples:
@@ -193,6 +196,7 @@ Examples:
   ./install.sh --claude    # Install Claude Code in dev container
   ./install.sh --mailpit   # Install/recreate Mailpit (reads from .env)
   ./install.sh --ngrok     # Install ngrok in dev container
+  ./install.sh --vscode    # Install VSCode extensions
 EOF
     exit 0
 }
@@ -598,16 +602,7 @@ install_dev() {
             tail -f /dev/null >/dev/null
     fi
 
-    rm -f .gitignore
-    cat > .gitignore << 'GITIGNORE'
-target/
-gui/node_modules/
-src/main/resources/static/
-docker/
-.env
-logs/
-config/
-GITIGNORE
+    cp jms/.gitignore .gitignore
 
     # config/application.properties — sostituisce i placeholder con i valori da .env
     sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
@@ -635,6 +630,7 @@ GITIGNORE
     sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
     sed "s|{{PGSQL_HOST}}|$PGSQL_HOST|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
     sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
+    rm -f .vscode/settings.template.json
 
     echo "Installing npm dependencies..."
     docker exec "$DEV_CONTAINER" sh -c "cd /workspace/gui && npm install"
@@ -665,6 +661,60 @@ GITIGNORE
 # Dispatcher
 # =============================================================================
 
+install_vscode_extensions() {
+    EXTENSIONS_FILE=".vscode/extensions.json"
+    if [ ! -f "$EXTENSIONS_FILE" ]; then
+        echo "ERROR: $EXTENSIONS_FILE not found"
+        exit 1
+    fi
+    if ! command -v code > /dev/null 2>&1; then
+        echo "ERROR: 'code' command not found. Make sure VSCode is installed and 'code' is in PATH."
+        exit 1
+    fi
+
+    # Legge tutte le recommendations
+    ALL_EXTS=$(grep '"' "$EXTENSIONS_FILE" \
+        | grep -v '^\s*//' \
+        | sed 's/.*"\([^"]*\.[^"]*\)".*/\1/' \
+        | grep '\.')
+
+    # Legge le estensioni hostOnly (UI extensions che non possono girare nel container)
+    # Estratte dal blocco dopo "hostOnly" fino alla parentesi chiusa
+    HOST_EXTS=$(awk '/"hostOnly"/,/\]/' "$EXTENSIONS_FILE" \
+        | grep '"' \
+        | grep -v 'hostOnly' \
+        | sed 's/.*"\([^"]*\.[^"]*\)".*/\1/' \
+        | grep '\.')
+
+    # Installa le estensioni hostOnly sul client locale
+    if [ -n "$HOST_EXTS" ]; then
+        echo "Installing host (UI) extensions locally..."
+        echo "$HOST_EXTS" | while IFS= read -r EXT; do
+            echo "  [host] $EXT"
+            code --install-extension "$EXT"
+        done
+    fi
+
+    # Installa le restanti nel container via docker exec
+    DEV_CONTAINER="${PROJECT_NAME:-$(basename "$PWD")}"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_CONTAINER}$"; then
+        echo "WARNING: container '$DEV_CONTAINER' not running — skipping container extensions."
+        echo "Start the dev environment first with ./install.sh, then re-run ./install.sh --vscode"
+        return
+    fi
+    echo "Installing workspace extensions inside container '$DEV_CONTAINER'..."
+    echo "$ALL_EXTS" | while IFS= read -r EXT; do
+        # Salta le hostOnly
+        if echo "$HOST_EXTS" | grep -qx "$EXT"; then
+            continue
+        fi
+        echo "  [container] $EXT"
+        docker exec "$DEV_CONTAINER" code --install-extension "$EXT" 2>&1 || true
+    done
+
+    echo "Done."
+}
+
 case "$1" in
     --postgres)
         install_postgres
@@ -677,6 +727,9 @@ case "$1" in
         ;;
     --claude)
         install_claude
+        ;;
+    --vscode)
+        install_vscode_extensions
         ;;
     --help|-h)
         show_help
