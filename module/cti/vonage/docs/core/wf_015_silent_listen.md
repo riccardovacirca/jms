@@ -29,45 +29,30 @@ cliente nel DB.
 
 ## Flusso
 
-```
-Admin browser                    Backend                         Vonage
-     │                               │                              │
-     │ POST /api/cti/vonage          │                              │
-     │   /sdk/auth/listen            │                              │
-     │──────────────────────────────>│                              │
-     │                               │ session.require(ADMIN, READ) │
-     │                               │ vonageUserId = "admin-<sub>" │
-     │                               │ generateSdkJwt(vonageUserId) │
-     │<──────────────────────────────│                              │
-     │  {"token": "<JWT RS256>"}     │                              │
-     │                               │                              │
-     │ [connessione WebRTC]          │                              │
-     │ client.connect(token)         │                              │
-     │──────────────────────────────────────────────────────────────>
-     │                               │                              │
-     │ [seleziona operatore target]  │                              │
-     │ client.serverCall(            │                              │
-     │   {listenTarget: opUuid})     │                              │
-     │──────────────────────────────────────────────────────────────>
-     │                               │                              │
-     │                               │ POST /api/cti/vonage/answer  │
-     │                               │<─────────────────────────────│
-     │                               │ custom_data.listenTarget      │
-     │                               │  presente → branch listen    │
-     │                               │ findByUuid(listenTarget)     │
-     │                               │ buildListenerNccoJson(       │
-     │                               │   targetCall.conversationName│
-     │                               │ )                            │
-     │                               │──────────────────────────────>
-     │                               │  NCCO: conversation          │
-     │                               │  mute:true, endOnExit:false  │
-     │                               │                              │
-     │ [ascolto attivo]              │                              │
-     │                               │                              │
-     │ client.hangup()               │                              │
-     │──────────────────────────────────────────────────────────────>
-     │ [admin esce dalla conversaz.] │                              │
-     │ [operatore e cliente continuano]                             │
+```mermaid
+sequenceDiagram
+    participant A as Admin browser
+    participant B as Backend
+    participant V as Vonage
+
+    A->>B: POST /api/cti/vonage/sdk/auth/listen
+    note over B: session.require(ADMIN, READ)<br/>vonageUserId = admin-#lt;sub#gt;<br/>generateSdkJwt(vonageUserId)
+    B-->>A: token JWT RS256
+
+    A->>V: client.connect(token) — WebRTC
+
+    note over A: seleziona la chiamata attiva target
+    A->>V: client.serverCall — listenTarget: callUuid
+
+    V->>B: POST /api/cti/vonage/answer
+    note over B: listenTarget presente → branch listen<br/>findByUuid(listenTarget)<br/>buildListenerNccoJson(conversationName)
+    B-->>V: NCCO conversation
+    note over B,V: mute:true, endOnExit:false, startOnEnter:false
+
+    note over A: ascolto attivo (silenzioso)
+
+    A->>V: client.hangup()
+    note over A,V: Admin esce — operatore e cliente continuano
 ```
 
 ## Endpoint

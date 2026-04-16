@@ -287,6 +287,7 @@ public class App
         flyway = Flyway.configure()
           .dataSource(DB.getDataSource())
           .locations("classpath:db/migration")
+          .outOfOrder(true)
           .load();
         applied = flyway.migrate().migrationsExecuted;
         log.info("Flyway: {} migrazione/i applicata/e", applied);

@@ -1,5 +1,6 @@
 package dev.jms.app.crm;
 
+import dev.jms.app.crm.handler.CampagneHandler;
 import dev.jms.app.crm.handler.ContattiHandler;
 import dev.jms.app.crm.handler.ImporterHandler;
 import dev.jms.app.crm.handler.ListeHandler;
@@ -26,10 +27,13 @@ public class Routes
     ImporterHandler importer;
     TurnoHandler turni;
 
+    CampagneHandler campagne;
+
     contatti = new ContattiHandler();
     liste = new ListeHandler();
     importer = new ImporterHandler(config);
     turni = new TurnoHandler();
+    campagne = new CampagneHandler();
 
     router.route(HttpMethod.GET,    "/api/contatti",                  contatti::list);
     router.route(HttpMethod.POST,   "/api/contatti",                  contatti::create);
@@ -42,9 +46,11 @@ public class Routes
 
     router.route(HttpMethod.GET,    "/api/liste",                     liste::list);
     router.route(HttpMethod.POST,   "/api/liste",                     liste::create);
+    router.route(HttpMethod.GET,    "/api/liste/default",             liste::getDefault);
     router.route(HttpMethod.GET,    "/api/liste/{id}",                liste::get);
     router.route(HttpMethod.PUT,    "/api/liste/{id}",                liste::update);
     router.route(HttpMethod.DELETE, "/api/liste/{id}",                liste::delete);
+    router.route(HttpMethod.PUT,    "/api/liste/{id}/default",        liste::setDefault);
     router.route(HttpMethod.PUT,    "/api/liste/{id}/stato",          liste::updateStato);
     router.route(HttpMethod.PUT,    "/api/liste/{id}/scadenza",       liste::updateScadenza);
     router.route(HttpMethod.GET,    "/api/liste/{id}/contatti",       liste::listContatti);
@@ -56,6 +62,15 @@ public class Routes
     router.route(HttpMethod.PUT,    "/api/crm/operatori/turni/{id}",         turni::update);
     router.route(HttpMethod.DELETE, "/api/crm/operatori/turni/{id}",         turni::delete);
     router.route(HttpMethod.GET,    "/api/crm/operatori/turni/corrente",     turni::corrente);
+
+    router.route(HttpMethod.GET,    "/api/campagne",                   campagne::list);
+    router.route(HttpMethod.POST,   "/api/campagne",                   campagne::create);
+    router.route(HttpMethod.GET,    "/api/campagne/{id}",              campagne::get);
+    router.route(HttpMethod.PUT,    "/api/campagne/{id}",              campagne::update);
+    router.route(HttpMethod.DELETE, "/api/campagne/{id}",              campagne::delete);
+    router.route(HttpMethod.GET,    "/api/campagne/{id}/liste",        campagne::listListe);
+    router.route(HttpMethod.POST,   "/api/campagne/{id}/liste",        campagne::addLista);
+    router.route(HttpMethod.DELETE, "/api/campagne/{id}/liste/{lid}",  campagne::removeLista);
 
     router.route(HttpMethod.GET,    "/api/import/campi",              importer::campi);
     router.route(HttpMethod.POST,   "/api/import/analyze",            importer::analyze);

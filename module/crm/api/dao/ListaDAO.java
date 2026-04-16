@@ -92,6 +92,43 @@ public class ListaDAO
     db.query(sql, l.nome(), l.descrizione(), l.consenso(), l.stato(), scadenza, l.id());
   }
 
+  /** Restituisce la lista marcata come default, o null se non configurata. */
+  public ListaDTO findDefault() throws Exception
+  {
+    String sql;
+    ArrayList<HashMap<String, Object>> rows;
+
+    sql =
+      "SELECT l.*, COUNT(lc.contatto_id) AS contatti_count " +
+      "FROM jms_crm_liste l " +
+      "LEFT JOIN jms_crm_lista_contatti lc ON lc.lista_id = l.id " +
+      "WHERE l.is_default = TRUE AND l.deleted_at IS NULL " +
+      "GROUP BY l.id";
+    rows = db.select(sql);
+    return rows.isEmpty() ? null : toDTO(rows.get(0));
+  }
+
+  /**
+   * Imposta la lista indicata come default, rimuovendo il flag da tutte le altre.
+   * Operazione atomica eseguita in transazione.
+   */
+  public void setDefault(int id) throws Exception
+  {
+    String sql;
+
+    db.begin();
+    try {
+      sql = "UPDATE jms_crm_liste SET is_default = FALSE WHERE is_default = TRUE";
+      db.query(sql);
+      sql = "UPDATE jms_crm_liste SET is_default = TRUE, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL";
+      db.query(sql, id);
+      db.commit();
+    } catch (Exception e) {
+      db.rollback();
+      throw e;
+    }
+  }
+
   /** Soft delete: imposta deleted_at. */
   public void delete(int id) throws Exception
   {
@@ -214,6 +251,7 @@ public class ListaDAO
       createdAt != null ? createdAt.toString() : null,
       updatedAt != null ? updatedAt.toString() : null,
       deletedAt != null ? deletedAt.toString() : null,
+      DB.toBoolean(row.get("is_default")),
       DB.toLong(row.get("contatti_count"))
     );
   }

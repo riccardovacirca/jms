@@ -671,47 +671,16 @@ install_vscode_extensions() {
         echo "ERROR: 'code' command not found. Make sure VSCode is installed and 'code' is in PATH."
         exit 1
     fi
-
-    # Legge tutte le recommendations
-    ALL_EXTS=$(grep '"' "$EXTENSIONS_FILE" \
-        | grep -v '^\s*//' \
-        | sed 's/.*"\([^"]*\.[^"]*\)".*/\1/' \
-        | grep '\.')
-
-    # Legge le estensioni hostOnly (UI extensions che non possono girare nel container)
-    # Estratte dal blocco dopo "hostOnly" fino alla parentesi chiusa
-    HOST_EXTS=$(awk '/"hostOnly"/,/\]/' "$EXTENSIONS_FILE" \
+    echo "Installing VSCode extensions from $EXTENSIONS_FILE..."
+    awk '/"recommendations"/,/\]/' "$EXTENSIONS_FILE" \
         | grep '"' \
-        | grep -v 'hostOnly' \
+        | grep -v 'recommendations' \
         | sed 's/.*"\([^"]*\.[^"]*\)".*/\1/' \
-        | grep '\.')
-
-    # Installa le estensioni hostOnly sul client locale
-    if [ -n "$HOST_EXTS" ]; then
-        echo "Installing host (UI) extensions locally..."
-        echo "$HOST_EXTS" | while IFS= read -r EXT; do
-            echo "  [host] $EXT"
+        | grep '\.' \
+        | while IFS= read -r EXT; do
+            echo "  $EXT"
             code --install-extension "$EXT"
         done
-    fi
-
-    # Installa le restanti nel container via docker exec
-    DEV_CONTAINER="${PROJECT_NAME:-$(basename "$PWD")}"
-    if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_CONTAINER}$"; then
-        echo "WARNING: container '$DEV_CONTAINER' not running — skipping container extensions."
-        echo "Start the dev environment first with ./install.sh, then re-run ./install.sh --vscode"
-        return
-    fi
-    echo "Installing workspace extensions inside container '$DEV_CONTAINER'..."
-    echo "$ALL_EXTS" | while IFS= read -r EXT; do
-        # Salta le hostOnly
-        if echo "$HOST_EXTS" | grep -qx "$EXT"; then
-            continue
-        fi
-        echo "  [container] $EXT"
-        docker exec "$DEV_CONTAINER" code --install-extension "$EXT" 2>&1 || true
-    done
-
     echo "Done."
 }
 

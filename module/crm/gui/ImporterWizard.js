@@ -8,7 +8,7 @@ import { LitElement, html } from 'lit';
 class ImporterWizard extends LitElement {
 
   static properties = {
-    listaId:     {},
+    listaId:       {},
     _step:         { state: true },
     _loading:      { state: true },
     _error:        { state: true },
@@ -18,7 +18,8 @@ class ImporterWizard extends LitElement {
     _validation:   { state: true },
     _result:       { state: true },
     _consenso:     { state: true },
-    _previewIndex: { state: true }
+    _previewIndex: { state: true },
+    _listaNome:    { state: true }
   };
 
   createRenderRoot() { return this; }
@@ -36,11 +37,13 @@ class ImporterWizard extends LitElement {
     this._result       = null;
     this._consenso     = false;
     this._previewIndex = 0;
+    this._listaNome    = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
     this._loadCampi();
+    this._loadListaNome();
   }
 
   async _loadCampi() {
@@ -49,6 +52,26 @@ class ImporterWizard extends LitElement {
       const data = await res.json();
       if (!data.err) this._campi = data.out;
     } catch (e) { /* silent */ }
+  }
+
+  async _loadListaNome() {
+    if (this.listaId) {
+      try {
+        const res  = await fetch(`/api/liste/${this.listaId}`);
+        const data = await res.json();
+        if (!data.err && data.out) this._listaNome = data.out.nome;
+      } catch (e) { /* silent */ }
+    } else {
+      try {
+        const res  = await fetch('/api/liste/default');
+        const data = await res.json();
+        if (!data.err && data.out) {
+          this._listaNome = data.out.nome + ' (lista di default)';
+        } else {
+          this._listaNome = null;
+        }
+      } catch (e) { /* silent */ }
+    }
   }
 
   // ── Step 1: upload file ────────────────────────────────────────────────────
@@ -198,14 +221,21 @@ class ImporterWizard extends LitElement {
   _renderStepper() {
     const steps = ['Upload', 'Mappa', 'Valida', 'Fine'];
     return html`
-      <div class="d-flex gap-0">
+      <div class="d-flex align-items-center gap-0">
         ${steps.map((s, i) => {
-          const n   = i + 1;
-          const cls = n < this._step ? 'bg-success text-white' : n === this._step ? 'bg-primary text-white' : 'bg-light text-muted';
+          const n      = i + 1;
+          const done   = n < this._step;
+          const active = n === this._step;
+          const cls    = done ? 'bg-success text-white' : active ? 'bg-primary text-white' : 'bg-light text-muted border';
+          const lbl    = done ? 'text-success' : active ? 'text-primary fw-semibold' : 'text-muted';
           return html`
             <div class="d-flex align-items-center">
-              <span class="badge rounded-pill px-3 py-2 ${cls}">${n}. ${s}</span>
-              ${n < steps.length ? html`<span class="text-muted px-1">→</span>` : ''}
+              <div class="d-flex flex-column align-items-center gap-1">
+                <span class="badge rounded-circle d-flex align-items-center justify-content-center ${cls}"
+                      style="width:2rem;height:2rem;font-size:.85rem">${n}</span>
+                <span class="small ${lbl}" style="white-space:nowrap">${s}</span>
+              </div>
+              ${n < steps.length ? html`<span class="text-muted px-2 mb-4">→</span>` : ''}
             </div>`;
         })}
       </div>`;
@@ -217,9 +247,18 @@ class ImporterWizard extends LitElement {
         <div class="card-body">
           <h5 class="card-title">Seleziona file Excel</h5>
           <p class="text-muted small">Formati supportati: .xls, .xlsx. La prima riga deve contenere le intestazioni.</p>
+          ${this._listaNome
+            ? html`<p class="small mb-3">
+                <span class="text-muted">Lista di destinazione:</span>
+                <strong class="ms-1">${this._listaNome}</strong>
+              </p>`
+            : html`<div class="alert alert-warning small mb-3">
+                Nessuna lista di default configurata. Impostare una lista di default prima di importare.
+              </div>`}
           ${this._loading
             ? html`<p class="text-muted">Analisi in corso...</p>`
             : html`<input type="file" class="form-control" accept=".xls,.xlsx"
+                          ?disabled=${!this._listaNome}
                           @change=${this._onFileChange}>`}
         </div>
       </div>`;

@@ -69,7 +69,7 @@ public class ListeHandler
     int newId;
     HashMap<String, Object> out;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     try {
       dao   = new ListaDAO(db);
       lista = ListaAdapter.from(req);
@@ -141,7 +141,7 @@ public class ListeHandler
     ListaDTO existing;
     ListaDTO updated;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     id       = Integer.parseInt(req.urlArgs().get("id"));
     dao      = new ListaDAO(db);
     existing = dao.findById(id);
@@ -167,7 +167,7 @@ public class ListeHandler
             id,
             updated.nome(), updated.descrizione(), updated.consenso(),
             updated.stato(), updated.scadenza(),
-            existing.createdAt(), null, null, existing.contattiCount()
+            existing.createdAt(), null, null, existing.isDefault(), existing.contattiCount()
           );
           dao.update(updated);
           res.status(200)
@@ -197,7 +197,7 @@ public class ListeHandler
     ListaDAO dao;
     ListaDTO existing;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     id       = Integer.parseInt(req.urlArgs().get("id"));
     dao      = new ListaDAO(db);
     existing = dao.findById(id);
@@ -206,6 +206,13 @@ public class ListeHandler
          .contentType("application/json")
          .err(true)
          .log("Lista non trovata")
+         .out(null)
+         .send();
+    } else if (existing.isDefault()) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("La lista di default non può essere eliminata")
          .out(null)
          .send();
     } else {
@@ -231,7 +238,7 @@ public class ListeHandler
     HashMap<String, Object> body;
     int stato;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     id       = Integer.parseInt(req.urlArgs().get("id"));
     dao      = new ListaDAO(db);
     existing = dao.findById(id);
@@ -267,7 +274,7 @@ public class ListeHandler
     HashMap<String, Object> body;
     String scadenza;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     id       = Integer.parseInt(req.urlArgs().get("id"));
     dao      = new ListaDAO(db);
     existing = dao.findById(id);
@@ -400,6 +407,56 @@ public class ListeHandler
          .send();
     } else {
       dao.removeContatto(id, cid);
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(null)
+         .send();
+    }
+  }
+
+  /**
+   * GET /api/crm/liste/default — restituisce la lista marcata come default, o null.
+   */
+  public void getDefault(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    ListaDAO dao;
+    ListaDTO lista;
+
+    session.require(Role.USER, Permission.READ);
+    dao   = new ListaDAO(db);
+    lista = dao.findDefault();
+    res.status(200)
+       .contentType("application/json")
+       .err(false)
+       .log(null)
+       .out(lista)
+       .send();
+  }
+
+  /**
+   * PUT /api/crm/liste/{id}/default — imposta la lista indicata come default.
+   */
+  public void setDefault(HttpRequest req, HttpResponse res, Session session, DB db) throws Exception
+  {
+    int id;
+    ListaDAO dao;
+    ListaDTO lista;
+
+    session.require(Role.ADMIN, Permission.WRITE);
+    id    = Integer.parseInt(req.urlArgs().get("id"));
+    dao   = new ListaDAO(db);
+    lista = dao.findById(id);
+    if (lista == null) {
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Lista non trovata")
+         .out(null)
+         .send();
+    } else {
+      dao.setDefault(id);
       res.status(200)
          .contentType("application/json")
          .err(false)

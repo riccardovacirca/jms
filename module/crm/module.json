@@ -21,7 +21,7 @@
             },
             "persistent": false,
             "priority": 999,
-            "init": null
+            "init": true
         }
     },
     "install_notice": null

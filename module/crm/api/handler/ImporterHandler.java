@@ -53,7 +53,7 @@ public class ImporterHandler
   {
     List<HashMap<String, String>> result;
 
-    session.require(Role.USER, Permission.READ);
+    session.require(Role.ADMIN, Permission.READ);
     result = new ArrayList<>();
     result.add(campo("nome",            "Nome"));
     result.add(campo("cognome",         "Cognome"));
@@ -87,7 +87,7 @@ public class ImporterHandler
     ImportSessionDAO dao;
     HashMap<String, Object> out;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     fileBytes = req.getMultipartFileBytes("file");
     if (fileBytes == null || fileBytes.length == 0) {
       res.status(200)
@@ -157,7 +157,7 @@ public class ImporterHandler
     HashMap<String, Object> body;
     Object mappingObj;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     sessionId     = req.urlArgs().get("id");
     dao           = new ImportSessionDAO(db);
     importSession = dao.findById(sessionId);
@@ -208,7 +208,7 @@ public class ImporterHandler
     int warningCount;
     HashMap<String, Object> out;
 
-    session.require(Role.USER, Permission.READ);
+    session.require(Role.ADMIN, Permission.READ);
     sessionId     = req.urlArgs().get("id");
     dao           = new ImportSessionDAO(db);
     importSession = dao.findById(sessionId);
@@ -318,7 +318,7 @@ public class ImporterHandler
     String txError;
     HashMap<String, Object> out;
 
-    session.require(Role.USER, Permission.WRITE);
+    session.require(Role.ADMIN, Permission.WRITE);
     sessionId     = req.urlArgs().get("id");
     dao           = new ImportSessionDAO(db);
     importSession = dao.findById(sessionId);
@@ -344,13 +344,31 @@ public class ImporterHandler
          .out(null)
          .send();
     } else {
-      body          = Json.decode(req.getBody(), HashMap.class);
-      listaId       = body.get("listaId") != null ? ((Number) body.get("listaId")).intValue() : null;
+      body    = Json.decode(req.getBody(), HashMap.class);
+      listaId = body.get("listaId") != null ? ((Number) body.get("listaId")).intValue() : null;
+      if (listaId == null) {
+        ListaDAO defaultDao;
+        ListaDTO defaultLista;
+        defaultDao   = new ListaDAO(db);
+        defaultLista = defaultDao.findDefault();
+        if (defaultLista == null) {
+          res.status(200)
+             .contentType("application/json")
+             .err(true)
+             .log("Nessuna lista di default configurata. Impostare una lista di default prima di importare.")
+             .out(null)
+             .send();
+          listaId = null;
+        } else {
+          listaId = defaultLista.id();
+        }
+      }
+      if (listaId != null) {
       consenso      = body.get("consenso") instanceof Boolean ? (Boolean) body.get("consenso") : false;
       mapping       = Json.decode(importSession.columnMapping(), HashMap.class);
       rows          = Excel.read(new FileInputStream(importSession.filePath()));
       contattoDao   = new ContattoDAO(db);
-      listaDao      = listaId != null ? new ListaDAO(db) : null;
+      listaDao      = new ListaDAO(db);
       importedCount = 0;
       skippedCount  = 0;
       warningCount  = 0;
@@ -411,9 +429,7 @@ public class ImporterHandler
             0L
           );
           newId = contattoDao.insert(c);
-          if (listaDao != null) {
-            listaDao.addContatto(listaId, newId);
-          }
+          listaDao.addContatto(listaId, newId);
           importedCount++;
         }
         db.commit();
@@ -443,6 +459,7 @@ public class ImporterHandler
            .log(null)
            .out(out)
            .send();
+      }
       }
     }
   }

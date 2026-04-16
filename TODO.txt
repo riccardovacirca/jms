@@ -264,15 +264,21 @@ Testare su chrome l'installazione
 --------------------------------------------------------------------------------
 Aggiungere creazione/gestione campagne a CRM
 --------------------------------------------------------------------------------
-Verificare la possibilità di suddividere un modulo in componenti autonomi
-
-
-
+[OK] Verificare la possibilità di suddividere un modulo in componenti autonomi
 aggiungiamo un subcommand cmd git init che nel progetto corrente esegue:
-
 git init
 git add .
 git commit -m "first commit"
 git branch -M main
 git remote add origin https://github.com/riccardovacirca/<project_name>.git
 git push -u origin main
+--------------------------------------------------------------------------------
+Caricamneto liste contatti:
+- L'associazione dei contatti ad una lista non è facoltativo
+- deve esistere una lista di default cui vengono automaticamente associati i
+  contatti non esplicitamente associati a una lista. questa lista di default può
+  essere concettualmente una lista operatore e raccoglie tutti i contatti
+  aggiunti al di fuori delle liste ufficiali.
+- le liste sono caricate da utenti amministratori o root
+- il wizard di importazione è presente insieme al crud di gestione liste nella
+  dashboard dell'amministratore

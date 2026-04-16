@@ -1,15 +1,13 @@
 package dev.jms.app.crm.dto;
 
-public record ListaDTO(
+/** DTO immutabile per una campagna CRM. */
+public record CampagnaDTO(
   Integer id,
   String  nome,
   String  descrizione,
-  boolean consenso,
   int     stato,
-  String  scadenza,
   String  createdAt,
   String  updatedAt,
   String  deletedAt,
-  boolean isDefault,
-  long    contattiCount
+  long    listeCount
 ) {}

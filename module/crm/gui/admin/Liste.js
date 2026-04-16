@@ -1,65 +1,46 @@
 import { LitElement, html } from 'lit';
-import './ImporterWizard.js';
+import './ImportaLista.js';
 
 function emptyForm() {
-  return {
-    nome: '', descrizione: '', consenso: false, stato: 1, scadenza: ''
-  };
+  return { nome: '', descrizione: '', consenso: false, stato: 1, scadenza: '' };
 }
 
-class Liste extends LitElement {
+/**
+ * Componente di amministrazione delle liste contatti.
+ * Gestisce la vista elenco, il form di creazione/modifica e il wizard di importazione.
+ * Montato dalla dashboard tramite il tag `crm-admin-liste`.
+ */
+class AdminListe extends LitElement {
 
   static properties = {
-    _view:          { state: true },
-    _items:         { state: true },
-    _total:         { state: true },
-    _page:          { state: true },
-    _size:          { state: true },
-    _loading:       { state: true },
-    _error:         { state: true },
-    _editing:       { state: true },
-    _form:          { state: true },
-    _deleteId:      { state: true },
-    _formError:     { state: true },
-    _importerSource: { state: true },
-    _lista:         { state: true },
-    _contatti:  { state: true },
-    _ctTotal:   { state: true },
-    _ctPage:    { state: true },
-    _ctLoading:  { state: true },
-    _addSearch:  { state: true },
-    _addResults: { state: true }
+    _view:      { state: true },
+    _items:     { state: true },
+    _total:     { state: true },
+    _page:      { state: true },
+    _size:      { state: true },
+    _loading:   { state: true },
+    _error:     { state: true },
+    _editing:   { state: true },
+    _form:      { state: true },
+    _deleteId:  { state: true },
+    _formError: { state: true }
   };
 
   createRenderRoot() { return this; }
 
   constructor() {
     super();
-    this._view            = 'list';
-    this._items           = [];
-    this._total           = 0;
-    this._page            = 1;
-    this._size            = 20;
-    this._loading         = false;
-    this._error           = null;
-    this._editing         = null;
-    this._form            = emptyForm();
-    this._deleteId        = null;
-    this._formError       = null;
-    this._importerSource  = 'list';
-    this._lista           = null;
-    this._contatti   = [];
-    this._ctTotal    = 0;
-    this._ctPage     = 1;
-    this._ctLoading  = false;
-    this._addSearch  = '';
-    this._addResults = [];
-    this._addTimer   = null;
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    clearTimeout(this._addTimer);
+    this._view      = 'list';
+    this._items     = [];
+    this._total     = 0;
+    this._page      = 1;
+    this._size      = 20;
+    this._loading   = false;
+    this._error     = null;
+    this._editing   = null;
+    this._form      = emptyForm();
+    this._deleteId  = null;
+    this._formError = null;
   }
 
   connectedCallback() {
@@ -162,78 +143,6 @@ class Liste extends LitElement {
     }
   }
 
-  async _openContatti(item) {
-    this._lista    = item;
-    this._ctPage   = 1;
-    this._view     = 'contatti';
-    await this._loadContatti();
-  }
-
-  async _loadContatti() {
-    this._ctLoading = true;
-    try {
-      const res  = await fetch(`/api/liste/${this._lista.id}/contatti?page=${this._ctPage}&size=${this._size}`);
-      const data = await res.json();
-      if (!data.err) {
-        this._contatti = data.out.items;
-        this._ctTotal  = data.out.total;
-      }
-    } catch (e) {
-      /* silent */
-    } finally {
-      this._ctLoading = false;
-    }
-  }
-
-  _goToCtPage(page) {
-    this._ctPage = page;
-    this._loadContatti();
-  }
-
-  _onAddSearch(e) {
-    this._addSearch = e.target.value;
-    clearTimeout(this._addTimer);
-    if (!this._addSearch.trim()) {
-      this._addResults = [];
-      return;
-    }
-    this._addTimer = setTimeout(async () => {
-      try {
-        const res  = await fetch(`/api/contatti/search?q=${encodeURIComponent(this._addSearch)}&page=1&size=8`);
-        const data = await res.json();
-        if (!data.err) this._addResults = data.out.items;
-      } catch (e) { /* silent */ }
-    }, 300);
-  }
-
-  async _addContatto(contattoId) {
-    try {
-      const res  = await fetch(`/api/liste/${this._lista.id}/contatti`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ contattoId })
-      });
-      const data = await res.json();
-      if (!data.err) {
-        this._addSearch  = '';
-        this._addResults = [];
-        this._loadContatti();
-      }
-    } catch (e) { /* silent */ }
-  }
-
-  async _removeContatto(contattoId) {
-    try {
-      const res  = await fetch(`/api/liste/${this._lista.id}/contatti/${contattoId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!data.err) {
-        this._loadContatti();
-      }
-    } catch (e) {
-      /* silent */
-    }
-  }
-
   async _setDefault(id) {
     try {
       const res  = await fetch(`/api/liste/${id}/default`, { method: 'PUT' });
@@ -248,14 +157,8 @@ class Liste extends LitElement {
     }
   }
 
-  _openImporter(source) {
-    this._importerSource = source;
-    this._view           = 'importer';
-  }
-
   render() {
     if (this._view === 'form')     return this._renderForm();
-    if (this._view === 'contatti') return this._renderContatti();
     if (this._view === 'importer') return this._renderImporter();
     return this._renderList();
   }
@@ -265,9 +168,9 @@ class Liste extends LitElement {
     return html`
       <div class="container-fluid py-4">
         <div class="d-flex align-items-center gap-2 mb-4">
-          <h1 class="h4 mb-0">Liste</h1>
+          <h1 class="h4 mb-0">Liste contatti</h1>
           <button class="btn btn-sm btn-outline-success ms-auto"
-                  @click=${() => this._openImporter('list')}>Importa contatti</button>
+                  @click=${() => { this._view = 'importer'; }}>Importa</button>
           <button class="btn btn-sm btn-primary"
                   @click=${this._newLista}>Nuova lista</button>
         </div>
@@ -299,12 +202,11 @@ class Liste extends LitElement {
                 </thead>
                 <tbody>
                   ${this._items.length === 0
-                    ? html`<tr><td colspan="6" class="text-center text-muted py-4">Nessuna lista trovata</td></tr>`
+                    ? html`<tr><td colspan="7" class="text-center text-muted py-4">Nessuna lista trovata</td></tr>`
                     : this._items.map(item => html`
                       <tr>
                         <td>
-                          <button class="btn btn-link btn-sm p-0 text-start"
-                                  @click=${() => this._openContatti(item)}>${item.nome}</button>
+                          ${item.nome}
                           ${item.isDefault
                             ? html`<span class="badge bg-warning text-dark ms-2 small">default</span>`
                             : ''}
@@ -397,96 +299,16 @@ class Liste extends LitElement {
       </div>`;
   }
 
-  _renderContatti() {
-    const pages = Math.ceil(this._ctTotal / this._size);
-    return html`
-      <div class="container-fluid py-4">
-        <div class="d-flex align-items-center gap-2 mb-4">
-          <button class="btn btn-sm btn-outline-secondary"
-                  @click=${() => { this._view = 'list'; this._lista = null; }}>← Torna</button>
-          <h1 class="h4 mb-0">Lista: ${this._lista?.nome}</h1>
-          <span class="badge bg-light text-dark border ms-2">${this._ctTotal} contatti</span>
-          <button class="btn btn-sm btn-outline-success ms-auto"
-                  @click=${() => this._openImporter('contatti')}>Importa da file</button>
-        </div>
-
-        <div class="mb-3" style="max-width:460px;position:relative">
-          <input class="form-control form-control-sm" type="search"
-                 placeholder="Cerca contatto da aggiungere..."
-                 .value=${this._addSearch} @input=${this._onAddSearch}>
-          ${this._addResults.length > 0 ? html`
-            <div class="list-group shadow-sm"
-                 style="position:absolute;z-index:10;width:100%;top:calc(100% + 2px)">
-              ${this._addResults.map(c => html`
-                <button type="button"
-                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1 px-2"
-                        @click=${() => this._addContatto(c.id)}>
-                  <span>${c.cognome || ''} ${c.nome || ''} — ${c.telefono || ''}</span>
-                  <span class="badge bg-primary ms-2">Aggiungi</span>
-                </button>`)}
-            </div>` : ''}
-        </div>
-
-        ${this._ctLoading
-          ? html`<p class="text-muted">Caricamento...</p>`
-          : html`
-            <div class="table-responsive">
-              <table class="table table-sm table-hover align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th>Cognome</th>
-                    <th>Nome</th>
-                    <th>Telefono</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${this._contatti.length === 0
-                    ? html`<tr><td colspan="4" class="text-center text-muted py-4">Nessun contatto in questa lista</td></tr>`
-                    : this._contatti.map(c => html`
-                      <tr>
-                        <td>${c.cognome  || ''}</td>
-                        <td>${c.nome     || ''}</td>
-                        <td>${c.telefono || ''}</td>
-                        <td class="text-end">
-                          <button class="btn btn-sm btn-outline-danger"
-                                  @click=${() => this._removeContatto(c.contattoId)}>Rimuovi</button>
-                        </td>
-                      </tr>`)}
-                </tbody>
-              </table>
-            </div>
-            ${pages > 1 ? html`
-              <nav>
-                <ul class="pagination pagination-sm">
-                  ${Array.from({ length: pages }, (_, i) => i + 1).map(p => html`
-                    <li class="page-item ${p === this._ctPage ? 'active' : ''}">
-                      <button class="page-link" @click=${() => this._goToCtPage(p)}>${p}</button>
-                    </li>`)}
-                </ul>
-              </nav>` : ''}
-          `}
-      </div>`;
-  }
   _renderImporter() {
-    const fromContatti = this._importerSource === 'contatti';
     return html`
-      <importer-wizard
-        .listaId=${fromContatti ? (this._lista?.id ?? null) : null}
-        @cancel=${() => { this._view = fromContatti ? 'contatti' : 'list'; }}
-        @done=${() => {
-          if (fromContatti) {
-            this._view = 'contatti';
-            this._loadContatti();
-          } else {
-            this._view = 'list';
-            this._loadList();
-          }
-        }}>
-      </importer-wizard>`;
+      <crm-importa-lista
+        .listaId=${null}
+        @cancel=${() => { this._view = 'list'; }}
+        @done=${() => { this._view = 'list'; this._loadList(); }}>
+      </crm-importa-lista>`;
   }
 }
 
-customElements.define('liste-layout', Liste);
+customElements.define('crm-admin-liste', AdminListe);
 
-export default Liste;
+export default AdminListe;
