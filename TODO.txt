@@ -265,3 +265,14 @@ Testare su chrome l'installazione
 Aggiungere creazione/gestione campagne a CRM
 --------------------------------------------------------------------------------
 Verificare la possibilità di suddividere un modulo in componenti autonomi
+
+
+
+aggiungiamo un subcommand cmd git init che nel progetto corrente esegue:
+
+git init
+git add .
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/riccardovacirca/<project_name>.git
+git push -u origin main

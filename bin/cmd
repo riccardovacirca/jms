@@ -44,6 +44,7 @@ Usage: cmd COMMAND [OPTIONS]
   gui run                          Run Vite dev server (foreground, with API proxy)
   gui clean                        Clear build output (src/main/resources/static/)
 
+  git init                         Inizializza repo locale, crea primo commit e pubblica su GitHub
   git push [-r <path>]             Stage, commit and push
   git pull [-r <path>]             Pull from remote
   git sync [-r <path>]             Pull + commit + push
@@ -73,7 +74,8 @@ Usage: cmd COMMAND [OPTIONS]
   ngrok stop                       Stop ngrok tunnel
   ngrok status                     Show ngrok status and public URL
 
-  snap    Capture current config + modules → snapshots/<id>.tar.gz
+  snap              Crea snapshot cifrato (config/ + .env + database) → snapshots/snapshot.tar.gz.gpg
+  snap restore      Ripristina snapshot (opzioni: --db-only, --config-only)
 
   bench [options]                  Run siege benchmark (log to bench/siege-YYYYMMDD-HHMMSS.log)
                                      Default: -c 10 -r 100 (10 concurrent users, 100 reps each)
@@ -816,6 +818,46 @@ git_merge() {
     fi
     cd "$WORKSPACE"
     info "Note: Use 'cmd git push' to push merged changes to remote"
+}
+
+git_init() {
+    load_env
+    [ -n "$PROJECT_NAME" ] || error "PROJECT_NAME non impostato nel file .env"
+    _require_git_env
+
+    [ ! -d "$WORKSPACE/.git" ] || error "Repository git già esistente in $WORKSPACE. Usare 'cmd git fetch' per clonare da remoto su un progetto esistente."
+
+    local GIT_URL="https://${GIT_USER}:${GIT_TOKEN}@github.com/${GIT_USER}/${PROJECT_NAME}.git"
+
+    info "[git init] Repository: https://github.com/${GIT_USER}/${PROJECT_NAME}.git"
+    info "[git init] User:       $GIT_USER <$GIT_EMAIL>"
+    printf '\n'
+    confirm "Inizializzare e pubblicare il progetto '$PROJECT_NAME' su GitHub?" || exit 0
+
+    cd "$WORKSPACE"
+
+    git init || error "git init fallito"
+    git config user.name "$GIT_USER"
+    git config user.email "$GIT_EMAIL"
+    git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
+
+    info "  Staging di tutti i file..."
+    git add .
+
+    info "  Creazione del primo commit..."
+    git commit -m "first commit" || error "git commit fallito"
+
+    git branch -M main
+
+    info "  Aggiunta remote origin..."
+    git remote add origin "$GIT_URL" || error "git remote add fallito"
+
+    info "  Push su origin/main..."
+    git push -u origin main || error "git push fallito — verificare che il repository esista su GitHub e che il token abbia i permessi necessari"
+
+    printf '\n'
+    success "Repository pubblicato: https://github.com/${GIT_USER}/${PROJECT_NAME}"
+    printf '\n'
 }
 
 git_update() {
@@ -2280,216 +2322,214 @@ module_test() {
 # Snapshot Operations
 # ============================================================================
 
-# ============================================================================
-# Snapshot Operations
-# ============================================================================
+# Legge la passphrase: da SNAP_PASSPHRASE (env) o interattivamente da /dev/tty
+_snap_passphrase() {
+    local PROMPT="$1"
+    if [ -n "${SNAP_PASSPHRASE:-}" ]; then
+        printf '%s' "$SNAP_PASSPHRASE"
+    else
+        local PASS
+        printf '%s' "$PROMPT" >&2
+        read -rs PASS </dev/tty
+        printf '\n' >&2
+        printf '%s' "$PASS"
+    fi
+}
 
 snap_create() {
     load_env
 
+    command -v gpg >/dev/null 2>&1 || error "gpg non trovato. Installare con: apt-get install gnupg"
 
-    local TIMESTAMP
-    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-    local SNAP_ID="${PROJECT_NAME}-$TIMESTAMP"
     local SNAP_DIR="$WORKSPACE/snapshots"
-    local SNAP_TMP="$SNAP_DIR/${SNAP_ID}"
-    local SNAP_OUT="$SNAP_DIR/${SNAP_ID}.tar.gz"
+    local SNAP_TMP="$SNAP_DIR/snapshot"
+    local SNAP_TAR="$SNAP_DIR/snapshot.tar.gz"
+    local SNAP_OUT="$SNAP_DIR/snapshot.tar.gz.gpg"
 
-    [ -f "$SNAP_OUT" ] && error "Snapshot già esistente: ${SNAP_ID}.tar.gz"
+    # Chiedi passphrase prima di fare qualsiasi lavoro
+    local PASSPHRASE
+    PASSPHRASE=$(_snap_passphrase "Passphrase: ")
+    [ -n "$PASSPHRASE" ] || error "Passphrase obbligatoria"
 
+    # Conferma passphrase solo in modalità interattiva
+    if [ -z "${SNAP_PASSPHRASE:-}" ]; then
+        local PASSPHRASE2
+        PASSPHRASE2=$(_snap_passphrase "Conferma passphrase: ")
+        [ "$PASSPHRASE" = "$PASSPHRASE2" ] || error "Le passphrase non corrispondono"
+    fi
+
+    rm -rf "$SNAP_TMP"
     mkdir -p "$SNAP_TMP"
 
-    info "[snap] Creo snapshot: $SNAP_ID"
+    info "[snap] Creo snapshot..."
     printf '\n'
 
-    # 1. Cartella config/
+    # 1. .env
+    if [ -f "$WORKSPACE/.env" ]; then
+        cp "$WORKSPACE/.env" "$SNAP_TMP/.env"
+        success "  ✓ .env"
+    else
+        warn "  ⚠ .env non trovato"
+    fi
+
+    # 2. config/
     if [ -d "$WORKSPACE/config" ]; then
         cp -r "$WORKSPACE/config" "$SNAP_TMP/config"
-        success "  ✓ config/ → $(find "$WORKSPACE/config" -type f | wc -l) file"
+        local CONFIG_COUNT
+        CONFIG_COUNT=$(find "$WORKSPACE/config" -type f | wc -l)
+        success "  ✓ config/ → $CONFIG_COUNT file"
+    else
+        warn "  ⚠ config/ non trovata"
     fi
 
-    # 2. Esportazione dati database (solo dati, no schema)
-    local DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
-    DB_HOST=$(grep "^db.host=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-    DB_PORT=$(grep "^db.port=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-    DB_NAME=$(grep "^db.name=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-    DB_USER=$(grep "^db.user=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-    DB_PASSWORD=$(grep "^db.password=" "$WORKSPACE/config/application.properties" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r')
-
-    if [ -n "$DB_HOST" ] && [ -n "$DB_NAME" ]; then
-        PGPASSWORD="$DB_PASSWORD" pg_dump -h "$DB_HOST" -p "${DB_PORT:-5432}" -U "$DB_USER" \
-            --data-only --column-inserts --no-owner --no-acl \
-            "$DB_NAME" > "$SNAP_TMP/database_data.sql" 2>/dev/null || true
-        if [ -f "$SNAP_TMP/database_data.sql" ] && [ -s "$SNAP_TMP/database_data.sql" ]; then
-            local DATA_SIZE
-            DATA_SIZE=$(du -sh "$SNAP_TMP/database_data.sql" | cut -f1)
-            success "  ✓ database_data.sql → $DATA_SIZE (solo dati, no schema)"
+    # 3. pg_dump completo (schema + dati)
+    if [ "${PGSQL_ENABLED:-false}" = "true" ]; then
+        local PG_HOST PG_PORT
+        PG_HOST="${PGSQL_HOST:-postgres}"
+        PG_PORT="${PGSQL_PORT:-5432}"
+        info "  [snap] Esporto database $PGSQL_NAME..."
+        PGPASSWORD="$PGSQL_ROOT_PASSWORD" pg_dump \
+            -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" \
+            --no-owner --no-acl \
+            "$PGSQL_NAME" > "$SNAP_TMP/database.sql" 2>/dev/null || true
+        if [ -s "$SNAP_TMP/database.sql" ]; then
+            local DB_SIZE
+            DB_SIZE=$(du -sh "$SNAP_TMP/database.sql" | cut -f1)
+            success "  ✓ database.sql → $DB_SIZE"
         else
-            rm -f "$SNAP_TMP/database_data.sql"
-            warning "  ⚠ database export skipped (empty or failed)"
+            rm -f "$SNAP_TMP/database.sql"
+            warn "  ⚠ database export skipped (vuoto o fallito)"
         fi
+    else
+        info "  [snap] PostgreSQL disabilitato — database saltato"
     fi
-
-    # 3. Elenco moduli installati
-    local INSTALLED_JSON="$WORKSPACE/src/main/resources/module/installed.json"
-    if [ -f "$INSTALLED_JSON" ]; then
-        python3 - "$INSTALLED_JSON" "$SNAP_TMP/modules.txt" << 'PYEOF'
-import json, sys
-with open(sys.argv[1]) as f:
-    modules = json.load(f)
-with open(sys.argv[2], 'w') as out:
-    for key in sorted(modules.keys()):
-        name = modules[key].get('name', key)
-        version = modules[key].get('version', 'unknown')
-        out.write(f"{key}@{version}\n")
-PYEOF
-        local MODULE_COUNT
-        MODULE_COUNT=$(wc -l < "$SNAP_TMP/modules.txt" 2>/dev/null || echo 0)
-        success "  ✓ modules.txt → $MODULE_COUNT moduli"
-    fi
-
-    # 4. Elenco pacchetti npm
-    if [ -f "$WORKSPACE/gui/package.json" ]; then
-        cp "$WORKSPACE/gui/package.json" "$SNAP_TMP/package.json"
-        if [ -f "$WORKSPACE/gui/package-lock.json" ]; then
-            cp "$WORKSPACE/gui/package-lock.json" "$SNAP_TMP/package-lock.json"
-        fi
-        local NPM_COUNT
-        NPM_COUNT=$(jq -r '.dependencies // {} | length' "$WORKSPACE/gui/package.json" 2>/dev/null || echo 0)
-        success "  ✓ package.json + package-lock.json → $NPM_COUNT dipendenze"
-    fi
-
-    # 5. Copia pom.xml
-    if [ -f "$WORKSPACE/pom.xml" ]; then
-        cp "$WORKSPACE/pom.xml" "$SNAP_TMP/pom.xml"
-        success "  ✓ pom.xml"
-    fi
-
-    # 6. Genera README.md
-    cat > "$SNAP_TMP/README.md" << 'READMEEOF'
-# Snapshot Configurazione Applicazione
-
-Questo snapshot contiene una fotografia completa della configurazione applicazione al momento della creazione.
-
-## Contenuto
-
-### 1. Configurazione (`config/`)
-File di configurazione dell'applicazione (`application.properties`, chiavi private, ecc.).
-
-**Ripristino:**
-```bash
-cp -r config/ /workspace/config/
-```
-
-### 2. Dati Database (`database_data.sql`)
-Esportazione dei dati del database (solo INSERT, senza schema).
-La struttura delle tabelle deve essere ricreata eseguendo le migration Flyway.
-
-**Ripristino:**
-```bash
-# 1. Ricrea database vuoto
-cmd db reset
-
-# 2. Applica migration (crea struttura tabelle)
-cmd app build  # Flyway viene eseguito automaticamente
-
-# 3. Importa dati
-cmd db -f database_data.sql
-```
-
-**ATTENZIONE:** L'import dei dati deve avvenire DOPO aver applicato le migration, altrimenti le tabelle non esistono.
-
-### 3. Moduli Installati (`modules.txt`)
-Lista dei moduli installati con le rispettive versioni (formato: `key@version`).
-
-**Ripristino:**
-```bash
-# Installa ogni modulo manualmente
-while IFS=@ read -r key version; do
-    cmd module install "$key"
-done < modules.txt
-```
-
-**NOTA:** I moduli devono essere disponibili in `module/` o come file `.tar.gz`. L'ordine di installazione non è critico se le dipendenze sono soddisfatte; in caso di errori di dipendenza, installare prima i moduli dipendenti.
-
-### 4. Pacchetti NPM (`package.json`, `package-lock.json`)
-Dipendenze frontend dell'applicazione.
-
-**Ripristino:**
-```bash
-cp package.json /workspace/gui/package.json
-cp package-lock.json /workspace/gui/package-lock.json
-cd /workspace/gui
-npm install
-```
-
-### 5. Maven POM (`pom.xml`)
-Configurazione Maven con dipendenze backend.
-
-**Ripristino:**
-```bash
-cp pom.xml /workspace/pom.xml
-```
-
-## Procedura Completa di Ripristino
-
-1. **Ripristina configurazione:**
-   ```bash
-   cp -r config/ /workspace/config/
-   ```
-
-2. **Ripristina pom.xml:**
-   ```bash
-   cp pom.xml /workspace/pom.xml
-   ```
-
-3. **Installa moduli:**
-   ```bash
-   while IFS=@ read -r key version; do
-       cmd module install "$key"
-   done < modules.txt
-   ```
-
-4. **Compila applicazione (applica migration):**
-   ```bash
-   cmd app build
-   ```
-
-5. **Importa dati database:**
-   ```bash
-   cmd db -f database_data.sql
-   ```
-
-6. **Ripristina pacchetti frontend:**
-   ```bash
-   cp package.json /workspace/gui/package.json
-   cp package-lock.json /workspace/gui/package-lock.json
-   cd /workspace/gui && npm install
-   ```
-
-7. **Ricompila frontend:**
-   ```bash
-   cmd gui build
-   ```
-
-## Metadata
-
-- **Creato:** TIMESTAMP_PLACEHOLDER
-READMEEOF
-
-    # Sostituisci placeholder nel README
-    sed -i "s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" "$SNAP_TMP/README.md"
-    success "  ✓ README.md → guida al ripristino manuale"
 
     # Comprimi
     printf '\n'
-    info "[snap] Comprimo → snapshots/${SNAP_ID}.tar.gz ..."
-    tar -czf "$SNAP_OUT" -C "$SNAP_DIR" "$SNAP_ID"
+    info "[snap] Comprimo..."
+    tar -czf "$SNAP_TAR" -C "$SNAP_DIR" "snapshot"
+    rm -rf "$SNAP_TMP"
+
+    # Cifra con GPG simmetrico AES256
+    info "[snap] Cifro con GPG (AES256)..."
+    rm -f "$SNAP_OUT"
+    printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+        --symmetric --cipher-algo AES256 \
+        --passphrase-fd 0 \
+        --output "$SNAP_OUT" \
+        "$SNAP_TAR"
+    rm -f "$SNAP_TAR"
+
+    printf '\n'
+    success "Snapshot creato: snapshots/snapshot.tar.gz.gpg"
+    info "Ripristina con:  cmd snap restore"
+    printf '\n'
+}
+
+snap_restore() {
+    load_env
+
+    command -v gpg >/dev/null 2>&1 || error "gpg non trovato. Installare con: apt-get install gnupg"
+
+    local DB_ONLY=false
+    local CONFIG_ONLY=false
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --db-only)     DB_ONLY=true; shift ;;
+            --config-only) CONFIG_ONLY=true; shift ;;
+            *) error "Opzione non riconosciuta: $1. Usa: --db-only, --config-only" ;;
+        esac
+    done
+
+    local SNAP_DIR="$WORKSPACE/snapshots"
+    local SNAP_OUT="$SNAP_DIR/snapshot.tar.gz.gpg"
+    local SNAP_TAR="$SNAP_DIR/snapshot.tar.gz"
+    local SNAP_TMP="$SNAP_DIR/snapshot"
+
+    [ -f "$SNAP_OUT" ] || error "Snapshot non trovato: snapshots/snapshot.tar.gz.gpg. Creare con: cmd snap"
+
+    local PASSPHRASE
+    PASSPHRASE=$(_snap_passphrase "Passphrase: ")
+    [ -n "$PASSPHRASE" ] || error "Passphrase obbligatoria"
+
+    # Decifra
+    info "[snap] Decifro snapshot..."
+    rm -f "$SNAP_TAR"
+    printf '%s' "$PASSPHRASE" | gpg --batch --yes \
+        --passphrase-fd 0 \
+        --output "$SNAP_TAR" \
+        --decrypt "$SNAP_OUT" 2>/dev/null \
+        || error "Decifratura fallita — passphrase errata?"
+
+    # Estrai
+    rm -rf "$SNAP_TMP"
+    tar -xzf "$SNAP_TAR" -C "$SNAP_DIR"
+    rm -f "$SNAP_TAR"
+
+    printf '\n'
+    info "[snap] Ripristino in corso..."
+    printf '\n'
+
+    # config/ e .env (saltati solo con --db-only)
+    if ! $DB_ONLY; then
+        if [ -f "$SNAP_TMP/.env" ]; then
+            cp "$SNAP_TMP/.env" "$WORKSPACE/.env"
+            success "  ✓ .env ripristinato"
+        fi
+        if [ -d "$SNAP_TMP/config" ]; then
+            mkdir -p "$WORKSPACE/config"
+            cp -r "$SNAP_TMP/config/." "$WORKSPACE/config/"
+            success "  ✓ config/ ripristinata"
+        fi
+    fi
+
+    # database (saltato solo con --config-only)
+    if ! $CONFIG_ONLY; then
+        if [ -f "$SNAP_TMP/database.sql" ] && [ "${PGSQL_ENABLED:-false}" = "true" ]; then
+            local PG_HOST PG_PORT
+            PG_HOST="${PGSQL_HOST:-postgres}"
+            PG_PORT="${PGSQL_PORT:-5432}"
+
+            warn "  Questo sovrascriverà tutti i dati esistenti in $PGSQL_NAME!"
+            confirm "  Continuare?" || { rm -rf "$SNAP_TMP"; exit 0; }
+
+            export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
+            # Termina connessioni attive e ricrea il database
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
+                -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$PGSQL_NAME' AND pid <> pg_backend_pid();" \
+                2>/dev/null || true
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
+                -c "DROP DATABASE IF EXISTS $PGSQL_NAME;" 2>/dev/null || true
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d postgres \
+                -c "CREATE DATABASE $PGSQL_NAME;" \
+                || { rm -rf "$SNAP_TMP"; error "Impossibile creare il database"; }
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+                -c "GRANT ALL ON SCHEMA public TO \"$PGSQL_USER\";" 2>/dev/null || true
+
+            info "  [snap] Importo database $PGSQL_NAME..."
+            PGPASSWORD="$PGSQL_ROOT_PASSWORD" psql \
+                -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" \
+                -d "$PGSQL_NAME" \
+                -f "$SNAP_TMP/database.sql" \
+                || { rm -rf "$SNAP_TMP"; error "Ripristino database fallito"; }
+
+            local DB_SIZE
+            DB_SIZE=$(du -sh "$SNAP_TMP/database.sql" | cut -f1)
+            success "  ✓ database ripristinato ($DB_SIZE)"
+        else
+            if [ "${PGSQL_ENABLED:-false}" != "true" ]; then
+                info "  [snap] PostgreSQL disabilitato — database saltato"
+            elif [ ! -f "$SNAP_TMP/database.sql" ]; then
+                info "  [snap] Nessun dump database nello snapshot"
+            fi
+        fi
+    fi
+
     rm -rf "$SNAP_TMP"
 
     printf '\n'
-    success "Snapshot creato: snapshots/${SNAP_ID}.tar.gz"
-    info "Estrai con: tar -xzf snapshots/${SNAP_ID}.tar.gz -C snapshots/"
+    success "Ripristino completato"
     printf '\n'
 }
 
@@ -2626,6 +2666,7 @@ case "$1" in
         done
 
         case "$GIT_CMD" in
+            init)   git_init ;;
             push)   git_push "$REPO_PATH" ;;
             pull)   git_pull "$REPO_PATH" ;;
             sync)   git_sync "$REPO_PATH" ;;
@@ -2633,7 +2674,7 @@ case "$1" in
             branch) git_branch "$BRANCH_NAME" "$REPO_PATH" "$BASE_BRANCH" ;;
             merge)  git_merge "$BRANCH_NAME" "$REPO_PATH" ;;
             update) git_update "$REPO_PATH" ;;
-            *) error "Unknown git command: $GIT_CMD. Use: push, pull, sync, fetch, branch, merge, update" ;;
+            *) error "Unknown git command: $GIT_CMD. Use: init, push, pull, sync, fetch, branch, merge, update" ;;
         esac
         ;;
     db)
@@ -2680,7 +2721,14 @@ case "$1" in
             *) error "Unknown module command: $2. Use: export, install, dist, uninstall, cli, test" ;;
         esac
         ;;
-    snap) shift; snap_create "$@" ;;
+    snap)
+        case "$2" in
+            restore) shift 2; snap_restore "$@" ;;
+            create)  shift 2; snap_create "$@" ;;
+            "")      shift;   snap_create "$@" ;;
+            *) error "Comando snap non riconosciuto: $2. Usa: create, restore" ;;
+        esac
+        ;;
     -h|--help|help|"")
         show_help
         ;;
