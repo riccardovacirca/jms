@@ -630,7 +630,8 @@ GITIGNORE
     sed "s|{{SCHEDULER_POLL_INTERVAL_SECONDS}}|${SCHEDULER_POLL_INTERVAL_SECONDS:-15}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
     sed "s|{{PROJECT_TITLE}}|${PROJECT_TITLE:-$PROJECT_NAME}|g" config/application.properties > config/application.properties.tmp && mv -f config/application.properties.tmp config/application.properties
 
-    # .vscode/settings.json — sostituisce i placeholder con i valori da .env
+    # .vscode/settings.json — generato da settings.template.json con i valori da .env
+    cp jms/.vscode/settings.template.json .vscode/settings.json
     sed "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
     sed "s|{{PGSQL_HOST}}|$PGSQL_HOST|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json
     sed "s|{{PGSQL_PASSWORD}}|$PGSQL_PASSWORD|g" .vscode/settings.json > .vscode/settings.json.tmp && mv -f .vscode/settings.json.tmp .vscode/settings.json

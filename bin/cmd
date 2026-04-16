@@ -2372,7 +2372,14 @@ snap_create() {
         warn "  ⚠ .env non trovato"
     fi
 
-    # 2. config/
+    # 2. .vscode/settings.json
+    if [ -f "$WORKSPACE/.vscode/settings.json" ]; then
+        mkdir -p "$SNAP_TMP/.vscode"
+        cp "$WORKSPACE/.vscode/settings.json" "$SNAP_TMP/.vscode/settings.json"
+        success "  ✓ .vscode/settings.json"
+    fi
+
+    # 4. config/
     if [ -d "$WORKSPACE/config" ]; then
         cp -r "$WORKSPACE/config" "$SNAP_TMP/config"
         local CONFIG_COUNT
@@ -2382,7 +2389,7 @@ snap_create() {
         warn "  ⚠ config/ non trovata"
     fi
 
-    # 3. pg_dump completo (schema + dati)
+    # 5. pg_dump completo (schema + dati)
     if [ "${PGSQL_ENABLED:-false}" = "true" ]; then
         local PG_HOST PG_PORT
         PG_HOST="${PGSQL_HOST:-postgres}"
@@ -2471,11 +2478,16 @@ snap_restore() {
     info "[snap] Ripristino in corso..."
     printf '\n'
 
-    # config/ e .env (saltati solo con --db-only)
+    # config/, .env, .vscode/settings.json (saltati solo con --db-only)
     if ! $DB_ONLY; then
         if [ -f "$SNAP_TMP/.env" ]; then
             cp "$SNAP_TMP/.env" "$WORKSPACE/.env"
             success "  ✓ .env ripristinato"
+        fi
+        if [ -f "$SNAP_TMP/.vscode/settings.json" ]; then
+            mkdir -p "$WORKSPACE/.vscode"
+            cp "$SNAP_TMP/.vscode/settings.json" "$WORKSPACE/.vscode/settings.json"
+            success "  ✓ .vscode/settings.json ripristinato"
         fi
         if [ -d "$SNAP_TMP/config" ]; then
             mkdir -p "$WORKSPACE/config"

@@ -7,5 +7,6 @@ logs/
 config/
 storage/
 jms/
+.vscode/settings.json
 snapshots/snapshot.tar.gz
 snapshots/snapshot/

@@ -35,6 +35,9 @@ cmd module cli <module> <script> [OPTIONS]       # Esegue module/<module>/cli/<s
 cmd module cli <module> list                     # Lista tutti i comandi CLI disponibili per il modulo
 cmd module test <module> <script> [OPTIONS]      # Esegue module/<module>/test/<script>.sh (solo in sviluppo)
 cmd module test <module> list                    # Lista tutti gli script di test disponibili per il modulo
+cmd snap                 # Crea snapshot cifrato (config/ + .env + .vscode/settings.json + database) → snapshots/snapshot.tar.gz.gpg
+cmd snap restore         # Ripristina snapshot (--db-only, --config-only)
+cmd git init             # Inizializza repo locale, primo commit e pubblica su GitHub (richiede repo GitHub già creato)
 cmd bench [options]      # Run siege benchmark (options passed to siege, log to bench/siege-YYYYMMDD-HHMMSS.log)
 ```
 
