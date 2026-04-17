@@ -508,6 +508,7 @@ vite_build() {
 
     info "Building Vite application..."
     cd "$VITE_DIR"
+    npm install --prefer-offline 2>/dev/null || npm install
     npm run build
     success "Vite build completed → src/main/resources/static/"
 }
@@ -2395,9 +2396,22 @@ snap_create() {
         PG_HOST="${PGSQL_HOST:-postgres}"
         PG_PORT="${PGSQL_PORT:-5432}"
         info "  [snap] Esporto database $PGSQL_NAME..."
+
+        # Tabelle log/transient: schema incluso, dati esclusi.
+        # Sovrascrivibile via SNAP_EXCLUDE_DATA in .env (lista separata da virgola).
+        local SNAP_EXCLUDE_DATA_DEFAULT="jms_audit_log,jms_user_refresh_tokens,jms_user_password_reset_tokens,jms_user_auth_pins,jms_cti_sessione_operatore,jms_crm_import_sessions,jobrunr_jobs,jobrunr_job_stats"
+        local SNAP_EXCLUDE_DATA_LIST="${SNAP_EXCLUDE_DATA:-$SNAP_EXCLUDE_DATA_DEFAULT}"
+        local PG_EXCLUDE_ARGS=""
+        IFS=',' read -r -a _exclude_tables <<< "$SNAP_EXCLUDE_DATA_LIST"
+        for _t in "${_exclude_tables[@]}"; do
+            _t=$(echo "$_t" | tr -d ' ')
+            [ -n "$_t" ] && PG_EXCLUDE_ARGS="$PG_EXCLUDE_ARGS --exclude-table-data=$_t"
+        done
+
         PGPASSWORD="$PGSQL_ROOT_PASSWORD" pg_dump \
             -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" \
             --no-owner --no-acl \
+            $PG_EXCLUDE_ARGS \
             "$PGSQL_NAME" > "$SNAP_TMP/database.sql" 2>/dev/null || true
         if [ -s "$SNAP_TMP/database.sql" ]; then
             local DB_SIZE

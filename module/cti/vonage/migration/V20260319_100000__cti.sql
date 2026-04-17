@@ -1,29 +1,33 @@
 CREATE TABLE jms_cti_chiamate (
-  id                  BIGSERIAL     PRIMARY KEY,
-  uuid                VARCHAR(64),
-  conversazione_uuid  VARCHAR(64),
-  direzione           VARCHAR(16),
-  stato               VARCHAR(32),
-  tipo_mittente       VARCHAR(16),
-  numero_mittente     VARCHAR(32),
-  tipo_destinatario   VARCHAR(16),
-  numero_destinatario VARCHAR(32),
-  tariffa             VARCHAR(16),
-  costo               VARCHAR(16),
-  durata              INTEGER,
-  ora_inizio          TIMESTAMP,
-  ora_fine            TIMESTAMP,
-  rete                VARCHAR(32),
-  answer_url          TEXT,
-  event_url           TEXT,
-  errore_titolo       VARCHAR(255),
-  errore_dettaglio    TEXT,
-  operatore_id          BIGINT,
-  chiamante_account_id  INTEGER,
-  contatto_id           BIGINT,
-  callback_url          VARCHAR(500),
-  data_creazione        TIMESTAMP DEFAULT NOW(),
-  data_aggiornamento    TIMESTAMP
+  id                   BIGSERIAL    PRIMARY KEY,
+  uuid                 VARCHAR(64),
+  conversazione_uuid   VARCHAR(64),
+  conversation_name    VARCHAR(100),
+  direzione            VARCHAR(16),
+  stato                VARCHAR(32),
+  tipo_mittente        VARCHAR(16),
+  numero_mittente      VARCHAR(32),
+  tipo_destinatario    VARCHAR(16),
+  numero_destinatario  VARCHAR(32),
+  tariffa              VARCHAR(16),
+  costo                VARCHAR(16),
+  durata               INTEGER,
+  ora_inizio           TIMESTAMP,
+  ora_fine             TIMESTAMP,
+  rete                 VARCHAR(32),
+  answer_url           TEXT,
+  event_url            TEXT,
+  errore_titolo        VARCHAR(255),
+  errore_dettaglio     TEXT,
+  recording_url        VARCHAR(500),
+  recording_uuid       VARCHAR(64),
+  recording_path       VARCHAR(500),
+  operatore_id         BIGINT,
+  chiamante_account_id INTEGER,
+  contatto_id          BIGINT,
+  callback_url         VARCHAR(500),
+  data_creazione       TIMESTAMP DEFAULT NOW(),
+  data_aggiornamento   TIMESTAMP
 );
 
 CREATE TABLE jms_cti_operatori (
@@ -34,8 +38,8 @@ CREATE TABLE jms_cti_operatori (
   claim_scadenza   TIMESTAMP,
   sessione_ttl     TIMESTAMP,
   nome             VARCHAR(100),
-  attivo           BOOLEAN      NOT NULL DEFAULT TRUE,
-  data_creazione   TIMESTAMP    NOT NULL DEFAULT NOW()
+  attivo           BOOLEAN   NOT NULL DEFAULT TRUE,
+  data_creazione   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX jms_cti_idx_operatori_claim
@@ -44,31 +48,19 @@ CREATE UNIQUE INDEX jms_cti_idx_operatori_claim
 
 -- stato: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata
 CREATE TABLE jms_cti_sessione_operatore (
-  id                   BIGSERIAL    PRIMARY KEY,
-  operatore_id         INTEGER      NOT NULL,
-
-  -- Connessione effettiva
+  id                   BIGSERIAL PRIMARY KEY,
+  operatore_id         INTEGER   NOT NULL,
   connessione_inizio   TIMESTAMP,
   connessione_fine     TIMESTAMP,
   durata_totale        INTEGER,
-
-  -- Pause (disconnessioni dentro la sessione)
-  numero_pause         INTEGER      NOT NULL DEFAULT 0,
-  durata_pause         INTEGER      NOT NULL DEFAULT 0,
-
-  -- Ultima connessione effettiva (aggiornata a ogni reconnessione, usata per calcolo durata pausa)
+  numero_pause         INTEGER   NOT NULL DEFAULT 0,
+  durata_pause         INTEGER   NOT NULL DEFAULT 0,
   ultima_connessione   TIMESTAMP,
-
-  -- Statistiche chiamate
-  numero_chiamate      INTEGER      NOT NULL DEFAULT 0,
-  durata_conversazione INTEGER      NOT NULL DEFAULT 0,
-
-  -- Stato corrente: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata
-  stato                SMALLINT     NOT NULL DEFAULT 0,
-
-  -- Audit
-  creato_da            INTEGER      NOT NULL,
-  data_creazione       TIMESTAMP    NOT NULL DEFAULT NOW(),
+  numero_chiamate      INTEGER   NOT NULL DEFAULT 0,
+  durata_conversazione INTEGER   NOT NULL DEFAULT 0,
+  stato                SMALLINT  NOT NULL DEFAULT 0,
+  creato_da            INTEGER   NOT NULL,
+  data_creazione       TIMESTAMP NOT NULL DEFAULT NOW(),
   modificato_da        INTEGER,
   data_modifica        TIMESTAMP
 );
@@ -82,7 +74,6 @@ CREATE TABLE jms_cti_prefissi_internazionali (
     iso      CHAR(2)      NOT NULL,
     prefisso VARCHAR(10)  NOT NULL,
     attivo   BOOLEAN      DEFAULT TRUE,
-
     CONSTRAINT uq_iso UNIQUE (iso)
 );
 
@@ -146,20 +137,20 @@ INSERT INTO jms_cti_prefissi_internazionali (paese, iso, prefisso) VALUES
 
 -- Coda globale contatti CTI in ingresso (condivisa tra tutti gli operatori)
 CREATE TABLE jms_cti_coda_contatti (
-  id               BIGSERIAL  PRIMARY KEY,
-  contatto_json    JSONB      NOT NULL,
-  data_inserimento TIMESTAMP  NOT NULL DEFAULT NOW()
+  id               BIGSERIAL PRIMARY KEY,
+  contatto_json    JSONB     NOT NULL,
+  data_inserimento TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX jms_cti_idx_coda_contatti_data ON jms_cti_coda_contatti(data_inserimento);
 
 -- Coda personale per operatore: contatti estratti dalla coda globale e pianificati
 CREATE TABLE jms_cti_operatore_contatti (
-  id               BIGSERIAL  PRIMARY KEY,
-  operatore_id     BIGINT     NOT NULL REFERENCES jms_cti_operatori(id),
-  contatto_json    JSONB      NOT NULL,
-  data_inserimento TIMESTAMP  NOT NULL DEFAULT NOW(),
-  pianificato_al   TIMESTAMP  NOT NULL DEFAULT NOW()
+  id               BIGSERIAL PRIMARY KEY,
+  operatore_id     BIGINT    NOT NULL REFERENCES jms_cti_operatori(id),
+  contatto_json    JSONB     NOT NULL,
+  data_inserimento TIMESTAMP NOT NULL DEFAULT NOW(),
+  pianificato_al   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX jms_cti_idx_op_contatti_op    ON jms_cti_operatore_contatti(operatore_id);

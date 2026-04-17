@@ -14,9 +14,9 @@ CREATE TABLE jms_crm_contatti (
     cap             VARCHAR(10),
     provincia       VARCHAR(50),
     note            TEXT,
-    stato           INTEGER DEFAULT 1,
-    consenso        BOOLEAN DEFAULT FALSE,
-    blacklist       BOOLEAN DEFAULT FALSE,
+    stato           INTEGER   DEFAULT 1,
+    consenso        BOOLEAN   DEFAULT FALSE,
+    blacklist       BOOLEAN   DEFAULT FALSE,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP
 );
@@ -35,17 +35,19 @@ CREATE TABLE jms_crm_liste (
     id          SERIAL PRIMARY KEY,
     nome        VARCHAR(100) NOT NULL UNIQUE,
     descrizione TEXT,
-    consenso    BOOLEAN DEFAULT FALSE,
-    stato       INTEGER DEFAULT 1,
+    consenso    BOOLEAN   DEFAULT FALSE,
+    stato       INTEGER   DEFAULT 1,
     scadenza    DATE,
+    is_default  BOOLEAN   NOT NULL DEFAULT FALSE,
     deleted_at  TIMESTAMP,
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMP
 );
 
-CREATE INDEX jms_crm_idx_liste_stato      ON jms_crm_liste(stato);
-CREATE INDEX jms_crm_idx_liste_scadenza   ON jms_crm_liste(scadenza);
-CREATE INDEX jms_crm_idx_liste_deleted_at ON jms_crm_liste(deleted_at);
+CREATE INDEX        jms_crm_idx_liste_stato      ON jms_crm_liste(stato);
+CREATE INDEX        jms_crm_idx_liste_scadenza   ON jms_crm_liste(scadenza);
+CREATE INDEX        jms_crm_idx_liste_deleted_at ON jms_crm_liste(deleted_at);
+CREATE UNIQUE INDEX jms_crm_idx_liste_is_default ON jms_crm_liste(is_default) WHERE is_default = TRUE;
 
 -- ============================================================================
 -- RELAZIONE LISTE-CONTATTI (Many-to-Many)
@@ -53,8 +55,8 @@ CREATE INDEX jms_crm_idx_liste_deleted_at ON jms_crm_liste(deleted_at);
 
 CREATE TABLE jms_crm_lista_contatti (
     id          SERIAL PRIMARY KEY,
-    lista_id    INTEGER NOT NULL REFERENCES jms_crm_liste(id)    ON DELETE CASCADE,
-    contatto_id INTEGER NOT NULL REFERENCES jms_crm_contatti(id) ON DELETE CASCADE,
+    lista_id    INTEGER   NOT NULL REFERENCES jms_crm_liste(id)    ON DELETE CASCADE,
+    contatto_id INTEGER   NOT NULL REFERENCES jms_crm_contatti(id) ON DELETE CASCADE,
     created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(lista_id, contatto_id)
 );
@@ -90,16 +92,47 @@ CREATE INDEX jms_crm_idx_import_sessions_created ON jms_crm_import_sessions(crea
 -- ============================================================================
 
 CREATE TABLE jms_crm_turno (
-  id               BIGSERIAL  PRIMARY KEY,
-  operatore_id     BIGINT     NOT NULL,
-  turno_inizio     TIMESTAMP  NOT NULL,
-  turno_fine       TIMESTAMP  NOT NULL,
-  note             TEXT,
-  creato_da        BIGINT,
-  data_creazione   TIMESTAMP  NOT NULL DEFAULT NOW(),
-  modificato_da    BIGINT,
-  data_modifica    TIMESTAMP
+    id             BIGSERIAL PRIMARY KEY,
+    operatore_id   BIGINT    NOT NULL,
+    turno_inizio   TIMESTAMP NOT NULL,
+    turno_fine     TIMESTAMP NOT NULL,
+    note           TEXT,
+    creato_da      BIGINT,
+    data_creazione TIMESTAMP NOT NULL DEFAULT NOW(),
+    modificato_da  BIGINT,
+    data_modifica  TIMESTAMP
 );
 
 CREATE INDEX jms_crm_idx_turno_operatore ON jms_crm_turno(operatore_id);
 CREATE INDEX jms_crm_idx_turno_periodo   ON jms_crm_turno(turno_inizio, turno_fine);
+
+-- ============================================================================
+-- CAMPAGNE
+-- ============================================================================
+
+CREATE TABLE jms_crm_campagne (
+    id          SERIAL PRIMARY KEY,
+    nome        VARCHAR(100) NOT NULL,
+    descrizione TEXT,
+    stato       INTEGER   NOT NULL DEFAULT 1,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP,
+    deleted_at  TIMESTAMP
+);
+
+CREATE UNIQUE INDEX jms_crm_idx_campagne_nome ON jms_crm_campagne(nome) WHERE deleted_at IS NULL;
+CREATE INDEX        jms_crm_idx_campagne_stato ON jms_crm_campagne(stato);
+
+-- ============================================================================
+-- RELAZIONE CAMPAGNE-LISTE (Many-to-Many)
+-- ============================================================================
+
+CREATE TABLE jms_crm_campagna_liste (
+    campagna_id INTEGER   NOT NULL REFERENCES jms_crm_campagne(id) ON DELETE CASCADE,
+    lista_id    INTEGER   NOT NULL REFERENCES jms_crm_liste(id)    ON DELETE CASCADE,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (campagna_id, lista_id)
+);
+
+CREATE INDEX jms_crm_idx_campagna_liste_campagna ON jms_crm_campagna_liste(campagna_id);
+CREATE INDEX jms_crm_idx_campagna_liste_lista    ON jms_crm_campagna_liste(lista_id);
