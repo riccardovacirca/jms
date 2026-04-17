@@ -2526,6 +2526,10 @@ snap_restore() {
                 -f "$SNAP_TMP/database.sql" \
                 || { rm -rf "$SNAP_TMP"; error "Ripristino database fallito"; }
 
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+                -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO \"$PGSQL_USER\"; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO \"$PGSQL_USER\";" \
+                2>/dev/null || true
+
             local DB_SIZE
             DB_SIZE=$(du -sh "$SNAP_TMP/database.sql" | cut -f1)
             success "  ✓ database ripristinato ($DB_SIZE)"
