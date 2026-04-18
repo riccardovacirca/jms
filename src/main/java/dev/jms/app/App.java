@@ -23,7 +23,6 @@ import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.PathTemplateHandler;
 import io.undertow.server.handlers.resource.ClassPathResourceManager;
 import io.undertow.server.handlers.resource.ResourceHandler;
-import io.undertow.util.Headers;
 import org.flywaydb.core.Flyway;
 import java.io.InputStream;
 import java.util.Map;
@@ -120,16 +119,13 @@ public class App
 
     // === REGISTRAZIONE ROUTE ===
 
-    // Status endpoint pubblico — verifica che l'applicazione sia attiva.
-    // Ritorna JSON standard {"err":false,"log":null,"out":"App is running"}.
+    // Status endpoint pubblico — health check, risponde HTTP 200 senza body.
     paths.add("/api/status", new HttpHandler() {
       @Override
       public void handleRequest(HttpServerExchange exchange) throws Exception
       {
-        exchange.getResponseHeaders()
-          .put(Headers.CONTENT_TYPE, "application/json");
-        exchange.getResponseSender()
-          .send("{\"err\":false,\"log\":null,\"out\":\"App is running\"}");
+        exchange.setStatusCode(200);
+        exchange.endExchange();
       }
     });
 

@@ -11,7 +11,8 @@
 #   --mailpit               Installa/ricrea il container Mailpit del progetto
 #   --ngrok                 Installa ngrok nel container di sviluppo
 #   --claude                Installa Claude Code nel container di sviluppo
-#   --vscode                Installa le estensioni VSCode da .vscode/extensions.json
+#   --vscode                Installa le estensioni VSCode dentro il container di sviluppo
+#   --vscode-host           Installa le estensioni VSCode sull'host (Firefox debugger incluso)
 #   --help, -h              Mostra questo messaggio
 #
 # Examples:
@@ -187,7 +188,8 @@ Options:
   --mailpit               Install/recreate project Mailpit container
   --claude                Install Claude Code inside the dev container
   --ngrok                 Install ngrok inside the dev container
-  --vscode                Install VSCode extensions from .vscode/extensions.json
+  --vscode                Install VSCode extensions inside the dev container
+  --vscode-host           Install VSCode extensions on host (Firefox debugger included)
   --help, -h              Show this message
 
 Examples:
@@ -196,7 +198,8 @@ Examples:
   ./install.sh --claude    # Install Claude Code in dev container
   ./install.sh --mailpit   # Install/recreate Mailpit (reads from .env)
   ./install.sh --ngrok     # Install ngrok in dev container
-  ./install.sh --vscode    # Install VSCode extensions
+  ./install.sh --vscode    # Install VSCode extensions in dev container
+  ./install.sh --vscode-host  # Install VSCode extensions on host
 EOF
     exit 0
 }
@@ -661,7 +664,46 @@ install_dev() {
 # Dispatcher
 # =============================================================================
 
-install_vscode_extensions() {
+install_vscode_container() {
+    EXTENSIONS_FILE=".vscode/extensions.json"
+    if [ ! -f "$EXTENSIONS_FILE" ]; then
+        echo "ERROR: $EXTENSIONS_FILE not found"
+        exit 1
+    fi
+    if [ ! -f .env ]; then
+        echo "Generating .env..."
+        generate_env_file
+    fi
+    . ./.env
+
+    DEV_CONTAINER="$PROJECT_NAME"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${DEV_CONTAINER}$"; then
+        echo "Dev container '$DEV_CONTAINER' is not running. Start it first with: ./install.sh"
+        exit 1
+    fi
+
+    CODE_SERVER=$(docker exec "$DEV_CONTAINER" bash -c \
+        "ls ~/.vscode-server/bin/*/bin/code-server 2>/dev/null | head -1")
+    if [ -z "$CODE_SERVER" ]; then
+        echo "ERROR: VS Code Server not found in container '$DEV_CONTAINER'."
+        echo "       Connect to the container via Remote Containers in VS Code first, then retry."
+        exit 1
+    fi
+
+    echo "Installing VSCode extensions in container '$DEV_CONTAINER'..."
+    awk '/"recommendations"/,/\]/' "$EXTENSIONS_FILE" \
+        | grep '"' \
+        | grep -v 'recommendations' \
+        | sed 's/.*"\([^"]*\.[^"]*\)".*/\1/' \
+        | grep '\.' \
+        | while IFS= read -r EXT; do
+            echo "  $EXT"
+            docker exec "$DEV_CONTAINER" "$CODE_SERVER" --install-extension "$EXT" --force
+        done
+    echo "Done."
+}
+
+install_vscode_host() {
     EXTENSIONS_FILE=".vscode/extensions.json"
     if [ ! -f "$EXTENSIONS_FILE" ]; then
         echo "ERROR: $EXTENSIONS_FILE not found"
@@ -671,7 +713,7 @@ install_vscode_extensions() {
         echo "ERROR: 'code' command not found. Make sure VSCode is installed and 'code' is in PATH."
         exit 1
     fi
-    echo "Installing VSCode extensions from $EXTENSIONS_FILE..."
+    echo "Installing VSCode extensions on host..."
     awk '/"recommendations"/,/\]/' "$EXTENSIONS_FILE" \
         | grep '"' \
         | grep -v 'recommendations' \
@@ -698,7 +740,10 @@ case "$1" in
         install_claude
         ;;
     --vscode)
-        install_vscode_extensions
+        install_vscode_container
+        ;;
+    --vscode-host)
+        install_vscode_host
         ;;
     --help|-h)
         show_help

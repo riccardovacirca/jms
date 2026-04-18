@@ -92,3 +92,11 @@ CREATE TABLE jms_user_settings
 );
 
 CREATE INDEX jms_idx_users_account_id ON jms_users(account_id);
+
+-- Account di bootstrap. Hash: PBKDF2WithHmacSHA256, 310.000 iterazioni, Base64(salt):Base64(key).
+-- Cambiare le password dopo la prima installazione.
+INSERT INTO jms_user_accounts (username, email, password_hash, ruolo, must_change_password) VALUES
+  ('root',     'root@example.com',     'obLD1OX2p7jJ0OHyo7TF1g==:Np0PrYc0q1uXjHPMRgEQOJ20nCAgfwYb7efCpwyx/Zk=', 'root',  false),
+  ('admin',    'admin@example.com',    'ssPU5fanuMnQ4fKjtMXW5w==:r9fgVazp4iX2J7m3gCLRk3Ecaze73IkPPwxIRdzfyMo=', 'admin', false),
+  ('operator', 'operator@example.com', 'w9Tl9qe4ydDh8qO0xdbn+A==:As+3w+SyZxYixkdMEvt9gYSEdFVR9ajq2SJxR4FfErM=', 'user',  false)
+ON CONFLICT (username) DO NOTHING;

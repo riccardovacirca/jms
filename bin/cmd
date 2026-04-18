@@ -65,8 +65,8 @@ Usage: cmd COMMAND [OPTIONS]
   module install <path> --force      Bypass missing dependency check
   module export --name <n> [-v x]    Export current project module to jms/module/<name>[-version]/
   module dist <path>                 Package module folder (relative to jms/module/) → dist/<name>-<version>.tar.gz
-  module uninstall --name <name>     Remove installed module (blocked if other modules depend on it)
-  module uninstall --name <name> --force  Bypass reverse dependency check
+  module uninstall <name>            Remove installed module (blocked if other modules depend on it)
+  module uninstall <name> --force    Bypass reverse dependency check
   module cli <module> <script> [OPTIONS]            Run jms/module/<module>/cli/<script>.sh [OPTIONS]
 
   ngrok run                        Start ngrok tunnel in foreground (Ctrl+C to stop)
@@ -328,15 +328,15 @@ _app_run_common() {
             "$WORKSPACE/src/" "$WORKSPACE/pom.xml" "$WORKSPACE/config/" 2>/dev/null || true
         sleep 0.3
         info "[dev] Change detected — recompiling..."
+        _dev_stop
         if [ "$WORKSPACE/pom.xml" -nt "$DEV_CP_FILE" ]; then
             _dev_classpath
         fi
         if mvn --no-transfer-progress compile -DskipTests; then
-            _dev_stop
             _dev_start
             _dev_wait_ready && touch "$WORKSPACE/gui/src/index.html" 2>/dev/null || true
         else
-            warn "[dev] Compilation failed — keeping running version"
+            warn "[dev] Compilation failed"
         fi
     done
 }
@@ -1213,6 +1213,7 @@ with open('$MANIFEST', 'w') as f:
 }
 
 _module_install() {
+    load_env
     local MODULE_DIR="$1"
     local MODULE_KEY="$2"
     [ -d "$MODULE_DIR" ]        || error "Cartella modulo non trovata: $MODULE_DIR"
@@ -1248,9 +1249,9 @@ _module_install() {
     fi
 
     # Migration SQL (copy as-is, no timestamp rename)
-    if [ -d "$MODULE_DIR/migration" ] && ls "$MODULE_DIR/migration"/*.sql >/dev/null 2>&1; then
+    if [ -d "$MODULE_DIR/db/install" ] && ls "$MODULE_DIR/db/install"/*.sql >/dev/null 2>&1; then
         info "[module] Copia migration SQL..."
-        for sql_file in "$MODULE_DIR/migration"/*.sql; do
+        for sql_file in "$MODULE_DIR/db/install"/*.sql; do
             cp "$sql_file" "$WORKSPACE/src/main/resources/db/migration/"
             success "  Migration copiata: $(basename "$sql_file")"
         done
@@ -1270,7 +1271,9 @@ _module_install() {
         if [ -n "$REGISTER_CALL" ]; then
             if grep -q '\[MODULE_ROUTES\]' "$APP_JAVA"; then
                 if ! grep -qF "$REGISTER_CALL" "$APP_JAVA"; then
-                    sed -i "s|// \[MODULE_ROUTES\]|// [MODULE_ROUTES]\n    ${REGISTER_CALL}|" "$APP_JAVA"
+                    local WRAPPED
+                    WRAPPED="try { ${REGISTER_CALL} } catch (Exception _e) { log.warn(\"Modulo ${MODULE_KEY} non avviato: {}\", _e.getMessage()); }"
+                    sed -i "s|// \[MODULE_ROUTES\]|// [MODULE_ROUTES]\n    ${WRAPPED}|" "$APP_JAVA"
                     success "  Route registrata in App.java: $REGISTER_CALL"
                 else
                     warn "  Route già registrata in App.java, skip"
@@ -1442,11 +1445,6 @@ if notice:
     # (inotifywait does not watch directories created after it starts).
     touch "$WORKSPACE/src/main/java/dev/jms/app/App.java" 2>/dev/null || true
 
-    # Execute post-install script if present.
-    # The script runs AFTER the touch so that if cmd app run is active the
-    # recompile+restart cycle is already triggered. We then wait for the backend
-    # to become reachable before running the script, so that any API calls it
-    # makes find the new module already loaded.
     local INSTALL_SCRIPT
     INSTALL_SCRIPT=$(python3 -c "
 import json
@@ -1456,50 +1454,18 @@ print(m.get('install_script', ''))
 " 2>/dev/null || echo "")
 
     if [ -n "$INSTALL_SCRIPT" ] && [ -f "$MODULE_DIR/$INSTALL_SCRIPT" ]; then
-        local PORT="${API_PORT:-8080}"
-        if app_is_running; then
-            info "[module] Backend in esecuzione — attendo riavvio con il nuovo modulo..."
-            local i=0
-            # Step 1: wait for the port to go DOWN (JVM restarting after recompile).
-            # Cap at 10 s — if cmd app run is not active the port never drops.
-            while [ $i -lt 20 ]; do
-                (echo > /dev/tcp/localhost/$PORT) 2>/dev/null || break
-                sleep 0.5
-                i=$((i+1))
-            done
-            # Step 2: wait for the port to come back UP (new binary loaded).
-            i=0
-            while [ $i -lt 120 ]; do
-                (echo > /dev/tcp/localhost/$PORT) 2>/dev/null && break
-                sleep 0.5
-                i=$((i+1))
-            done
-            if ! (echo > /dev/tcp/localhost/$PORT) 2>/dev/null; then
-                warn "[module] Backend non raggiungibile dopo 60s — esegui manualmente lo script di post-install:"
-                warn "         bash $MODULE_DIR/$INSTALL_SCRIPT $WORKSPACE $MODULE_KEY"
-            else
-                info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
-                if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
-                    success "  Script di post-install completato"
-                else
-                    warn "  Script di post-install fallito (exit code: $?)"
-                    warn "  L'installazione del modulo continua comunque"
-                fi
-            fi
+        info "[module] Esecuzione script di post-install..."
+        if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
+            success "  Script di post-install completato"
         else
-            info "[module] Esecuzione script di post-install: $INSTALL_SCRIPT"
-            if bash "$MODULE_DIR/$INSTALL_SCRIPT" "$WORKSPACE" "$MODULE_KEY"; then
-                success "  Script di post-install completato"
-            else
-                warn "  Script di post-install fallito (exit code: $?)"
-                warn "  L'installazione del modulo continua comunque"
-            fi
+            warn "  Script di post-install fallito — esegui manualmente: cmd module cli $MODULE_KEY install"
         fi
     fi
 
     printf '\n'
     printf 'Prossimi passi:\n'
-    printf '  1. cmd app build (compila frontend + backend)\n\n'
+    printf '  1. cmd app build (compila frontend + backend)\n'
+    printf '\n'
 }
 
 # ============================================================================
@@ -1708,10 +1674,10 @@ module_export() {
     local HAS_MIGRATIONS=false
     while IFS= read -r -d '' f; do
         if [ "$HAS_MIGRATIONS" = false ]; then
-            mkdir -p "$OUTPUT/migration"
+            mkdir -p "$OUTPUT/db/install"
             info "[module] Copio migration..."
         fi
-        cp "$f" "$OUTPUT/migration/"
+        cp "$f" "$OUTPUT/db/install/"
         HAS_MIGRATIONS=true
     done < <(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE_NAME}*.sql" -print0 2>/dev/null)
 
@@ -1947,25 +1913,23 @@ module_dist() {
 # ============================================================================
 # module_remove — rimuove un modulo installato leggendo il tracker
 #
-# --name accetta sia nomi semplici ("user") sia key con namespace ("cti/vonage").
+# Accetta sia nomi semplici ("user") sia key con namespace ("cti/vonage").
 # ============================================================================
 
 module_remove() {
+    load_env
     local MODULE_KEY=""
     local FORCE=false
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            --name)
-                [ -n "$2" ] || error "--name richiede un valore"
-                MODULE_KEY="$2"; shift 2 ;;
             --force) FORCE=true; shift ;;
-            -*) error "Opzione sconosciuta: $1. Usage: cmd module uninstall --name <key> [--force]" ;;
-            *) error "Usage: cmd module uninstall --name <key> [--force]" ;;
+            -*) error "Opzione sconosciuta: $1. Usage: cmd module uninstall <key> [--force]" ;;
+            *) MODULE_KEY="$1"; shift ;;
         esac
     done
 
-    [ -n "$MODULE_KEY" ] || error "Usage: cmd module uninstall --name <key> [--force]"
+    [ -n "$MODULE_KEY" ] || error "Usage: cmd module uninstall <key> [--force]"
     MODULE_KEY="${MODULE_KEY%/}"
 
     local MODULE_NAME MODULE_NS JAVA_DIR GUI_DIR JAVA_PKG GUI_PATH TRACKER_DIR
@@ -2024,7 +1988,6 @@ for root, dirs, files in os.walk(tracker_base):
     info "[module] Rimozione modulo: $MODULE_KEY"
     printf '\n'
 
-    # Execute pre-remove script if present
     local UNINSTALL_SCRIPT
     UNINSTALL_SCRIPT=$(python3 -c "
 import json
@@ -2034,22 +1997,14 @@ print(m.get('uninstall_script', ''))
 " 2>/dev/null || echo "")
 
     if [ -n "$UNINSTALL_SCRIPT" ]; then
-        # Try to find the script in the original module directory
-        local SCRIPT_PATH=""
-        if [ -d "$WORKSPACE/jms/module/$MODULE_KEY" ] && [ -f "$WORKSPACE/jms/module/$MODULE_KEY/$UNINSTALL_SCRIPT" ]; then
-            SCRIPT_PATH="$WORKSPACE/jms/module/$MODULE_KEY/$UNINSTALL_SCRIPT"
-        fi
-
-        if [ -n "$SCRIPT_PATH" ]; then
-            info "[module] Esecuzione script di pre-remove: $UNINSTALL_SCRIPT"
-            if bash "$SCRIPT_PATH" "$WORKSPACE" "$MODULE_KEY"; then
+        local UNINSTALL_SCRIPT_PATH="$WORKSPACE/jms/module/$MODULE_KEY/$UNINSTALL_SCRIPT"
+        if [ -f "$UNINSTALL_SCRIPT_PATH" ]; then
+            info "[module] Esecuzione script di pre-remove..."
+            if bash "$UNINSTALL_SCRIPT_PATH" "$WORKSPACE" "$MODULE_KEY"; then
                 success "  Script di pre-remove completato"
             else
-                warn "  Script di pre-remove fallito (exit code: $?)"
-                warn "  La rimozione del modulo continua comunque"
+                warn "  Script di pre-remove fallito — continua con la rimozione"
             fi
-        else
-            warn "  Script di pre-remove non trovato: $UNINSTALL_SCRIPT"
         fi
     fi
 
@@ -2169,14 +2124,47 @@ print('OK')
         success "  Maven profile rimosso dal pom.xml"
     fi
 
-    # Migration files: warn only (Flyway state cannot be rolled back automatically)
+    # Uninstall SQL: drop schema objects created by the module
+    local UNINSTALL_SQL_DIR="$WORKSPACE/jms/module/$MODULE_KEY/db/uninstall"
+    if [ -d "$UNINSTALL_SQL_DIR" ] && ls "$UNINSTALL_SQL_DIR"/*.sql >/dev/null 2>&1; then
+        if [ "${PGSQL_ENABLED:-true}" = "true" ]; then
+            info "[module] Esecuzione SQL di disinstallazione..."
+            export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
+            local PG_HOST="${PGSQL_HOST:-postgres}"
+            local PG_PORT="${PGSQL_PORT:-5432}"
+            for sql_file in $(ls "$UNINSTALL_SQL_DIR"/*.sql | sort); do
+                if psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" \
+                        -d "$PGSQL_NAME" -f "$sql_file" >/dev/null 2>&1; then
+                    success "  SQL eseguito: $(basename "$sql_file")"
+                else
+                    warn "  SQL fallito: $(basename "$sql_file") — esegui manualmente se necessario"
+                fi
+            done
+        else
+            warn "[module] PostgreSQL non abilitato — esegui manualmente i file in:"
+            warn "         $UNINSTALL_SQL_DIR"
+        fi
+    fi
+
+    # Migration files: remove from Flyway path and clean schema history
     local MIGRATION_DIR="$WORKSPACE/src/main/resources/db/migration"
     local MIGR_FILES
     MIGR_FILES=$(find "$MIGRATION_DIR" -maxdepth 1 -name "*__${MODULE_NAME}*.sql" 2>/dev/null | sort)
     if [ -n "$MIGR_FILES" ]; then
-        warn "  Le seguenti migration NON vengono rimosse automaticamente (Flyway):"
-        echo "$MIGR_FILES" | while IFS= read -r f; do warn "    $(basename "$f")"; done
-        warn "  Esegui 'cmd db reset' se vuoi ripristinare il database da zero"
+        info "[module] Rimozione migration SQL..."
+        export PGPASSWORD="$PGSQL_ROOT_PASSWORD"
+        local PG_HOST="${PGSQL_HOST:-postgres}"
+        local PG_PORT="${PGSQL_PORT:-5432}"
+        echo "$MIGR_FILES" | while IFS= read -r f; do
+            local fname
+            fname=$(basename "$f")
+            rm -f "$f"
+            rm -f "$WORKSPACE/target/classes/db/migration/$fname"
+            success "  Migration rimossa: $fname"
+            psql -h "$PG_HOST" -p "$PG_PORT" -U "$PGSQL_ROOT_USER" -d "$PGSQL_NAME" \
+                -c "DELETE FROM flyway_schema_history WHERE script = '$fname'" \
+                >/dev/null 2>&1 || true
+        done
     fi
 
     # Remove module config properties from application.properties and .env

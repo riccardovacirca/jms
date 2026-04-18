@@ -19,8 +19,7 @@ class StatusView extends LitElement
   async connectedCallback() {
     super.connectedCallback();
     const res = await fetch('/api/status');
-    const data = await res.json();
-    this._message = data.err ? data.log : data.out;
+    this._message = res.ok ? 'App is running' : 'App is not running';
   }
 
   render() {

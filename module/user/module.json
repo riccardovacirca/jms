@@ -24,6 +24,6 @@
             "init": true
         }
     },
-    "install_script": "cli/install.sh",
-    "install_notice": "Lo script di post-install crea automaticamente gli account root, admin e operator con password di default. Cambiare le password dopo la prima installazione."
+    "install_script": null,
+    "install_notice": "Gli account di bootstrap (root/root123., admin/admin123., operator/operator123.) vengono creati dalla migration. Cambiare le password dopo la prima installazione."
 }
