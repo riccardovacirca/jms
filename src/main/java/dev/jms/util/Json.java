@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+/**
+ * Utility per la serializzazione e deserializzazione JSON tramite Jackson.
+ */
 public class Json
 {
   private static final ObjectMapper mapper;

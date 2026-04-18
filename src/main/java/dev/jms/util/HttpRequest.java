@@ -14,12 +14,20 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Wrapper sulla {@link HttpServerExchange} di Undertow che espone
+ * i dati della richiesta HTTP in modo tipizzato e leggibile.
+ * Supporta sia modalità blocking che async per la lettura del body.
+ */
 public class HttpRequest
 {
   private final HttpServerExchange exchange;
-  private final byte[] bodyBytes; // Null se blocking mode
-  private String bodyString; // Cache
-  private FormData formData; // Cache per multipart
+  // Null se modalità blocking
+  private final byte[] bodyBytes;
+  // Cache del body come stringa
+  private String bodyString;
+  // Cache per multipart/form-data
+  private FormData formData;
 
   /**
    * Costruttore per modalità blocking (esistente, invariato).
@@ -147,10 +155,10 @@ public class HttpRequest
   {
     if (bodyString == null) {
       if (bodyBytes != null) {
-        // Async mode: body già disponibile
+        // Modalità async: body già disponibile
         bodyString = new String(bodyBytes, StandardCharsets.UTF_8);
       } else {
-        // Blocking mode: legge da InputStream (comportamento attuale)
+        // Modalità blocking: legge da InputStream
         try (InputStream is = exchange.getInputStream()) {
           byte[] bytes;
           bytes = is.readAllBytes();
@@ -158,7 +166,7 @@ public class HttpRequest
         }
       }
     }
-    return bodyString; // Cache
+    return bodyString;
   }
 
   /**
@@ -170,10 +178,10 @@ public class HttpRequest
     byte[] result;
 
     if (bodyBytes != null) {
-      // Async mode
+      // Modalità async
       result = bodyBytes;
     } else {
-      // Blocking mode
+      // Modalità blocking
       try (InputStream is = exchange.getInputStream()) {
         result = is.readAllBytes();
       }
@@ -251,12 +259,15 @@ public class HttpRequest
   public java.util.HashMap<String, Object> body() throws Exception
   {
     String raw;
+    java.util.HashMap<String, Object> result;
 
     raw = getBody();
     if (raw == null || raw.isBlank()) {
-      return new java.util.HashMap<>();
+      result = new java.util.HashMap<>();
+    } else {
+      result = Json.decode(raw, java.util.HashMap.class);
     }
-    return Json.decode(raw, java.util.HashMap.class);
+    return result;
   }
 
   /**

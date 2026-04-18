@@ -389,6 +389,26 @@ RULE error.log-level
 ## DOCUMENTAZIONE
 
 ```
+RULE doc.section-separator
+  applies-to: sezioni logiche all'interno di una classe
+  note: per separare sezioni logiche di una classe (es. campi statici, costruttori,
+        metodi pubblici, metodi privati) si usa un blocco di tre righe commento:
+        riga 1 e riga 3 sono "// =========================" (25 segni uguale),
+        riga 2 è "// Titolo in italiano";
+        il titolo è in italiano come tutti i commenti inline;
+        questo costrutto è usato solo quando la classe è sufficientemente lunga
+        da beneficiare di una struttura visiva esplicita
+
+  ok: |
+    // =========================
+    // Metodi pubblici
+    // =========================
+
+  ko: |
+    // ── Public methods ──────────────────────
+```
+
+```
 RULE doc.inline-comment-position
   applies-to: commenti inline (//)
   note: i commenti inline vanno sulla riga immediatamente precedente all'istruzione commentata,

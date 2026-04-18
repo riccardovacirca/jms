@@ -54,7 +54,7 @@ public class App
     // === CARICAMENTO CONFIGURAZIONE ===
 
     config = new Config();
-    port   = config.getInt("server.port", 8080);
+    port = config.getInt("server.port", 8080);
     asyncPoolSize = config.getInt("async.pool.size", 20);
 
     // === INIZIALIZZAZIONE UTILITY CORE ===
@@ -151,10 +151,10 @@ public class App
       String formatted;
 
       session.require(Role.USER, Permission.READ);
-      body     = req.body();
-      level    = DB.toString(body.get("level"));
-      message  = DB.toString(body.get("message"));
-      context  = DB.toString(body.get("context"));
+      body = req.body();
+      level = DB.toString(body.get("level"));
+      message = DB.toString(body.get("message"));
+      context = DB.toString(body.get("context"));
       username = session.username();
 
       if (message == null || message.isBlank()) {
@@ -272,6 +272,10 @@ public class App
     }
   }
 
+  /**
+   * Esegue le migrazioni Flyway da classpath:db/migration.
+   * Saltata silenziosamente se il DataSource non è configurato.
+   */
   private static void runMigrations()
   {
     if (!DB.isConfigured()) {

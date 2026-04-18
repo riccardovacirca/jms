@@ -31,6 +31,11 @@ public class DB
   /** Last generated key bound to current thread */
   private final ThreadLocal<Long> lastGeneratedKey;
 
+  /**
+   * Crea un'istanza DB associata al DataSource fornito.
+   *
+   * @param dataSource sorgente di connessioni (tipicamente HikariCP)
+   */
   public DB(DataSource dataSource)
   {
     this.dataSource = dataSource;
@@ -39,7 +44,7 @@ public class DB
   }
 
   // =========================
-  // STATIC INIT
+  // Inizializzazione statica
   // =========================
 
   /**
@@ -104,7 +109,7 @@ public class DB
   }
 
   // =========================
-  // CONNECTION LIFECYCLE
+  // Ciclo di vita connessione
   // =========================
 
   /**
@@ -168,7 +173,7 @@ public class DB
   }
 
   // =========================
-  // TRANSACTIONS (MANUAL)
+  // Transazioni (manuali)
   // =========================
 
   /**
@@ -212,7 +217,7 @@ public class DB
   }
 
   // =========================
-  // WRITE QUERIES
+  // Query di scrittura
   // =========================
 
   /**
@@ -264,7 +269,7 @@ public class DB
   }
 
   // =========================
-  // READ QUERIES
+  // Query di lettura
   // =========================
 
   /**
@@ -307,7 +312,7 @@ public class DB
   }
 
   // =========================
-  // CURSOR (STREAMING)
+  // Cursore (streaming)
   // =========================
 
   /**
@@ -333,7 +338,7 @@ public class DB
   }
 
   // =========================
-  // METADATA
+  // Metadati
   // =========================
 
   /**
@@ -375,7 +380,7 @@ public class DB
   }
 
   // =========================
-  // HELPERS
+  // Helper
   // =========================
 
   private void bindParameters(PreparedStatement stmt, Object... params) throws SQLException
@@ -386,7 +391,7 @@ public class DB
   }
 
   // ========================================
-  // Type Conversion Helpers (Java 8+ Time API)
+  // Helper per conversione tipi (Java 8+ Time API)
   // ========================================
 
   /**
@@ -579,30 +584,54 @@ public class DB
   }
 
   // =========================
-  // CURSOR (streaming)
+  // Cursore (streaming)
   // =========================
 
+  /**
+   * Cursore JDBC per iterazione streaming di result set di grandi dimensioni.
+   * Chiudere con {@link #close()} dopo l'uso per liberare le risorse.
+   */
   public static class Cursor
   {
     private final ResultSet rs;
     private final PreparedStatement stmt;
 
+    /** Crea il cursore attorno al ResultSet e allo statement già eseguiti. */
     Cursor(ResultSet rs, PreparedStatement stmt)
     {
       this.rs = rs;
       this.stmt = stmt;
     }
 
+    /**
+     * Avanza al record successivo.
+     *
+     * @return {@code true} se esiste un record successivo
+     * @throws Exception se si verifica un errore JDBC
+     */
     public boolean next() throws Exception
     {
       return rs.next();
     }
 
+    /**
+     * Restituisce il valore della colonna indicata nel record corrente.
+     *
+     * @param column nome della colonna
+     * @return valore tipizzato JDBC, o {@code null}
+     * @throws Exception se si verifica un errore JDBC
+     */
     public Object get(String column) throws Exception
     {
       return rs.getObject(column);
     }
 
+    /**
+     * Restituisce il record corrente come mappa colonna→valore.
+     *
+     * @return mappa con tutti i valori del record corrente
+     * @throws Exception se si verifica un errore JDBC
+     */
     public HashMap<String, Object> getRow() throws Exception
     {
       HashMap<String, Object> r;
@@ -619,6 +648,7 @@ public class DB
       return r;
     }
 
+    /** Chiude il ResultSet e lo Statement, ignorando eventuali errori. */
     public void close()
     {
       try {

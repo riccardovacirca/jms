@@ -58,9 +58,9 @@ public class HandlerAdapter implements HttpHandler
   public HandlerAdapter(Handler handler, DataSource dataSource)
   {
     this(dataSource);
-    routes.put(HttpMethod.GET,    (req, res, session, db) -> handler.get(req, res, db));
-    routes.put(HttpMethod.POST,   (req, res, session, db) -> handler.post(req, res, db));
-    routes.put(HttpMethod.PUT,    (req, res, session, db) -> handler.put(req, res, db));
+    routes.put(HttpMethod.GET, (req, res, session, db) -> handler.get(req, res, db));
+    routes.put(HttpMethod.POST, (req, res, session, db) -> handler.post(req, res, db));
+    routes.put(HttpMethod.PUT, (req, res, session, db) -> handler.put(req, res, db));
     routes.put(HttpMethod.DELETE, (req, res, session, db) -> handler.delete(req, res, db));
   }
 
@@ -100,6 +100,10 @@ public class HandlerAdapter implements HttpHandler
     asyncFlags.put(method, Boolean.TRUE);
   }
 
+  /**
+   * Entry point Undertow. Rileva se siamo sull'IO thread e fa dispatch
+   * al worker thread (blocking) o all'AsyncExecutor (async).
+   */
   @Override
   public void handleRequest(HttpServerExchange exchange) throws Exception
   {
@@ -119,6 +123,11 @@ public class HandlerAdapter implements HttpHandler
     }
   }
 
+  /**
+   * Esegue l'handler sul thread corrente (worker o AsyncExecutor).
+   * Apre la connessione DB, risolve l'handler per il metodo HTTP,
+   * gestisce UnauthorizedException (401) e qualsiasi altra eccezione (500).
+   */
   private void executeBlocking(HttpServerExchange exchange)
   {
     DB db;
@@ -129,21 +138,25 @@ public class HandlerAdapter implements HttpHandler
     RouteHandler handler;
 
     exchange.startBlocking();
-    db  = dataSource != null ? new DB(dataSource) : null;
+    db = dataSource != null ? new DB(dataSource) : null;
     res = new HttpResponse(exchange);
 
     try {
       if (db != null) {
         db.open();
       }
-      req     = new HttpRequest(exchange);
+      req = new HttpRequest(exchange);
       session = new Session(req);
-      method  = parseMethod(exchange.getRequestMethod().toString());
+      method = parseMethod(exchange.getRequestMethod().toString());
       handler = method != null ? routes.get(method) : null;
 
       if (handler == null) {
-        res.status(405).contentType("application/json")
-           .err(true).log("Method Not Allowed").out(null).send();
+        res.status(405)
+           .contentType("application/json")
+           .err(true)
+           .log("Method Not Allowed")
+           .out(null)
+           .send();
       } else {
         res.setPreSendHook(() -> session.flush(res));
         handler.handle(req, res, session, db);
@@ -151,14 +164,22 @@ public class HandlerAdapter implements HttpHandler
 
     } catch (UnauthorizedException e) {
       if (!exchange.isResponseStarted()) {
-        res.status(401).contentType("application/json")
-           .err(true).log(e.getMessage()).out(null).send();
+        res.status(401)
+           .contentType("application/json")
+           .err(true)
+           .log(e.getMessage())
+           .out(null)
+           .send();
       }
     } catch (Exception e) {
       log.error("Errore di sistema in handler per {}", exchange.getRequestPath(), e);
       if (!exchange.isResponseStarted()) {
-        res.status(500).contentType("application/json")
-           .err(true).log("Errore interno del server").out(null).send();
+        res.status(500)
+           .contentType("application/json")
+           .err(true)
+           .log("Errore interno del server")
+           .out(null)
+           .send();
       }
     } finally {
       if (db != null) {

@@ -77,7 +77,7 @@ public final class Excel
         }
 
         if (headers.isEmpty()) {
-          throw new Exception("Il file non contiene intestazioni valide nella prima riga");
+          throw new Exception("The file does not contain valid headers in the first row");
         }
 
         maxHeaderIndex = validCols.get(validCols.size() - 1);
@@ -94,7 +94,7 @@ public final class Excel
 
           if (rowLastCell > 0 && rowLastCell < maxHeaderIndex + 1) {
             throw new Exception(String.format(
-              "Errore di struttura: riga %d ha %d colonne, necessarie almeno %d.",
+              "Structure error: row %d has %d columns, at least %d required.",
               rowNumber, rowLastCell, maxHeaderIndex + 1));
           }
 
@@ -171,7 +171,7 @@ public final class Excel
         }
 
         if (headers.isEmpty()) {
-          throw new Exception("Il file non contiene intestazioni valide nella prima riga");
+          throw new Exception("The file does not contain valid headers in the first row");
         }
 
         if (!emptyCols.isEmpty()) {
@@ -200,7 +200,7 @@ public final class Excel
 
           if (totalRows <= 20 && rowLastCell < maxHeaderIndex + 1) {
             throw new Exception(String.format(
-              "Errore di struttura: riga %d ha solo %d colonne, necessarie almeno %d.",
+              "Structure error: row %d has only %d columns, at least %d required.",
               totalRows + 1, rowLastCell, maxHeaderIndex + 1));
           }
 
@@ -314,6 +314,7 @@ public final class Excel
     /** Eventuali avvisi (es. colonne senza intestazione). */
     public final List<String> warnings;
 
+    /** Crea un risultato di analisi con i dati raccolti. */
     AnalysisResult(
       List<String> headers,
       List<Map<String, Object>> previewRows,
@@ -334,6 +335,7 @@ public final class Excel
   {
     private final int rowsImported;
 
+    /** Crea un risultato con il conteggio delle righe importate. */
     ImportResult(int rowsImported)
     {
       this.rowsImported = rowsImported;

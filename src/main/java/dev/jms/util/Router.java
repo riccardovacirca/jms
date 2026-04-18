@@ -28,11 +28,16 @@ public class Router
   private final DataSource ds;
   private final Map<String, HandlerAdapter> adapters;
 
-  /** Costruttore. */
+  /**
+   * Crea un Router associato al PathTemplateHandler e al DataSource specificati.
+   *
+   * @param paths PathTemplateHandler di Undertow su cui registrare i path
+   * @param ds    DataSource da passare agli {@link HandlerAdapter}
+   */
   public Router(PathTemplateHandler paths, DataSource ds)
   {
-    this.paths    = paths;
-    this.ds       = ds;
+    this.paths = paths;
+    this.ds = ds;
     this.adapters = new HashMap<>();
   }
 

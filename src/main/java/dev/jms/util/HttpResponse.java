@@ -44,6 +44,11 @@ public class HttpResponse
     Cookie.configure(secure, sameSite);
   }
 
+  /**
+   * Crea una nuova response per l'exchange Undertow indicato.
+   *
+   * @param exchange exchange Undertow associato alla richiesta corrente
+   */
   public HttpResponse(HttpServerExchange exchange)
   {
     this.exchange = exchange;
@@ -176,10 +181,10 @@ public class HttpResponse
   public void raw(String body)
   {
     if (!_statusSet) {
-      throw new IllegalStateException("status() non chiamato");
+      throw new IllegalStateException("status() not called");
     }
     if (!_ctSet) {
-      throw new IllegalStateException("contentType() non chiamato");
+      throw new IllegalStateException("contentType() not called");
     }
     if (preSendHook != null) {
       preSendHook.run();
@@ -204,7 +209,7 @@ public class HttpResponse
     String disposition;
 
     if (!_statusSet) {
-      throw new IllegalStateException("status() non chiamato");
+      throw new IllegalStateException("status() not called");
     }
     if (data == null) {
       throw new IllegalArgumentException("data cannot be null");
@@ -234,19 +239,19 @@ public class HttpResponse
     LinkedHashMap<String, Object> body;
 
     if (!_statusSet) {
-      throw new IllegalStateException("status() non chiamato");
+      throw new IllegalStateException("status() not called");
     }
     if (!_ctSet) {
-      throw new IllegalStateException("contentType() non chiamato");
+      throw new IllegalStateException("contentType() not called");
     }
     if (!_errSet) {
-      throw new IllegalStateException("err() non chiamato");
+      throw new IllegalStateException("err() not called");
     }
     if (!_logSet) {
-      throw new IllegalStateException("log() non chiamato");
+      throw new IllegalStateException("log() not called");
     }
     if (!_outSet) {
-      throw new IllegalStateException("out() non chiamato");
+      throw new IllegalStateException("out() not called");
     }
 
     if (preSendHook != null) {

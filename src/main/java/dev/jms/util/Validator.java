@@ -10,11 +10,13 @@ import java.util.function.UnaryOperator;
  */
 public final class Validator
 {
-  private Validator() {}
+  private Validator()
+  {
+  }
 
-  // -------------------------
-  // STRING
-  // -------------------------
+  // =========================
+  // Stringhe
+  // =========================
 
   /** Fallisce se il valore è null o blank. */
   public static String required(String value, String name)
@@ -80,17 +82,24 @@ public final class Validator
   /** Fallisce se il valore non è uno di quelli consentiti. */
   public static String oneOf(String value, String name, String... allowed)
   {
+    boolean found;
+
+    found = false;
     for (String a : allowed) {
       if (a.equals(value)) {
-        return value;
+        found = true;
+        break;
       }
     }
-    throw new ValidationException(name + " invalid value");
+    if (!found) {
+      throw new ValidationException(name + " invalid value");
+    }
+    return value;
   }
 
-  // -------------------------
-  // NUMERIC
-  // -------------------------
+  // =========================
+  // Numerici
+  // =========================
 
   /** Parsa e fallisce se il valore non è un intero positivo (> 0). */
   public static int positiveInt(String value, String name)
@@ -116,9 +125,9 @@ public final class Validator
     return value;
   }
 
-  // -------------------------
-  // BOOLEAN
-  // -------------------------
+  // =========================
+  // Booleano
+  // =========================
 
   /** Parsa e fallisce se il valore non è "true" o "false" (case-insensitive). */
   public static boolean bool(String value, String name)
@@ -129,9 +138,9 @@ public final class Validator
     return Boolean.parseBoolean(value);
   }
 
-  // -------------------------
-  // HELPERS
-  // -------------------------
+  // =========================
+  // Helper
+  // =========================
 
   /**
    * Applica il validatore solo se il valore è non-null e non-blank.
@@ -140,10 +149,14 @@ public final class Validator
    */
   public static String optional(String value, UnaryOperator<String> validator)
   {
+    String result;
+
     if (value == null || value.isBlank()) {
-      return value;
+      result = value;
+    } else {
+      result = validator.apply(value);
     }
-    return validator.apply(value);
+    return result;
   }
 
   /**
@@ -171,11 +184,11 @@ public final class Validator
   public static void signPlaceholder(String value, String fieldName)
   {
     if (value == null || value.isBlank()) {
-      throw new ValidationException(fieldName + " è obbligatorio");
+      throw new ValidationException(fieldName + " is required");
     }
     if (!value.matches("^[a-zA-Z0-9]+$")) {
       throw new ValidationException(
-        fieldName + " può contenere solo caratteri alfanumerici (no spazi, no underscore, no caratteri speciali)"
+        fieldName + " must contain only alphanumeric characters (no spaces, underscores, or special characters)"
       );
     }
   }

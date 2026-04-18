@@ -18,7 +18,7 @@ import io.undertow.server.handlers.CookieImpl;
 public final class Cookie
 {
   /** Nome del cookie che trasporta il JWT di accesso (scadenza breve). */
-  public static final String ACCESS_TOKEN  = "access_token";
+  public static final String ACCESS_TOKEN = "access_token";
 
   /** Nome del cookie che trasporta il token di refresh (scadenza lunga, opaco, persistito su DB). */
   public static final String REFRESH_TOKEN = "refresh_token";
@@ -26,10 +26,12 @@ public final class Cookie
   /** Nome del cookie che identifica la sessione server-side. */
   public static final String SESSION_ID = "session_id";
 
-  private static boolean secure   = false;
-  private static String  sameSite = "Lax";
+  private static boolean secure = false;
+  private static String sameSite = "Lax";
 
-  private Cookie() {}
+  private Cookie()
+  {
+  }
 
   /**
    * Configura i flag di sicurezza applicati a tutti i cookie dell'applicazione.
@@ -40,7 +42,7 @@ public final class Cookie
    */
   public static void configure(boolean secure, String sameSite)
   {
-    Cookie.secure   = secure;
+    Cookie.secure = secure;
     Cookie.sameSite = sameSite;
   }
 

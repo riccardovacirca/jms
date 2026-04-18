@@ -48,7 +48,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class Session
 {
-  // ── Static session store ─────────────────────────────────────────────────────
+  // =========================
+  // Store di sessione statico
+  // =========================
 
   private static final ConcurrentHashMap<String, HashMap<String, Object>> store;
   private static final ConcurrentHashMap<String, Long> touched;
@@ -71,20 +73,26 @@ public class Session
     cleanupExecutor.scheduleAtFixedRate(Session::cleanup, 60, 60, TimeUnit.SECONDS);
   }
 
-  // ── Per-request JWT state ────────────────────────────────────────────────────
+  // =========================
+  // Stato JWT per richiesta
+  // =========================
 
   private final HttpRequest req;
   private Map<String, Object> _claims;
   private boolean _resolved;
 
-  // ── Per-request storage state ────────────────────────────────────────────────
+  // =========================
+  // Stato storage per richiesta
+  // =========================
 
   private String _sessionId;
   private HashMap<String, Object> _attrs;
   private boolean _attrsLoaded;
   private boolean _dirty;
 
-  // ── Constructor ──────────────────────────────────────────────────────────────
+  // =========================
+  // Costruttore
+  // =========================
 
   /**
    * Costruttore package-private — istanziato da {@link HandlerAdapter}.
@@ -99,7 +107,9 @@ public class Session
     this._dirty = false;
   }
 
-  // ── Static configuration ─────────────────────────────────────────────────────
+  // =========================
+  // Configurazione statica
+  // =========================
 
   /**
    * Configura il TTL dello store server-side.
@@ -124,7 +134,9 @@ public class Session
     }
   }
 
-  // ── JWT methods ──────────────────────────────────────────────────────────────
+  // =========================
+  // Metodi JWT
+  // =========================
 
   /**
    * Verifica che la sessione soddisfi il livello minimo richiesto.
@@ -240,7 +252,9 @@ public class Session
     return resolve();
   }
 
-  // ── Storage methods ──────────────────────────────────────────────────────────
+  // =========================
+  // Metodi storage
+  // =========================
 
   /**
    * Restituisce il valore associato alla chiave nello storage server-side.
@@ -328,7 +342,9 @@ public class Session
     return result;
   }
 
-  // ── Package-private ──────────────────────────────────────────────────────────
+  // =========================
+  // Metodi package-private
+  // =========================
 
   /**
    * Persiste lo storage e rinnova il cookie di sessione nella risposta corrente.
@@ -347,7 +363,9 @@ public class Session
     }
   }
 
-  // ── Private JWT helpers ──────────────────────────────────────────────────────
+  // =========================
+  // Helper privati JWT
+  // =========================
 
   /** Restituisce i claims lanciando {@link UnauthorizedException} se non autenticato. */
   private Map<String, Object> requireClaims()
@@ -400,7 +418,9 @@ public class Session
     return _claims;
   }
 
-  // ── Private storage helpers ──────────────────────────────────────────────────
+  // =========================
+  // Helper privati storage
+  // =========================
 
   /**
    * Carica lazy lo storage dal cookie di sessione.

@@ -27,7 +27,7 @@ public class AsyncExecutor
   public static void init(int size)
   {
     if (executor != null) {
-      throw new IllegalStateException("AsyncExecutor già inizializzato");
+      throw new IllegalStateException("AsyncExecutor already initialized");
     }
     poolSize = size;
     executor = Executors.newFixedThreadPool(
@@ -36,7 +36,8 @@ public class AsyncExecutor
         Thread t;
         t = new Thread(r);
         t.setName("async-handler-" + t.threadId());
-        t.setDaemon(false); // Non daemon per permettere graceful shutdown
+        // Non daemon per permettere graceful shutdown
+        t.setDaemon(false);
         t.setUncaughtExceptionHandler((thread, throwable) -> {
           System.err.println("[error] Uncaught exception in " + thread.getName());
           throwable.printStackTrace();
@@ -53,7 +54,7 @@ public class AsyncExecutor
   public static ExecutorService getExecutor()
   {
     if (executor == null) {
-      throw new IllegalStateException("AsyncExecutor non inizializzato");
+      throw new IllegalStateException("AsyncExecutor not initialized");
     }
     return executor;
   }
@@ -112,6 +113,7 @@ public class AsyncExecutor
     /** Numero totale di task completati. */
     public final long completedTasks;
 
+    /** Crea uno snapshot con i valori forniti. */
     Stats(int poolSize, int activeThreads, int queuedTasks, long completedTasks)
     {
       this.poolSize = poolSize;

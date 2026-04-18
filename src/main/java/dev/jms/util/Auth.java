@@ -62,7 +62,7 @@ public class Auth
   public static Auth get()
   {
     if (instance == null) {
-      throw new IllegalStateException("Auth non inizializzato — chiamare Auth.init()");
+      throw new IllegalStateException("Auth not initialized — call Auth.init() first");
     }
     return instance;
   }
@@ -271,7 +271,7 @@ public class Auth
     StringBuilder sb;
 
     rnd = new SecureRandom();
-    sb  = new StringBuilder(8);
+    sb = new StringBuilder(8);
     for (int i = 0; i < 8; i++) {
       sb.append(rnd.nextInt(10));
     }

@@ -107,7 +107,7 @@ public class Mail
   public static Mail get()
   {
     if (instance == null) {
-      throw new IllegalStateException("Mail non inizializzato — chiamare Mail.init()");
+      throw new IllegalStateException("Mail not initialized — call Mail.init()");
     }
     return instance;
   }

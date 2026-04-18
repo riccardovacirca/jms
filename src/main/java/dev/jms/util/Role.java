@@ -53,7 +53,7 @@ public enum Role
       }
     }
     if (result == null) {
-      throw new IllegalArgumentException("Livello ruolo non valido: " + level);
+      throw new IllegalArgumentException("Invalid role level: " + level);
     }
     return result;
   }
@@ -68,7 +68,7 @@ public enum Role
   public static Role of(String name)
   {
     if (name == null) {
-      throw new IllegalArgumentException("Nome ruolo null");
+      throw new IllegalArgumentException("Role name is null");
     }
     return Role.valueOf(name.toUpperCase());
   }
