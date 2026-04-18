@@ -6,7 +6,7 @@ docker/
 logs/
 config/
 storage/
-jms/
+/jms/
 .vscode/settings.json
 snapshots/snapshot.tar.gz
 snapshots/snapshot/
