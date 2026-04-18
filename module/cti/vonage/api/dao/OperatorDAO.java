@@ -88,14 +88,17 @@ public class OperatorDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    OperatorDTO result;
 
     sql = "SELECT id, vonage_user_id, account_id, attivo "
         + "FROM jms_cti_operatori WHERE account_id = ? AND attivo = TRUE LIMIT 1";
     rows = db.select(sql, accountId);
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = mapRow(rows.get(0));
     }
-    return mapRow(rows.get(0));
+    return result;
   }
 
   /**
@@ -177,14 +180,17 @@ public class OperatorDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    OperatorDTO result;
 
     sql = "SELECT id, vonage_user_id, account_id, attivo "
         + "FROM jms_cti_operatori WHERE id = ?";
     rows = db.select(sql, id);
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = mapRow(rows.get(0));
     }
-    return mapRow(rows.get(0));
+    return result;
   }
 
   /**
@@ -197,14 +203,17 @@ public class OperatorDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    OperatorDTO result;
 
     sql = "SELECT id, vonage_user_id, account_id, attivo "
         + "FROM jms_cti_operatori WHERE claim_account_id = ? AND attivo = TRUE LIMIT 1";
     rows = db.select(sql, accountId);
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = mapRow(rows.get(0));
     }
-    return mapRow(rows.get(0));
+    return result;
   }
 
   /**
@@ -217,14 +226,17 @@ public class OperatorDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    OperatorDTO result;
 
     sql = "SELECT id, vonage_user_id, account_id, attivo "
         + "FROM jms_cti_operatori WHERE vonage_user_id = ?";
     rows = db.select(sql, vonageUserId);
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = mapRow(rows.get(0));
     }
-    return mapRow(rows.get(0));
+    return result;
   }
 
   /**
@@ -238,13 +250,16 @@ public class OperatorDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    Long result;
 
     sql = "SELECT claim_account_id FROM jms_cti_operatori WHERE id = ?";
     rows = db.select(sql, operatoreId);
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = DB.toLong(rows.get(0).get("claim_account_id"));
     }
-    return DB.toLong(rows.get(0).get("claim_account_id"));
+    return result;
   }
 
   /**
@@ -336,5 +351,4 @@ public class OperatorDAO
         DB.toBoolean(row.get("attivo"))
     );
   }
-
 }

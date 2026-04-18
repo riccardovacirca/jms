@@ -144,14 +144,6 @@ public class CallDAO
   }
 
   /**
-   * Restituisce la lista paginata di chiamate con il nome dell'operatore,
-   * ottimizzata per la risposta API (LEFT JOIN su {@code jms_cti_operatori}).
-   *
-   * @param page numero di pagina (da 1)
-   * @param size elementi per pagina
-   * @return lista di righe grezze pronte per la serializzazione JSON
-   */
-  /**
    * Lista paginata di tutte le chiamate (per ADMIN/ROOT), con nome operatore.
    *
    * @param page numero di pagina (da 1)

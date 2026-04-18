@@ -1,8 +1,8 @@
 # JavaScript Coding Style DSL
 
 ```
-version: 1.0
-scope:   gui/src/**/*.js
+version: 1.3
+scope: gui/src/**/*.js
 ```
 
 ---
@@ -44,31 +44,59 @@ RULE fmt.one-statement-per-line
 
   ok: |
     this._loading = true;
-    this._error   = null;
+    this._error = null;
     this._render();
 
   ko: |
-    this._loading = true; this._error = null; this._render()
+    this._loading = true; this._error = null; this._render();
+```
+
+```
+RULE fmt.no-alignment-padding
+  applies-to: assegnazioni, proprietà di oggetto, argomenti
+  note: non si aggiungono spazi extra per allineare verticalmente il carattere = o :
+        su righe adiacenti; ogni assegnazione usa un solo spazio attorno all'operatore
+
+  ok: |
+    const ts = new Date().toISOString();
+    const extra = data ? ' ' + JSON.stringify(data) : '';
+
+    const CONFIG = {
+      consoleEnabled: true,
+      backendEnabled: false,
+      debugToBackend: false
+    };
+
+  ko: |
+    const ts    = new Date().toISOString();
+    const extra = data ? ' ' + JSON.stringify(data) : '';
+
+    const CONFIG = {
+      consoleEnabled:  true,
+      backendEnabled:  false,
+      debugToBackend:  false
+    };
 ```
 
 ```
 RULE fmt.long-statement
-  applies-to: istruzioni che superano la leggibilità su riga singola
+  applies-to: istruzioni che superano indicativamente 100 caratteri o che contengono
+              più di un'operazione composta nella stessa espressione
   note: le istruzioni lunghe vengono spezzate estraendo variabili intermedie
         o espandendo oggetti/array su più righe con una proprietà per riga;
         si preferisce l'estrazione di variabili intermedie rispetto al wrapping della stessa espressione
 
   ok: |
     // variabili intermedie per template literal complessa
-    const ts    = new Date().toISOString();
+    const ts = new Date().toISOString();
     const extra = data ? ' ' + JSON.stringify(data) : '';
     return `[${ts}] [${level}] [${module}] ${message}${extra}`;
 
     // oggetto espanso su più righe
     const CONFIG = {
-      consoleEnabled:  true,
-      backendEnabled:  false,
-      debugToBackend:  false
+      consoleEnabled: true,
+      backendEnabled: false,
+      debugToBackend: false
     };
 
     // proprietà di oggetto letterale su righe separate
@@ -90,9 +118,11 @@ RULE fmt.long-statement
 
 ```
 RULE fmt.no-inline-function-body
-  applies-to: function declaration, shorthand method, getter/setter in object literal
+  applies-to: function declaration, class method, shorthand method, getter/setter in object literal
   note: il corpo sta sempre su righe separate rispetto alla firma,
-        indipendentemente dal numero di istruzioni contenute
+        indipendentemente dal numero di istruzioni contenute;
+        nessuna eccezione, incluso createRenderRoot() nei LitElement;
+        le arrow function usate come callback inline (es. v => { this._x = v; }) sono esentate
 
   ok: |
     function debug(m, msg, d) {
@@ -108,6 +138,10 @@ RULE fmt.no-inline-function-body
       }
     };
 
+    createRenderRoot() {
+      return this;
+    }
+
   ko: |
     function debug(m, msg, d) { log(m, 'DEBUG', msg, d); }
 
@@ -115,6 +149,8 @@ RULE fmt.no-inline-function-body
       get state() { return state; },
       subscribe(fn) { listeners.push(fn); }
     };
+
+    createRenderRoot() { return this; }
 ```
 
 ---
@@ -124,37 +160,29 @@ RULE fmt.no-inline-function-body
 ```
 RULE export.at-end
   applies-to: tutti i moduli con export
-  note: gli export named sono raggruppati in un unico blocco export { } alla fine del file;
-        non si usa export inline sulle dichiarazioni
+  note: dichiarazione ed export sono sempre su statement separati e l'export sta alla fine del file;
+        gli export named usano un unico blocco export { } come ultima istruzione;
+        i default export usano export default <nome> su una riga separata, dopo la dichiarazione;
+        non si usa mai export inline su una dichiarazione (né export function, né export default function,
+        né export const)
 
   ok: |
+    // named exports
     function foo() { ... }
     function bar() { ... }
 
     export { foo, bar };
 
+    // default export
+    function init() { ... }
+
+    export default init;
+
   ko: |
     export function foo() { ... }
     export function bar() { ... }
-```
 
-```
-RULE export.separate-from-declaration
-  applies-to: tutti i moduli con export
-  note: le dichiarazioni di funzioni e costanti sono separate dall'export;
-        una funzione non viene dichiarata ed esportata nella stessa riga
-
-  ok: |
-    function mount(tag, component) {
-      customElements.define(tag, component);
-    }
-
-    export { mount };
-
-  ko: |
-    export function mount(tag, component) {
-      customElements.define(tag, component);
-    }
+    export default function init() { ... }
 ```
 
 ```
@@ -226,22 +254,22 @@ RULE naming.file-equals-class
 
   ok: |
     // Componenti (classi)
-    user/auth/Login.js          → class Login
-    user/auth/Register.js       → class Register
-    user/account/Profile.js     → class Profile
-    user/account/Settings.js    → class Settings
+    user/auth/Login.js → class Login
+    user/auth/Register.js → class Register
+    user/account/Profile.js → class Profile
+    user/account/Settings.js → class Settings
 
     // Contesti (orchestrazione)
-    user/index.js               → mount/unmount + routing
-    user/init.js                → initialization function
+    user/index.js → mount/unmount + routing
+    user/init.js → initialization function
 
   ko: |
     // Nome file non corrisponde al nome classe
-    user/auth/login.js          → class Login
-    user/auth/LoginPage.js      → class Login
+    user/auth/login.js → class Login
+    user/auth/LoginPage.js → class Login
 
     // Contesto in PascalCase
-    user/Index.js               → mount/unmount function
+    user/Index.js → mount/unmount function
 ```
 
 ```
@@ -254,34 +282,44 @@ RULE naming.namespace-via-path
   ok: |
     user/
       auth/
-        Login.js           → class Login (non UserLogin)
-        Register.js        → class Register
+        Login.js → class Login (non UserLogin)
+        Register.js → class Register
       account/
-        Profile.js         → class Profile
-        Settings.js        → class Settings
+        Profile.js → class Profile
+        Settings.js → class Settings
 
   ko: |
     user/
-      UserLogin.js         → class UserLogin (prefisso ridondante)
-      UserRegister.js      → class UserRegister
-      UserProfile.js       → class UserProfile
+      UserLogin.js → class UserLogin (prefisso ridondante)
+      UserRegister.js → class UserRegister
+      UserProfile.js → class UserProfile
 ```
 
 ```
 RULE naming.custom-elements
   applies-to: registrazione custom elements
-  note: il tag name del custom element usa kebab-case e include il prefisso del modulo
-        per evitare conflitti globali nel registry dei custom elements;
+  note: il tag name usa kebab-case e include il prefisso del modulo per evitare conflitti
+        globali nel registry dei custom elements;
+        per moduli top-level il prefisso è il nome del modulo (es. user-);
+        per moduli con namespace (ns/name) il prefisso è ns-name- (es. cti-vonage-);
         il prefisso rimane anche se il nome della classe non lo include
 
   ok: |
-    // File: user/auth/Login.js
+    // Modulo top-level — File: user/auth/Login.js
     class Login extends LitElement { ... }
     customElements.define('user-login', Login);
 
-    // File: user/account/Profile.js
+    // Modulo top-level — File: user/account/Profile.js
     class Profile extends LitElement { ... }
     customElements.define('user-profile', Profile);
+
+    // Modulo con namespace — File: cti/vonage/call/Call.js
+    class Call extends LitElement { ... }
+    customElements.define('cti-vonage-call', Call);
+
+    // Modulo con namespace — File: cti/vonage/session/Panel.js
+    class Panel extends LitElement { ... }
+    customElements.define('cti-vonage-panel', Panel);
 
   ko: |
     // Manca prefisso modulo (rischio conflitti)
@@ -291,6 +329,14 @@ RULE naming.custom-elements
     // Tag non corrisponde al pattern kebab-case
     class Login extends LitElement { ... }
     customElements.define('userLogin', Login);
+
+    // Namespace non incluso nel prefisso
+    class Call extends LitElement { ... }
+    customElements.define('vonage-call', Call);
+
+    // Solo il namespace, manca il nome del modulo
+    class Call extends LitElement { ... }
+    customElements.define('cti-call', Call);
 ```
 
 ```
@@ -302,18 +348,60 @@ RULE naming.semantic-folders
 
   ok: |
     user/
-      auth/           → autenticazione (login, register, password reset)
-      account/        → gestione account (profile, settings)
+      auth/ → autenticazione (login, register, password reset)
+      account/ → gestione account (profile, settings)
 
     crm/
-      contatti/       → gestione contatti
-      aziende/        → gestione aziende
+      contatti/ → gestione contatti
+      aziende/ → gestione aziende
 
   ko: |
     user/
-      components/     → generico, non esprime dominio
-      pages/          → tecnico, non semantico
-      views/          → tecnico, non semantico
+      components/ → generico, non esprime dominio
+      pages/ → tecnico, non semantico
+      views/ → tecnico, non semantico
+```
+
+```
+RULE naming.module-entry
+  applies-to: file index.js di ogni modulo
+  note: il file index.js è il punto di ingresso del modulo ed è esentato dalla regola
+        naming.file-equals-class; il suo scopo è orchestrare il montaggio del modulo
+        nel DOM e non è considerato un componente;
+        esporta un oggetto default con il metodo mount(container);
+        per moduli semplici (un solo componente) il componente può essere definito
+        nello stesso file index.js; per moduli complessi i componenti stanno in file separati
+        (PascalCase, un file per classe) e index.js si limita all'orchestrazione
+
+  ok: |
+    // modulo semplice: componente e orchestrazione nello stesso file
+    class StatusView extends LitElement { ... }
+    customElements.define('status-view', StatusView);
+
+    const Status = {
+      mount(container) {
+        container.innerHTML = '<status-view></status-view>';
+      }
+    };
+
+    export default Status;
+
+    // modulo complesso: index.js solo orchestrazione
+    import './auth/Login.js';
+    import './auth/Register.js';
+
+    const User = {
+      mount(container) {
+        container.innerHTML = '<user-login></user-login>';
+      }
+    };
+
+    export default User;
+
+  ko: |
+    // index.js non esporta nulla (il router non riesce a montare il modulo)
+    class StatusView extends LitElement { ... }
+    customElements.define('status-view', StatusView);
 ```
 
 ---
@@ -324,7 +412,8 @@ RULE naming.semantic-folders
 RULE comment.jsdoc-for-functions
   applies-to: tutte le funzioni esportate o pubblicamente rilevanti
   note: i commenti che descrivono una funzione usano il formato JSDoc con /** */;
-        si includono @param per ogni parametro e @returns se la funzione restituisce un valore;
+        ogni @param include la type annotation in formato {type} e una descrizione;
+        @returns è obbligatorio se la funzione restituisce un valore, con type annotation e descrizione;
         i commenti inline // restano validi solo per note di contesto non legate a una funzione
 
   ok: |
@@ -332,7 +421,7 @@ RULE comment.jsdoc-for-functions
      * Verifica la sessione sul server e aggiorna auth di conseguenza.
      * @param {string} url - URL dell'endpoint
      * @param {RequestInit} options - Opzioni fetch
-     * @returns {Promise<Response>}
+     * @returns {Promise<Response>} risposta del server dopo eventuale refresh del token
      */
     async function fetchWithRefresh(url, options = {}) {
       ...
@@ -340,6 +429,16 @@ RULE comment.jsdoc-for-functions
 
   ko: |
     // Verifica la sessione sul server e aggiorna auth di conseguenza.
+    async function fetchWithRefresh(url, options = {}) {
+      ...
+    }
+
+    // @param senza type annotation
+    /**
+     * @param url - URL dell'endpoint
+     * @param options - Opzioni fetch
+     * @returns risposta del server
+     */
     async function fetchWithRefresh(url, options = {}) {
       ...
     }
@@ -356,7 +455,8 @@ RULE wc.class-per-component
         lo stato reattivo è dichiarato tramite static properties con { state: true }
         e inizializzato nel constructor;
         Shadow DOM è disabilitato con createRenderRoot() per consentire a Bootstrap
-        di applicare gli stili normalmente;
+        di applicare gli stili normalmente — il corpo di createRenderRoot() sta su
+        righe separate come qualsiasi altro metodo (regola fmt.no-inline-function-body);
         la logica di rendering è in render(), che restituisce un template html`...`;
         la registrazione avviene con customElements.define dopo la definizione della classe
 
@@ -364,15 +464,17 @@ RULE wc.class-per-component
     class AuthLayout extends LitElement {
       static properties = {
         _loading: { state: true },
-        _error:   { state: true }
+        _error: { state: true }
       };
 
-      createRenderRoot() { return this; }
+      createRenderRoot() {
+        return this;
+      }
 
       constructor() {
         super();
         this._loading = false;
-        this._error   = null;
+        this._error = null;
       }
 
       render() {
@@ -383,11 +485,12 @@ RULE wc.class-per-component
     customElements.define('auth-layout', AuthLayout);
 
   ko: |
+    // Estende HTMLElement invece di LitElement; usa innerHTML invece di html``
     class AuthLayout extends HTMLElement {
       constructor() {
         super();
         this._loading = false;
-        this._error   = null;
+        this._error = null;
       }
 
       _render() {
@@ -396,6 +499,11 @@ RULE wc.class-per-component
     }
 
     customElements.define('auth-layout', AuthLayout);
+
+    // createRenderRoot con corpo inline: viola fmt.no-inline-function-body
+    class AuthLayout extends LitElement {
+      createRenderRoot() { return this; }
+    }
 ```
 
 ```

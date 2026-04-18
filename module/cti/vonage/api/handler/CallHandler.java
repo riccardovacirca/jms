@@ -91,7 +91,7 @@ public class CallHandler
          .send();
     } else {
       opCodaDao = new OperatoreContattiDAO(db);
-      orphans   = opCodaDao.findOrphans(operator.id());
+      orphans = opCodaDao.findOrphans(operator.id());
       if (!orphans.isEmpty()) {
         codaDao = new CodaContattiDAO(db);
         db.begin();
@@ -158,11 +158,11 @@ public class CallHandler
     if (session.isAuthenticated()) {
       accountId = (int) session.sub();
       if (accountId > 0) {
-        dao      = new OperatorDAO(db);
+        dao = new OperatorDAO(db);
         operator = dao.findByClaimAccountId(accountId);
         if (operator != null) {
           sessioneDao = new SessioneOperatoreDAO(db);
-          sessione    = sessioneDao.findActive(operator.id());
+          sessione = sessioneDao.findActive(operator.id());
           if (sessione != null) {
             durataPausa = sessione.ultimaConnessione() != null
                 ? (int) java.time.Duration.between(
@@ -172,7 +172,7 @@ public class CallHandler
           }
 
           opCodaDao = new OperatoreContattiDAO(db);
-          orphans   = opCodaDao.findOrphans(operator.id());
+          orphans = opCodaDao.findOrphans(operator.id());
           if (!orphans.isEmpty()) {
             codaDao = new CodaContattiDAO(db);
             db.begin();
@@ -300,15 +300,15 @@ public class CallHandler
     log.debug("[CTI] answer: custom_data grezzo={}", customDataStr);
 
     customerNumber = null;
-    listenTarget   = null;
-    contattoId     = null;
-    callbackUrl    = null;
+    listenTarget = null;
+    contattoId = null;
+    callbackUrl = null;
     if (customDataStr != null && !customDataStr.isBlank()) {
       try {
         mapper = new ObjectMapper();
         customData = mapper.readValue(customDataStr, HashMap.class);
         customerNumber = DB.toString(customData.get("customerNumber"));
-        listenTarget   = DB.toString(customData.get("listenTarget"));
+        listenTarget = DB.toString(customData.get("listenTarget"));
         contattoId = customData.get("contactId") != null ? DB.toLong(customData.get("contactId")) : null;
         callbackUrl = DB.toString(customData.get("callbackUrl"));
       } catch (Exception e) {
@@ -322,7 +322,7 @@ public class CallHandler
       log.info("[CTI] answer/listen: fromUser={}, listenTarget={}", fromUser, listenTarget);
       CallDAO callDao;
       CallDTO targetCall;
-      callDao    = new CallDAO(db);
+      callDao = new CallDAO(db);
       targetCall = callDao.findByUuid(listenTarget);
       if (targetCall == null || targetCall.conversationName() == null) {
         log.warn("[CTI] answer/listen: chiamata target non trovata o senza conversation_name: {}", listenTarget);
@@ -409,9 +409,9 @@ public class CallHandler
     String status;
     String uuid;
 
-    body   = req.body();
+    body = req.body();
     status = DB.toString(body.get("status"));
-    uuid   = DB.toString(body.get("uuid"));
+    uuid = DB.toString(body.get("uuid"));
 
     log.info("[CTI] event: uuid={}, status={}", uuid, status);
 
@@ -451,8 +451,8 @@ public class CallHandler
 
     session.require(Role.USER, Permission.READ);
     accountId = (int) session.sub();
-    opDao     = new OperatorDAO(db);
-    operator  = opDao.findByClaimAccountId(accountId);
+    opDao = new OperatorDAO(db);
+    operator = opDao.findByClaimAccountId(accountId);
 
     if (operator == null) {
       res.status(200)
@@ -461,32 +461,29 @@ public class CallHandler
          .log(null)
          .out(null)
          .send();
-      return;
+    } else {
+      callDao = new CallDAO(db);
+      row = callDao.findActiveByOperatore(operator.id());
+      if (row == null) {
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(null)
+           .send();
+      } else {
+        out = new HashMap<>();
+        out.put("uuid", row.get("uuid"));
+        out.put("customerNumber", row.get("numero_destinatario"));
+        out.put("status", row.get("stato"));
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(out)
+           .send();
+      }
     }
-
-    callDao = new CallDAO(db);
-    row     = callDao.findActiveByOperatore(operator.id());
-
-    if (row == null) {
-      res.status(200)
-         .contentType("application/json")
-         .err(false)
-         .log(null)
-         .out(null)
-         .send();
-      return;
-    }
-
-    out = new HashMap<>();
-    out.put("uuid",           row.get("uuid"));
-    out.put("customerNumber", row.get("numero_destinatario"));
-    out.put("status",         row.get("stato"));
-    res.status(200)
-       .contentType("application/json")
-       .err(false)
-       .log(null)
-       .out(out)
-       .send();
   }
 
   /**
@@ -511,10 +508,10 @@ public class CallHandler
     session.require(Role.USER, Permission.READ);
     pageParam = req.queryParam("page");
     sizeParam = req.queryParam("size");
-    page     = (pageParam != null && !pageParam.isBlank()) ? Integer.parseInt(pageParam) : 1;
-    size     = (sizeParam != null && !sizeParam.isBlank()) ? Integer.parseInt(sizeParam) : 20;
-    isAdmin  = session.ruoloLevel() >= Role.ADMIN.level();
-    dao      = new CallDAO(db);
+    page = (pageParam != null && !pageParam.isBlank()) ? Integer.parseInt(pageParam) : 1;
+    size = (sizeParam != null && !sizeParam.isBlank()) ? Integer.parseInt(sizeParam) : 20;
+    isAdmin = session.ruoloLevel() >= Role.ADMIN.level();
+    dao = new CallDAO(db);
 
     if (isAdmin) {
       total = dao.count();
@@ -527,8 +524,8 @@ public class CallHandler
 
     out = new HashMap<>();
     out.put("total", total);
-    out.put("page",  page);
-    out.put("size",  size);
+    out.put("page", page);
+    out.put("size", size);
     out.put("items", items);
     res.status(200)
        .contentType("application/json")
@@ -569,9 +566,9 @@ public class CallHandler
 
     session.require(Role.ADMIN, Permission.READ);
     idParam = req.urlArgs().get("id");
-    id      = Long.parseLong(idParam);
-    dao     = new CallDAO(db);
-    call    = dao.findById(id);
+    id = Long.parseLong(idParam);
+    dao = new CallDAO(db);
+    call = dao.findById(id);
 
     if (call == null) {
       res.status(200)
@@ -580,46 +577,44 @@ public class CallHandler
          .log("Chiamata non trovata")
          .out(null)
          .send();
-      return;
-    }
-
-    recordingUrl = call.recordingUrl();
-    if (recordingUrl == null || recordingUrl.isBlank()) {
-      res.status(200)
-         .contentType("application/json")
-         .err(true)
-         .log("Registrazione non disponibile per questa chiamata")
-         .out(null)
-         .send();
-      return;
-    }
-
-    audio    = voiceHelper.downloadRecordingRaw(recordingUrl);
-    basePath = config.get("cti.vonage.recordings.path", "/app/data/cti/recordings");
-    dateDir  = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
-    filename = System.currentTimeMillis() + "_" + id + ".mp3";
-
-    if (call.operatoreId() != null) {
-      dir = Paths.get(basePath, String.valueOf(call.operatoreId()), dateDir);
     } else {
-      dir = Paths.get(basePath, "unknown", dateDir);
+      recordingUrl = call.recordingUrl();
+      if (recordingUrl == null || recordingUrl.isBlank()) {
+        res.status(200)
+           .contentType("application/json")
+           .err(true)
+           .log("Registrazione non disponibile per questa chiamata")
+           .out(null)
+           .send();
+      } else {
+        audio = voiceHelper.downloadRecordingRaw(recordingUrl);
+        basePath = config.get("cti.vonage.recordings.path", "/app/data/cti/recordings");
+        dateDir = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        filename = System.currentTimeMillis() + "_" + id + ".mp3";
+
+        if (call.operatoreId() != null) {
+          dir = Paths.get(basePath, String.valueOf(call.operatoreId()), dateDir);
+        } else {
+          dir = Paths.get(basePath, "unknown", dateDir);
+        }
+
+        Files.createDirectories(dir);
+        file = dir.resolve(filename);
+        Files.write(file, audio);
+
+        dao.updateRecordingPath(id, file.toString());
+        log.info("[CTI] downloadRecording: id={} path={}", id, file);
+
+        out = new HashMap<>();
+        out.put("path", file.toString());
+        res.status(200)
+           .contentType("application/json")
+           .err(false)
+           .log(null)
+           .out(out)
+           .send();
+      }
     }
-
-    Files.createDirectories(dir);
-    file = dir.resolve(filename);
-    Files.write(file, audio);
-
-    dao.updateRecordingPath(id, file.toString());
-    log.info("[CTI] downloadRecording: id={} path={}", id, file);
-
-    out = new HashMap<>();
-    out.put("path", file.toString());
-    res.status(200)
-       .contentType("application/json")
-       .err(false)
-       .log(null)
-       .out(out)
-       .send();
   }
 
 }

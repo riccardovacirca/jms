@@ -17,6 +17,9 @@ public class OperatoreContattiDAO
 {
   private final DB db;
 
+  /**
+   * @param db connessione DB iniettata dall'handler
+   */
   public OperatoreContattiDAO(DB db)
   {
     this.db = db;
@@ -41,48 +44,49 @@ public class OperatoreContattiDAO
     long codaGlobaleId;
     String contattoJson;
     long nuovoId;
+    OperatoreContattoDTO result;
 
+    result = null;
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? AND pianificato_al <= NOW() "
         + "ORDER BY pianificato_al ASC, data_inserimento ASC LIMIT 1";
     rows = db.select(sql, operatoreId);
 
     if (!rows.isEmpty()) {
-      return mapRow(rows.get(0));
-    }
+      result = mapRow(rows.get(0));
+    } else {
+      db.begin();
+      try {
+        sql = "SELECT id, contatto_json FROM jms_cti_coda_contatti "
+            + "ORDER BY data_inserimento ASC LIMIT 1 FOR UPDATE SKIP LOCKED";
+        rows = db.select(sql);
 
-    db.begin();
-    try {
-      sql = "SELECT id, contatto_json FROM jms_cti_coda_contatti "
-          + "ORDER BY data_inserimento ASC LIMIT 1 FOR UPDATE SKIP LOCKED";
-      rows = db.select(sql);
+        if (!rows.isEmpty()) {
+          codaGlobaleId = DB.toLong(rows.get(0).get("id"));
+          contattoJson = DB.toString(rows.get(0).get("contatto_json"));
 
-      if (rows.isEmpty()) {
-        db.commit();
-        return null;
+          sql = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json) "
+              + "VALUES (?, ?::jsonb) RETURNING id";
+          rows = db.select(sql, operatoreId, contattoJson);
+          nuovoId = DB.toLong(rows.get(0).get("id"));
+
+          sql = "DELETE FROM jms_cti_coda_contatti WHERE id = ?";
+          db.query(sql, codaGlobaleId);
+
+          db.commit();
+
+          sql = "SELECT * FROM jms_cti_operatore_contatti WHERE id = ?";
+          rows = db.select(sql, nuovoId);
+          result = mapRow(rows.get(0));
+        } else {
+          db.commit();
+        }
+      } catch (Exception e) {
+        try { db.rollback(); } catch (Exception ignored) {}
+        throw e;
       }
-
-      codaGlobaleId = DB.toLong(rows.get(0).get("id"));
-      contattoJson  = DB.toString(rows.get(0).get("contatto_json"));
-
-      sql = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json) "
-          + "VALUES (?, ?::jsonb) RETURNING id";
-      rows = db.select(sql, operatoreId, contattoJson);
-      nuovoId = DB.toLong(rows.get(0).get("id"));
-
-      sql = "DELETE FROM jms_cti_coda_contatti WHERE id = ?";
-      db.query(sql, codaGlobaleId);
-
-      db.commit();
-
-    } catch (Exception e) {
-      try { db.rollback(); } catch (Exception ignored) {}
-      throw e;
     }
-
-    sql = "SELECT * FROM jms_cti_operatore_contatti WHERE id = ?";
-    rows = db.select(sql, nuovoId);
-    return mapRow(rows.get(0));
+    return result;
   }
 
   /**
@@ -96,6 +100,7 @@ public class OperatoreContattiDAO
   {
     String sql;
     List<HashMap<String, Object>> rows;
+    OperatoreContattoDTO result;
 
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? AND pianificato_al <= NOW() "
@@ -103,23 +108,13 @@ public class OperatoreContattiDAO
     rows = db.select(sql, operatoreId);
 
     if (rows.isEmpty()) {
-      return null;
+      result = null;
+    } else {
+      result = mapRow(rows.get(0));
     }
-    return mapRow(rows.get(0));
+    return result;
   }
 
-  /**
-   * Aggiunge direttamente un contatto alla coda personale dell'operatore
-   * come prossimo da chiamare.
-   *
-   * <p>Inserisce il contatto con {@code pianificato_al} impostato a un secondo
-   * prima del minimo esistente, in modo che risulti primo nell'ordinamento
-   * {@code pianificato_al ASC}. Se la coda è vuota imposta {@code NOW()}.</p>
-   *
-   * @param operatoreId id dell'operatore
-   * @param contattoJson JSON del contatto (formato {@code {id, phone, callback, data:[]}})
-   * @return id del record inserito
-   */
   /**
    * Aggiunge direttamente un contatto alla coda personale dell'operatore.
    *
@@ -138,17 +133,17 @@ public class OperatoreContattiDAO
     List<HashMap<String, Object>> rows;
 
     if (pianificatoAl != null) {
-      sql  = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
-           + "VALUES (?, ?::jsonb, ?) RETURNING id";
+      sql = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
+          + "VALUES (?, ?::jsonb, ?) RETURNING id";
       rows = db.select(sql, operatoreId, contattoJson, pianificatoAl);
     } else {
-      sql  = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
-           + "VALUES (?, ?::jsonb, "
-           + "  COALESCE("
-           + "    (SELECT MIN(pianificato_al) FROM jms_cti_operatore_contatti WHERE operatore_id = ?) - INTERVAL '1 second',"
-           + "    NOW()"
-           + "  )"
-           + ") RETURNING id";
+      sql = "INSERT INTO jms_cti_operatore_contatti (operatore_id, contatto_json, pianificato_al) "
+          + "VALUES (?, ?::jsonb, "
+          + "  COALESCE("
+          + "    (SELECT MIN(pianificato_al) FROM jms_cti_operatore_contatti WHERE operatore_id = ?) - INTERVAL '1 second',"
+          + "    NOW()"
+          + "  )"
+          + ") RETURNING id";
       rows = db.select(sql, operatoreId, contattoJson, operatoreId);
     }
     return DB.toLong(rows.get(0).get("id"));
@@ -234,7 +229,7 @@ public class OperatoreContattiDAO
 
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? ORDER BY data_inserimento ASC";
-    rows   = db.select(sql, operatoreId);
+    rows = db.select(sql, operatoreId);
     result = new java.util.ArrayList<>();
     for (HashMap<String, Object> row : rows) {
       result.add(mapRow(row));
@@ -260,7 +255,7 @@ public class OperatoreContattiDAO
     sql = "SELECT * FROM jms_cti_operatore_contatti "
         + "WHERE operatore_id = ? AND pianificato_al <= NOW() "
         + "ORDER BY data_inserimento ASC";
-    rows   = db.select(sql, operatoreId);
+    rows = db.select(sql, operatoreId);
     result = new java.util.ArrayList<>();
     for (HashMap<String, Object> row : rows) {
       result.add(mapRow(row));

@@ -5,6 +5,7 @@ import dev.jms.app.crm.dao.ImportSessionDAO;
 import dev.jms.app.crm.dao.ListaDAO;
 import dev.jms.app.crm.dto.ContattoDTO;
 import dev.jms.app.crm.dto.ImportSessionDTO;
+import dev.jms.app.crm.dto.ListaDTO;
 import dev.jms.util.Config;
 import dev.jms.util.DB;
 import dev.jms.util.Excel;

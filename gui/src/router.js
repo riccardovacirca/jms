@@ -3,7 +3,7 @@ import { MODULE_CONFIG, DEFAULT_MODULE } from './config.js';
 import appInit from './init.js';
 
 const moduleIndex = import.meta.glob('./module/**/index.js');
-const moduleInit  = import.meta.glob('./module/**/init.js');
+const moduleInit = import.meta.glob('./module/**/init.js');
 
 /**
  * Router SPA hash-based con supporto per container multipli e moduli persistent.

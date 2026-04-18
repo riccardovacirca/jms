@@ -8,19 +8,19 @@ import java.time.LocalDateTime;
  * <p>Stato corrente: 0=disconnesso, 1=connesso, 2=in pausa, 3=in chiamata.</p>
  */
 public record SessioneOperatoreDTO(
-  Long          id,
-  Long          operatoreId,
+  Long id,
+  Long operatoreId,
   LocalDateTime connessioneInizio,
   LocalDateTime connessioneFine,
-  Integer       durataTotale,
-  Integer       numeroPause,
-  Integer       durataPause,
+  Integer durataTotale,
+  Integer numeroPause,
+  Integer durataPause,
   LocalDateTime ultimaConnessione,
-  Integer       numeroChiamate,
-  Integer       durataConversazione,
-  Integer       stato,
-  Long          creatoDA,
+  Integer numeroChiamate,
+  Integer durataConversazione,
+  Integer stato,
+  Long creatoDA,
   LocalDateTime dataCreazione,
-  Long          modificatoDA,
+  Long modificatoDA,
   LocalDateTime dataModifica
 ) {}

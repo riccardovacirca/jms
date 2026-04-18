@@ -46,19 +46,19 @@ public class SessioneOperatoreHandler
     session.require(Role.ADMIN, Permission.READ);
     pageParam = req.queryParam("page");
     sizeParam = req.queryParam("size");
-    page  = (pageParam != null && !pageParam.isBlank()) ? Integer.parseInt(pageParam) : 1;
-    size  = (sizeParam != null && !sizeParam.isBlank()) ? Integer.parseInt(sizeParam) : 20;
-    dao   = new SessioneOperatoreDAO(db);
+    page = (pageParam != null && !pageParam.isBlank()) ? Integer.parseInt(pageParam) : 1;
+    size = (sizeParam != null && !sizeParam.isBlank()) ? Integer.parseInt(sizeParam) : 20;
+    dao = new SessioneOperatoreDAO(db);
     total = dao.count();
     items = dao.findAll(page, size);
-    out   = new ArrayList<>();
+    out = new ArrayList<>();
     for (SessioneOperatoreDTO s : items) {
       out.add(toMap(s));
     }
     envelope = new HashMap<>();
     envelope.put("total", total);
-    envelope.put("page",  page);
-    envelope.put("size",  size);
+    envelope.put("page", page);
+    envelope.put("size", size);
     envelope.put("items", out);
     res.status(200)
        .contentType("application/json")
@@ -85,8 +85,8 @@ public class SessioneOperatoreHandler
 
     session.require(Role.USER, Permission.READ);
     accountId = session.sub();
-    opDao     = new OperatorDAO(db);
-    op        = opDao.findByClaimAccountId((int) accountId);
+    opDao = new OperatorDAO(db);
+    op = opDao.findByClaimAccountId((int) accountId);
 
     if (op == null) {
       res.status(200)
@@ -95,17 +95,16 @@ public class SessioneOperatoreHandler
          .log(null)
          .out(null)
          .send();
-      return;
+    } else {
+      dao = new SessioneOperatoreDAO(db);
+      sessione = dao.findActive(op.id());
+      res.status(200)
+         .contentType("application/json")
+         .err(false)
+         .log(null)
+         .out(sessione != null ? toMap(sessione) : null)
+         .send();
     }
-
-    dao     = new SessioneOperatoreDAO(db);
-    sessione = dao.findActive(op.id());
-    res.status(200)
-       .contentType("application/json")
-       .err(false)
-       .log(null)
-       .out(sessione != null ? toMap(sessione) : null)
-       .send();
   }
 
   /** Converte un DTO in mappa serializzabile JSON. */
@@ -114,21 +113,21 @@ public class SessioneOperatoreHandler
     HashMap<String, Object> m;
 
     m = new HashMap<>();
-    m.put("id",                  s.id());
-    m.put("operatoreId",         s.operatoreId());
-    m.put("connessioneInizio",   s.connessioneInizio());
-    m.put("connessioneFine",     s.connessioneFine());
-    m.put("durataTotale",        s.durataTotale());
-    m.put("numeroPause",         s.numeroPause());
-    m.put("durataPause",         s.durataPause());
-    m.put("ultimaConnessione",   s.ultimaConnessione());
-    m.put("numeroChiamate",      s.numeroChiamate());
+    m.put("id", s.id());
+    m.put("operatoreId", s.operatoreId());
+    m.put("connessioneInizio", s.connessioneInizio());
+    m.put("connessioneFine", s.connessioneFine());
+    m.put("durataTotale", s.durataTotale());
+    m.put("numeroPause", s.numeroPause());
+    m.put("durataPause", s.durataPause());
+    m.put("ultimaConnessione", s.ultimaConnessione());
+    m.put("numeroChiamate", s.numeroChiamate());
     m.put("durataConversazione", s.durataConversazione());
-    m.put("stato",               s.stato());
-    m.put("creatoDA",            s.creatoDA());
-    m.put("dataCreazione",       s.dataCreazione());
-    m.put("modificatoDA",        s.modificatoDA());
-    m.put("dataModifica",        s.dataModifica());
+    m.put("stato", s.stato());
+    m.put("creatoDA", s.creatoDA());
+    m.put("dataCreazione", s.dataCreazione());
+    m.put("modificatoDA", s.modificatoDA());
+    m.put("dataModifica", s.dataModifica());
     return m;
   }
 }

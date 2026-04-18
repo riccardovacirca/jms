@@ -31,7 +31,7 @@ class StatusView extends LitElement
   }
 }
 
-customElements.define('app-status', StatusView);
+customElements.define('status-view', StatusView);
 
 const Status = {
   mount(container) {

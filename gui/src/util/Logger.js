@@ -37,9 +37,9 @@ async function sendLog(level, message, context)
 
   try {
     await fetch('/api/log', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+      body: JSON.stringify(body),
     });
   } catch (_) {
     // silente — il logging non deve mai bloccare il flusso applicativo
@@ -53,7 +53,9 @@ const Logger = {
    * @param {object|string|null} [context]
    * @returns {Promise<void>}
    */
-  debug(message, context = null) { return sendLog('debug', message, context); },
+  debug(message, context = null) {
+    return sendLog('debug', message, context);
+  },
 
   /**
    * Log a livello info.
@@ -61,7 +63,9 @@ const Logger = {
    * @param {object|string|null} [context]
    * @returns {Promise<void>}
    */
-  info(message, context = null)  { return sendLog('info',  message, context); },
+  info(message, context = null) {
+    return sendLog('info', message, context);
+  },
 
   /**
    * Log a livello warn.
@@ -69,7 +73,9 @@ const Logger = {
    * @param {object|string|null} [context]
    * @returns {Promise<void>}
    */
-  warn(message, context = null)  { return sendLog('warn',  message, context); },
+  warn(message, context = null) {
+    return sendLog('warn', message, context);
+  },
 
   /**
    * Log a livello error.
@@ -77,7 +83,9 @@ const Logger = {
    * @param {object|string|null} [context]
    * @returns {Promise<void>}
    */
-  error(message, context = null) { return sendLog('error', message, context); },
+  error(message, context = null) {
+    return sendLog('error', message, context);
+  },
 };
 
 export { Logger };

@@ -1,8 +1,8 @@
 # Java Coding Style DSL
 
 ```
-version: 1.0
-scope:   dev.hello.**, dev.jms.**
+version: 1.1
+scope: dev.hello.**, dev.jms.**
 ```
 
 ---
@@ -170,7 +170,7 @@ RULE var.declare-at-scope-top
 
       username = (String) body.get("username");
       password = (String) body.get("password");
-      rows     = db.select(...);
+      rows = db.select(...);
     }
 
   ko: |
@@ -236,9 +236,10 @@ RULE flow.single-exit
   applies-to: tutti i metodi
   note: ogni metodo ha un solo punto di uscita;
         nei metodi void si evitano return anticipati usando if-else;
-        nei metodi tipizzati c'è un solo return statement
+        nei metodi tipizzati c'è un solo return statement, ottenuto con una variabile result
 
   ok: |
+    // metodo void: if-else, nessun return anticipato
     public void post(HttpRequest req, HttpResponse res, DB db) throws Exception
     {
       if (condition) {
@@ -246,6 +247,23 @@ RULE flow.single-exit
       } else {
         res.status(200)...err(false)...send();
       }
+    }
+
+    // metodo tipizzato: variabile result, un solo return alla fine
+    public UserDTO findById(long id) throws Exception
+    {
+      String sql;
+      List<HashMap<String, Object>> rows;
+      UserDTO result;
+
+      sql = "SELECT * FROM users WHERE id = ?";
+      rows = db.select(sql, id);
+      if (rows.isEmpty()) {
+        result = null;
+      } else {
+        result = toDTO(rows.get(0));
+      }
+      return result;
     }
 
   ko: |
@@ -256,6 +274,15 @@ RULE flow.single-exit
         return;
       }
       res.status(200)...err(false)...send();
+    }
+
+    public UserDTO findById(long id) throws Exception
+    {
+      ...
+      if (rows.isEmpty()) {
+        return null;
+      }
+      return toDTO(rows.get(0));
     }
 ```
 
@@ -344,8 +371,12 @@ RULE error.business-in-handler
   ok: |
     if (username == null || username.isBlank()) {
       log.warn("Login fallito: credenziali mancanti");
-      res.status(200).contentType("application/json")
-         .err(true).log("Credenziali mancanti").out(null).send();
+      res.status(200)
+         .contentType("application/json")
+         .err(true)
+         .log("Credenziali mancanti")
+         .out(null)
+         .send();
     }
 
   ko: |
@@ -369,8 +400,12 @@ RULE error.system-in-adapter
   ok: |
     } catch (Exception e) {
       log.error("Errore di sistema in {}", handler.getClass().getSimpleName(), e);
-      res.status(500).contentType("application/json")
-         .err(true).log("Errore interno del server").out(null).send();
+      res.status(500)
+         .contentType("application/json")
+         .err(true)
+         .log("Errore interno del server")
+         .out(null)
+         .send();
     }
 ```
 
@@ -381,7 +416,7 @@ RULE error.log-level
   | Situazione                          | Livello | Stack trace |
   |-------------------------------------|---------|-------------|
   | Eccezione di business (handler)     | WARN    | no          |
-  | Errore di sistema (HandlerAdapter)  | ERROR   | si          |
+  | Errore di sistema (HandlerAdapter)  | ERROR   | sì          |
 ```
 
 ---
@@ -428,24 +463,44 @@ RULE doc.javadoc
   note: ogni classe pubblica e ogni metodo pubblico o package-private ha un commento Javadoc
         che descrive lo scopo; i metodi privati lo hanno se la logica non è auto-esplicativa;
         il commento descrive il "cosa" e il "perché", non il "come";
-        per i metodi che restituiscono null si indica esplicitamente la condizione
+        @param è obbligatorio per ogni parametro;
+        @return è obbligatorio per ogni metodo non-void;
+        @throws è obbligatorio per ogni eccezione dichiarata nella firma;
+        per i metodi che possono restituire null si indica esplicitamente la condizione
+        nel testo descrittivo o nel @return
 
   ok: |
     /**
      * Cerca l'utente per username includendo passwordHash ed email.
      * Usato nel flusso di login per la verifica delle credenziali.
-     * Restituisce null se l'utente non esiste o è disabilitato.
+     *
+     * @param username nome utente da cercare
+     * @return DTO con dati di autenticazione, o {@code null} se non esiste o è disabilitato
+     * @throws Exception se la query fallisce
      */
     public UserAuthDTO findForLogin(String username) throws Exception
 
-    /** Inserisce un nuovo refresh token. */
+    /**
+     * Inserisce un nuovo refresh token.
+     *
+     * @param token     valore del token (hex 64 caratteri)
+     * @param userId    id dell'account associato
+     * @param expiresAt data di scadenza del token
+     * @throws Exception se l'inserimento fallisce
+     */
     public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
 
   ko: |
-    public UserAuthDTO findForLogin(String username) throws Exception   // nessun commento
+    public UserAuthDTO findForLogin(String username) throws Exception   // nessun Javadoc
 
-    // commento in linea invece di Javadoc
+    // commento inline invece di Javadoc
     public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
+
+    // @param e @throws mancanti
+    /**
+     * Cerca l'utente per username.
+     */
+    public UserAuthDTO findForLogin(String username) throws Exception
 ```
 
 ---
@@ -465,7 +520,7 @@ RULE response.format
     }
 
   contract: |
-    err:false → log è null,  out contiene il payload
+    err:false → log è null, out contiene il payload
     err:true  → log contiene il messaggio, out è null
 ```
 

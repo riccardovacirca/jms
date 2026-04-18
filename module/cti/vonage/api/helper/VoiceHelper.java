@@ -55,7 +55,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class VoiceHelper
 {
-  // Istanza del logger associata alla classe VoiceHelper
   private static final Log log = Log.get(VoiceHelper.class);
   private final Config config;
   private final VonageClient vonageClient;
@@ -130,9 +129,6 @@ public class VoiceHelper
    * @param musicOnHoldUrl   URL audio per la musica di attesa
    * @param eventUrl         URL evento per la registrazione, o vuoto per disabilitarla
    * @return stringa JSON del NCCO da restituire a Vonage
-   *
-   * TODO: verificare cosa viene ascoltato dall'operatore durante l'attesa
-   *       in assenza di musica configurata
    */
   public String buildOperatorNccoJson(String conversationName,
                                       String musicOnHoldUrl,
@@ -235,8 +231,8 @@ public class VoiceHelper
              customerNumber, conversationName);
 
     fromNumber = config.get("cti.vonage.from_number", "");
-    answerUrl  = config.get("cti.vonage.answer_url", "");
-    eventUrl   = config.get("cti.vonage.event_url", "");
+    answerUrl = config.get("cti.vonage.answer_url", "");
+    eventUrl = config.get("cti.vonage.event_url", "");
 
     log.debug("[CTI] callCustomer: from={}, answerUrl={}, eventUrl={}, operatoreId={}, contattoId={}",
               fromNumber, answerUrl, eventUrl, operatoreId, contattoId);
@@ -311,6 +307,8 @@ public class VoiceHelper
     String price;
     String network;
     String fromUser;
+    String recordingUrl;
+    String recordingUuid;
     CallDAO dao;
     CallDTO call;
     HashMap<String, Object> cbData;
@@ -321,86 +319,83 @@ public class VoiceHelper
     LocalDateTime oraFine;
     Integer durata;
 
-    uuid        = DB.toString(body.get("uuid"));
-    status      = DB.toString(body.get("status"));
-    timestamp   = DB.toString(body.get("timestamp"));
-    startTime   = DB.toString(body.get("start_time"));
-    endTime     = DB.toString(body.get("end_time"));
+    uuid = DB.toString(body.get("uuid"));
+    status = DB.toString(body.get("status"));
+    timestamp = DB.toString(body.get("timestamp"));
+    startTime = DB.toString(body.get("start_time"));
+    endTime = DB.toString(body.get("end_time"));
     durationStr = DB.toString(body.get("duration"));
-    rate        = DB.toString(body.get("rate"));
-    price       = DB.toString(body.get("price"));
-    network     = DB.toString(body.get("network"));
-    fromUser    = DB.toString(body.get("from_user"));
+    rate = DB.toString(body.get("rate"));
+    price = DB.toString(body.get("price"));
+    network = DB.toString(body.get("network"));
+    fromUser = DB.toString(body.get("from_user"));
 
     log.debug("[CTI] processEvent body: {}", body);
 
     if (uuid == null || uuid.isBlank() || status == null || status.isBlank()) {
       log.debug("[CTI] processEvent: evento ignorato (uuid o status assente) body={}", body);
-      return;
-    }
-
-    dao = new CallDAO(db);
-
-    if ("answered".equals(status)) {
-      oraInizio = parseTimestamp(timestamp);
-      dao.updateOnAnswer(uuid, oraInizio);
-      call = dao.findByUuid(uuid);
-      if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
-        fireCallback(call.callbackUrl(), call.contattoId(), "call_answered", new HashMap<>());
-      }
-      if (fromUser != null && !fromUser.isBlank()) {
-        opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
-        op    = opDao.findByVonageUserId(fromUser);
-        if (op != null) {
-          sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
-          sessioneDao.setInChiamata(op.id());
-        }
-      }
-    } else if ("completed".equals(status)) {
-      oraInizio = parseTimestamp(startTime != null && !startTime.isBlank() ? startTime : timestamp);
-      oraFine   = parseTimestamp(endTime   != null && !endTime.isBlank()   ? endTime   : timestamp);
-      durata    = null;
-      if (durationStr != null && !durationStr.isBlank()) {
-        try {
-          durata = Integer.parseInt(durationStr.trim());
-        } catch (NumberFormatException e) {
-          log.warn("[CTI] processEvent: durata non parsabile: {}", durationStr);
-        }
-      }
-      dao.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network);
-      call = dao.findByUuid(uuid);
-      if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
-        cbData = new HashMap<>();
-        cbData.put("duration", durata);
-        fireCallback(call.callbackUrl(), call.contattoId(), "call_ended", cbData);
-      }
-      if (fromUser != null && !fromUser.isBlank()) {
-        opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
-        op    = opDao.findByVonageUserId(fromUser);
-        if (op != null) {
-          sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
-          sessioneDao.registraFineChiamata(op.id(), durata != null ? durata : 0);
-        }
-      }
-    } else if ("recording".equals(status)) {
-      String recordingUrl;
-      String recordingUuid;
-      recordingUrl  = DB.toString(body.get("recording_url"));
-      recordingUuid = DB.toString(body.get("recording_uuid"));
-      if (recordingUrl != null && !recordingUrl.isBlank()) {
-        dao.updateRecording(uuid, recordingUrl, recordingUuid);
-        log.info("[CTI] processEvent: recording uuid={} recordingUuid={}", uuid, recordingUuid);
-      } else {
-        log.warn("[CTI] processEvent: recording senza url uuid={}", uuid);
-      }
-    } else if ("failed".equals(status)    || "rejected".equals(status)
-            || "busy".equals(status)      || "timeout".equals(status)
-            || "cancelled".equals(status) || "unanswered".equals(status)
-            || "machine".equals(status)) {
-      log.warn("[CTI] processEvent: chiamata non risposta uuid={} status={}", uuid, status);
-      dao.updateStatus(uuid, status);
     } else {
-      log.debug("[CTI] processEvent: status non gestito uuid={} status={}", uuid, status);
+      dao = new CallDAO(db);
+
+      if ("answered".equals(status)) {
+        oraInizio = parseTimestamp(timestamp);
+        dao.updateOnAnswer(uuid, oraInizio);
+        call = dao.findByUuid(uuid);
+        if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
+          fireCallback(call.callbackUrl(), call.contattoId(), "call_answered", new HashMap<>());
+        }
+        if (fromUser != null && !fromUser.isBlank()) {
+          opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
+          op = opDao.findByVonageUserId(fromUser);
+          if (op != null) {
+            sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
+            sessioneDao.setInChiamata(op.id());
+          }
+        }
+      } else if ("completed".equals(status)) {
+        oraInizio = parseTimestamp(startTime != null && !startTime.isBlank() ? startTime : timestamp);
+        oraFine = parseTimestamp(endTime != null && !endTime.isBlank() ? endTime : timestamp);
+        durata = null;
+        if (durationStr != null && !durationStr.isBlank()) {
+          try {
+            durata = Integer.parseInt(durationStr.trim());
+          } catch (NumberFormatException e) {
+            log.warn("[CTI] processEvent: durata non parsabile: {}", durationStr);
+          }
+        }
+        dao.updateOnComplete(uuid, oraInizio, oraFine, durata, rate, price, network);
+        call = dao.findByUuid(uuid);
+        if (call != null && call.callbackUrl() != null && !call.callbackUrl().isBlank()) {
+          cbData = new HashMap<>();
+          cbData.put("duration", durata);
+          fireCallback(call.callbackUrl(), call.contattoId(), "call_ended", cbData);
+        }
+        if (fromUser != null && !fromUser.isBlank()) {
+          opDao = new dev.jms.app.module.cti.vonage.dao.OperatorDAO(db);
+          op = opDao.findByVonageUserId(fromUser);
+          if (op != null) {
+            sessioneDao = new dev.jms.app.module.cti.vonage.dao.SessioneOperatoreDAO(db);
+            sessioneDao.registraFineChiamata(op.id(), durata != null ? durata : 0);
+          }
+        }
+      } else if ("recording".equals(status)) {
+        recordingUrl = DB.toString(body.get("recording_url"));
+        recordingUuid = DB.toString(body.get("recording_uuid"));
+        if (recordingUrl != null && !recordingUrl.isBlank()) {
+          dao.updateRecording(uuid, recordingUrl, recordingUuid);
+          log.info("[CTI] processEvent: recording uuid={} recordingUuid={}", uuid, recordingUuid);
+        } else {
+          log.warn("[CTI] processEvent: recording senza url uuid={}", uuid);
+        }
+      } else if ("failed".equals(status) || "rejected".equals(status)
+              || "busy".equals(status) || "timeout".equals(status)
+              || "cancelled".equals(status) || "unanswered".equals(status)
+              || "machine".equals(status)) {
+        log.warn("[CTI] processEvent: chiamata non risposta uuid={} status={}", uuid, status);
+        dao.updateStatus(uuid, status);
+      } else {
+        log.debug("[CTI] processEvent: status non gestito uuid={} status={}", uuid, status);
+      }
     }
   }
 
@@ -537,15 +532,14 @@ public class VoiceHelper
 
     result = new ArrayList<>();
     users = vonageClient.getUsersClient().listUsers();
-    if (users == null) {
-      return result;
-    }
-    for (BaseUser user : users) {
-      entry = new HashMap<>();
-      entry.put("vonageId", user.getId());
-      entry.put("name", user.getName());
-      entry.put("displayName", user instanceof User ? ((User) user).getDisplayName() : null);
-      result.add(entry);
+    if (users != null) {
+      for (BaseUser user : users) {
+        entry = new HashMap<>();
+        entry.put("vonageId", user.getId());
+        entry.put("name", user.getName());
+        entry.put("displayName", user instanceof User ? ((User) user).getDisplayName() : null);
+        result.add(entry);
+      }
     }
     return result;
   }
@@ -591,6 +585,12 @@ public class VoiceHelper
     return vonageClient.getVoiceClient().downloadRecordingRaw(url);
   }
 
+  /**
+   * Genera un JWT Vonage Client SDK per l'utente indicato, con claim ACL completi.
+   *
+   * @param userId nome utente Vonage (corrisponde a {@code vonage_user_id} in {@code cti_operatori})
+   * @return JWT firmato valido per 3600 secondi
+   */
   public String generateSdkJwt(String userId) throws Exception
   {
     HashMap<String, Object> aclPaths;
