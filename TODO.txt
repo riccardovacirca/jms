@@ -282,3 +282,15 @@ Caricamneto liste contatti:
 - le liste sono caricate da utenti amministratori o root
 - il wizard di importazione è presente insieme al crud di gestione liste nella
   dashboard dell'amministratore
+--------------------------------------------------------------------------------
+- Rinominare il modulo home in helloworld
+--------------------------------------------------------------------------------
+- Introdurre nella applicazione il concetto di dominio. un dominio è una
+  raccolta di moduli. L'introduzione del dominio determina la seguente gerarchia
+  applicativa:
+    
+    Applicazione
+    |-- Dominio A
+    |     |-- Modulo 1
+    |     |-- Modulo 2
+    '     '-- Modulo 3
