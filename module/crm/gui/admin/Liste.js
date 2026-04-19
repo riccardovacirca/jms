@@ -2,7 +2,7 @@ import { LitElement, html } from 'lit';
 import './ImportaLista.js';
 
 function emptyForm() {
-  return { nome: '', descrizione: '', consenso: false, stato: 1, scadenza: '' };
+  return { nome: '', descrizione: '', consenso: false, stato: 1, scadenza: '', isDefault: false };
 }
 
 /**
@@ -104,6 +104,9 @@ class AdminListe extends LitElement {
       stato:       this._form.stato,
       scadenza:    this._form.scadenza    || null
     };
+    if (!this._editing) {
+      body.isDefault = this._form.isDefault;
+    }
     const url    = this._editing ? `/api/liste/${this._editing.id}` : '/api/liste';
     const method = this._editing ? 'PUT' : 'POST';
     this._formError = null;

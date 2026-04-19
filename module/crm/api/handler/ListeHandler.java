@@ -82,7 +82,10 @@ public class ListeHandler
            .send();
       } else {
         newId = dao.insert(lista);
-        out   = new HashMap<>();
+        if (lista.isDefault()) {
+          dao.setDefault(newId);
+        }
+        out = new HashMap<>();
         out.put("id", newId);
         res.status(200)
            .contentType("application/json")

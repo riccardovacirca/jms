@@ -23,16 +23,19 @@ public class ListaAdapter
     int stato;
     String scadenza;
 
+    boolean isDefault;
+
     body        = Json.decode(req.getBody(), HashMap.class);
     nome        = (String) body.get("nome");
     descrizione = (String) body.get("descrizione");
     consenso    = Boolean.TRUE.equals(body.get("consenso"));
     stato       = body.get("stato") instanceof Number ? ((Number) body.get("stato")).intValue() : 1;
     scadenza    = (String) body.get("scadenza");
+    isDefault   = Boolean.TRUE.equals(body.get("isDefault"));
 
     Validator.required(nome, "nome");
     Validator.maxLength(nome, 100, "nome");
 
-    return new ListaDTO(null, nome, descrizione, consenso, stato, scadenza, null, null, null, false, 0);
+    return new ListaDTO(null, nome, descrizione, consenso, stato, scadenza, null, null, null, isDefault, 0);
   }
 }

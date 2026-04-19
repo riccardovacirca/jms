@@ -126,6 +126,7 @@ class Sidebar extends LitElement {
                         ${child.label}
                       </button>
                     `)}
+                    <div class="btn btn-sm invisible" aria-hidden="true"></div>
                   </div>
                 ` : ''}
               </div>

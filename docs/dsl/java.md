@@ -467,26 +467,28 @@ RULE doc.javadoc
         @return è obbligatorio per ogni metodo non-void;
         @throws è obbligatorio per ogni eccezione dichiarata nella firma;
         per i metodi che possono restituire null si indica esplicitamente la condizione
-        nel testo descrittivo o nel @return
+        nel testo descrittivo o nel @return;
+        dopo il nome del @param c'è esattamente uno spazio (nessun padding di allineamento);
+        la descrizione di @param, @return e @throws inizia sempre con lettera maiuscola
 
   ok: |
     /**
      * Cerca l'utente per username includendo passwordHash ed email.
      * Usato nel flusso di login per la verifica delle credenziali.
      *
-     * @param username nome utente da cercare
+     * @param username Nome utente da cercare
      * @return DTO con dati di autenticazione, o {@code null} se non esiste o è disabilitato
-     * @throws Exception se la query fallisce
+     * @throws Exception Se la query fallisce
      */
     public UserAuthDTO findForLogin(String username) throws Exception
 
     /**
      * Inserisce un nuovo refresh token.
      *
-     * @param token     valore del token (hex 64 caratteri)
-     * @param userId    id dell'account associato
-     * @param expiresAt data di scadenza del token
-     * @throws Exception se l'inserimento fallisce
+     * @param token Valore del token (hex 64 caratteri)
+     * @param userId Id dell'account associato
+     * @param expiresAt Data di scadenza del token
+     * @throws Exception Se l'inserimento fallisce
      */
     public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
 
@@ -501,6 +503,17 @@ RULE doc.javadoc
      * Cerca l'utente per username.
      */
     public UserAuthDTO findForLogin(String username) throws Exception
+
+    // padding di allineamento e descrizioni in minuscolo
+    /**
+     * Inserisce un nuovo refresh token.
+     *
+     * @param token     valore del token (hex 64 caratteri)
+     * @param userId    id dell'account associato
+     * @param expiresAt data di scadenza del token
+     * @throws Exception se l'inserimento fallisce
+     */
+    public void insert(String token, int userId, LocalDateTime expiresAt) throws Exception
 ```
 
 ---
@@ -531,10 +544,20 @@ RULE response.status-on-exception
         solo HandlerAdapter restituisce codici non-200 (500)
 
   ok: |
-    res.status(200).err(true).log("Credenziali non valide").out(null).send();
+    res.status(200)
+       .contentType("application/json")
+       .err(true)
+       .log("Invalid credentials")
+       .out(null)
+       .send();
 
   ko: |
-    res.status(401).err(true).log("Credenziali non valide").out(null).send();
+    res.status(401)
+       .contentType("application/json")
+       .err(true)
+       .log("Invalid credentials")
+       .out(null)
+       .send();
 ```
 
 ```

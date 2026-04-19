@@ -55,9 +55,20 @@ RULE fmt.one-statement-per-line
 RULE fmt.no-alignment-padding
   applies-to: assegnazioni, proprietà di oggetto, argomenti
   note: non si aggiungono spazi extra per allineare verticalmente il carattere = o :
-        su righe adiacenti; ogni assegnazione usa un solo spazio attorno all'operatore
+        su righe adiacenti; ogni assegnazione usa un solo spazio attorno all'operatore;
+        l'allineamento verticale è sempre vietato, anche in blocchi omogenei
+        (assegnazioni consecutive, config, destructuring)
 
   ok: |
+    const a = 1;
+    const longName = 2;
+    const x = 3;
+
+    const obj = {
+      foo: 1,
+      longerKey: 2
+    };
+
     const ts = new Date().toISOString();
     const extra = data ? ' ' + JSON.stringify(data) : '';
 
@@ -68,6 +79,15 @@ RULE fmt.no-alignment-padding
     };
 
   ko: |
+    const a        = 1;
+    const longName = 2;
+    const x        = 3;
+
+    const obj = {
+      foo:       1,
+      longerKey: 2
+    };
+
     const ts    = new Date().toISOString();
     const extra = data ? ' ' + JSON.stringify(data) : '';
 
@@ -190,15 +210,25 @@ RULE export.side-effect-only
   applies-to: moduli che registrano custom elements
   note: i file che si limitano a registrare un custom element
         non esportano nulla; l'effetto collaterale è il loro unico scopo;
-        la registrazione avviene sempre tramite customElements.define direttamente
+        la registrazione avviene sempre tramite customElements.define direttamente;
+        caso tipico: custom elements — il modulo viene importato solo per eseguire
+        customElements.define; non si esporta mai la classe del componente
 
   ok: |
+    // HeaderLayout.js
     class HeaderLayout extends LitElement { ... }
     customElements.define('header-layout', HeaderLayout);
     // nessun export
 
+    // index.js
+    import './HeaderLayout.js'; // side-effect import
+
   ko: |
+    // export inutile: il componente non deve essere usato direttamente
     export class HeaderLayout extends LitElement { ... }
+
+    // import inutile di simboli
+    import { HeaderLayout } from './HeaderLayout.js';
 ```
 
 ---
@@ -229,7 +259,9 @@ RULE naming.generality-principle
   note: l'assenza di suffisso indica il contesto più ampio o il grado più ampio di generalità;
         i suffissi indicano specializzazione o riduzione del contesto;
         una classe Login rappresenta una pagina completa (contesto ampio);
-        LoginForm o LoginButton rappresenterebbero componenti più specifici (contesto ridotto)
+        LoginForm o LoginButton rappresenterebbero componenti più specifici (contesto ridotto);
+        il nome senza suffisso rappresenta il livello più alto (pagina/intero contesto);
+        i suffissi indicano sempre una specializzazione o una parte del tutto
 
   ok: |
     // Pagina completa (contesto più ampio)
@@ -239,10 +271,23 @@ RULE naming.generality-principle
     class LoginForm extends LitElement { ... }
     class LoginButton extends LitElement { ... }
 
+    // Contesto completo
+    class Dashboard extends LitElement { ... }
+
+    // Parti del contesto
+    class DashboardHeader extends LitElement { ... }
+    class DashboardSidebar extends LitElement { ... }
+
   ko: |
     // Ridondante: il suffisso Page non aggiunge valore se tutti i componenti
     // in quel contesto sono pagine
     class LoginPage extends LitElement { ... }
+
+    // Ridondante: "Page" non aggiunge informazione
+    class DashboardPage extends LitElement { ... }
+
+    // Ambiguo: manca il contesto principale
+    class Header extends LitElement { ... }
 ```
 
 ```
@@ -302,9 +347,18 @@ RULE naming.custom-elements
         globali nel registry dei custom elements;
         per moduli top-level il prefisso è il nome del modulo (es. user-);
         per moduli con namespace (ns/name) il prefisso è ns-name- (es. cti-vonage-);
-        il prefisso rimane anche se il nome della classe non lo include
+        il prefisso rimane anche se il nome della classe non lo include;
+        il prefisso è obbligatorio per evitare collisioni globali nel registry;
+        il tag è sempre kebab-case e univoco a livello applicativo
 
   ok: |
+    // stesso nome di classe in moduli diversi: il prefisso evita la collisione
+    // modulo user
+    customElements.define('user-profile', Profile);
+
+    // modulo admin
+    customElements.define('admin-profile', Profile);
+
     // Modulo top-level — File: user/auth/Login.js
     class Login extends LitElement { ... }
     customElements.define('user-login', Login);
@@ -322,13 +376,15 @@ RULE naming.custom-elements
     customElements.define('cti-vonage-panel', Panel);
 
   ko: |
+    // Collisione globale possibile: manca prefisso modulo
+    customElements.define('profile', Profile);
+
+    // Formato non valido: non è kebab-case
+    customElements.define('userProfile', Profile);
+
     // Manca prefisso modulo (rischio conflitti)
     class Login extends LitElement { ... }
     customElements.define('login', Login);
-
-    // Tag non corrisponde al pattern kebab-case
-    class Login extends LitElement { ... }
-    customElements.define('userLogin', Login);
 
     // Namespace non incluso nel prefisso
     class Call extends LitElement { ... }
@@ -371,37 +427,41 @@ RULE naming.module-entry
         esporta un oggetto default con il metodo mount(container);
         per moduli semplici (un solo componente) il componente può essere definito
         nello stesso file index.js; per moduli complessi i componenti stanno in file separati
-        (PascalCase, un file per classe) e index.js si limita all'orchestrazione
+        (PascalCase, un file per classe) e index.js si limita all'orchestrazione;
+        distinzione esplicita tra moduli semplici e complessi
 
   ok: |
-    // modulo semplice: componente e orchestrazione nello stesso file
+    // modulo semplice (1 componente): componente e orchestrazione nello stesso file
     class StatusView extends LitElement { ... }
     customElements.define('status-view', StatusView);
 
-    const Status = {
+    export default {
       mount(container) {
         container.innerHTML = '<status-view></status-view>';
       }
     };
 
-    export default Status;
-
-    // modulo complesso: index.js solo orchestrazione
+    // modulo complesso (più componenti): index.js solo orchestrazione
     import './auth/Login.js';
     import './auth/Register.js';
 
-    const User = {
+    export default {
       mount(container) {
         container.innerHTML = '<user-login></user-login>';
       }
     };
 
-    export default User;
-
   ko: |
     // index.js non esporta nulla (il router non riesce a montare il modulo)
     class StatusView extends LitElement { ... }
     customElements.define('status-view', StatusView);
+
+    // logica e componenti mescolati senza criterio: import + definizione inline
+    import './auth/Login.js';
+
+    class Something extends LitElement { ... }
+
+    // manca export default con mount
 ```
 
 ---
@@ -514,7 +574,9 @@ RULE wc.reactive-render
         ogni aggiornamento dello store assegna il nuovo valore alla proprietà reattiva
         corrispondente (this._x = v); Lit rileva la modifica e chiama render()
         automaticamente — non si chiama render() esplicitamente;
-        il subscriber non passa lo stato come argomento a un metodo handler separato
+        il subscriber non passa lo stato come argomento a un metodo handler separato;
+        render() non viene mai chiamato manualmente;
+        qualsiasi chiamata esplicita a render() è sempre un errore
 
   ok: |
     connectedCallback() {
@@ -528,10 +590,18 @@ RULE wc.reactive-render
     }
 
   ko: |
-    // render() non va chiamato esplicitamente: Lit lo gestisce automaticamente
+    // chiamata manuale vietata nel subscriber
     connectedCallback() {
       super.connectedCallback();
-      auth.subscribe(v => { this._authorized = v; this.render(); });
+      this._unsubAuth = store.subscribe(v => {
+        this._value = v;
+        this.render();
+      });
+    }
+
+    // chiamata diretta altrove nel componente
+    someMethod() {
+      this.render();
     }
 
     // lo stato non va passato come parametro a un handler: bypassa il pattern reattivo
