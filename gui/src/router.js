@@ -153,6 +153,12 @@ class Router
 
     const config = MODULE_CONFIG[moduleName];
 
+    if (!config) {
+      console.error(`[Router] Module "${moduleName}" not found in MODULE_CONFIG — check DEFAULT_MODULE and route configuration`);
+      this.showStatus('main', '404 — Pagina non trovata');
+      return;
+    }
+
     // Moduli persistent non vengono gestiti dal routing
     if (config.persistent) {
       return;
@@ -178,6 +184,12 @@ class Router
    */
   async loadModule(moduleName) {
     const config = MODULE_CONFIG[moduleName];
+
+    if (!config) {
+      console.error(`[Router] loadModule: module "${moduleName}" not found in MODULE_CONFIG`);
+      this.showStatus('main', '404 — Pagina non trovata');
+      return;
+    }
 
     if (config.authorization !== null && !authorized.get()) {
       const redirectTo     = config.authorization?.redirectTo;

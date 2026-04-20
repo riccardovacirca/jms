@@ -30,4 +30,10 @@ const headerUserSlot = atom(null);
 // minRuoloLevel: 1=user, 2=admin, 3=root; default 0 = sempre visibile.
 const dashboardItems = atom([]);
 
-export { authorized, user, headerNavItems, headerUserSlot, dashboardItems };
+// Schede statistiche esposte nella pagina di default del dashboard.
+// Ogni modulo registra una o più voci nella propria init.js:
+// { key: string, label: string, icon: string, color: string, value: string | (() => Promise<string>), minRuoloLevel: number }
+// value può essere un valore statico o una funzione asincrona che restituisce il valore da visualizzare.
+const dashboardStats = atom([]);
+
+export { authorized, user, headerNavItems, headerUserSlot, dashboardItems, dashboardStats };

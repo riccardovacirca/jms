@@ -1,0 +1,27 @@
+{
+  "name": "sales",
+  "version": "1.0.0",
+  "dependencies": {
+    "user": "^1.0.0"
+  },
+  "api": {
+    "routes": "dev.jms.app.sales.Routes.register(router, config);",
+    "config": {
+      "sales.resources.tmp": "/app/storage/sales/tmp"
+    }
+  },
+  "gui": {
+    "config": {
+      "route": "/sales",
+      "path": "sales",
+      "container": "main",
+      "authorization": { "redirectTo": "/user" },
+      "persistent": false,
+      "priority": 999,
+      "init": true
+    }
+  },
+  "install_script": null,
+  "uninstall_script": null,
+  "install_notice": null
+}

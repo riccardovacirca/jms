@@ -1,5 +1,6 @@
 import { LitElement, html } from 'lit';
 import './Sidebar.js';
+import './Stats.js';
 
 /**
  * Componente radice del dashboard.
@@ -21,7 +22,7 @@ class Dashboard extends LitElement {
 
   constructor() {
     super();
-    this._activeTag     = null;
+    this._activeTag  = 'dashboard-stats';
     this._currentTag    = null;
   }
 
