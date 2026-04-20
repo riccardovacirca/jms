@@ -4,17 +4,17 @@
 
 ### Obiettivo
 
-Consentire ai moduli installati di aggiungere voci di navigazione nell'area link dell'header e di occupare lo slot user (area destra) con un proprio custom element. La registrazione avviene tramite gli store condivisi `headerNavItems` e `headerUserSlot` nell'`init.js` di ciascun modulo. Il componente `<header-component>` reagisce reattivamente alle variazioni degli store.
+Consentire ai moduli installati di aggiungere voci di navigazione nell'area link dell'header e di occupare lo slot user (area destra) con un proprio custom element. La registrazione avviene tramite gli store condivisi `UIRegistry.headerNav` e `UIRegistry.headerUser` nell'`init.js` di ciascun modulo. Il componente `<header-component>` reagisce reattivamente alle variazioni degli store.
 
 ### Attori
 
 * Modulo esterno (`init.js` del modulo che si registra)
-* Store condiviso (`headerNavItems`, `headerUserSlot` in `store.js`)
+* Registro condiviso (`UIRegistry` in `store.js`)
 * Componente header (`Header.js` → `<header-component>`)
 
 ### Precondizioni
 
-* Store `headerNavItems` e `headerUserSlot` inizializzati in `store.js`
+* `UIRegistry.headerNav` e `UIRegistry.headerUser` inizializzati in `store.js`
 * `<header-component>` già montato come modulo persistent prima dell'esecuzione delle `init()`
 
 ---
@@ -22,7 +22,7 @@ Consentire ai moduli installati di aggiungere voci di navigazione nell'area link
 ### Flusso — Registrazione voce nell'area link
 
 1. Il router esegue tutte le `init()` dei moduli in parallelo prima del primo routing
-2. `init()` del modulo chiama `headerNavItems.set([...headerNavItems.get(), item])`
+2. `init()` del modulo chiama `UIRegistry.headerNav.set([...UIRegistry.headerNav.get(), item])`
 3. La voce ha forma `{ id, label, href, auth }` oppure con sottovoci `{ id, label, auth, items: [{ label, href }] }`:
    * `auth: false` — sempre visibile
    * `auth: true` — visibile solo se `authorized = true`
@@ -32,7 +32,7 @@ Consentire ai moduli installati di aggiungere voci di navigazione nell'area link
 
 ### Flusso — Registrazione slot user
 
-1. `init()` del modulo chiama `headerUserSlot.set({ tag: 'nome-custom-element' })`
+1. `init()` del modulo chiama `UIRegistry.headerUser.set({ tag: 'nome-custom-element' })`
 2. Il custom element deve essere già definito (importato nello stesso `init.js`)
 3. `<header-component>` riceve la notifica → `_userSlot` aggiornato, `_currentTag` azzerato
 4. `_mountUserSlot(el)` crea e appende `document.createElement(tag)` nel wrapper `ref`
@@ -50,7 +50,7 @@ Consentire ai moduli installati di aggiungere voci di navigazione nell'area link
 
 ### Postcondizioni
 
-* **Voce link**: presente in `headerNavItems`; visibile in base al valore di `auth` e allo stato di autenticazione
+* **Voce link**: presente in `UIRegistry.headerNav`; visibile in base al valore di `auth` e allo stato di autenticazione
 * **Slot user**: custom element montato nell'area destra dell'header; un solo modulo alla volta può occupare lo slot (l'ultimo che chiama `set` vince)
 * **Tema**: persistito in `localStorage`; ripristinato ad ogni montaggio dell'header
 
@@ -79,10 +79,10 @@ Consentire ai moduli installati di aggiungere voci di navigazione nell'area link
 ```mermaid
 sequenceDiagram
     participant Init as ModuloX/init.js
-    participant Store as headerNavItems (store)
+    participant Store as UIRegistry.headerNav (store)
     participant Header as header-component
 
-    Init->>Store: headerNavItems.set([...get(), { id, label, href, auth }])
+    Init->>Store: UIRegistry.headerNav.set([...get(), { id, label, href, auth }])
     Store-->>Header: subscriber notificato
     Header->>Header: _navItems aggiornato → re-render
     Header->>Header: filtra visibleItems per auth/authorized
@@ -94,11 +94,11 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Init as ModuloX/init.js
-    participant Store as headerUserSlot (store)
+    participant Store as UIRegistry.headerUser (store)
     participant Header as header-component
 
     Init->>Init: import './MyComponent.js' (define custom element)
-    Init->>Store: headerUserSlot.set({ tag: 'my-component' })
+    Init->>Store: UIRegistry.headerUser.set({ tag: 'my-component' })
     Store-->>Header: subscriber notificato
     Header->>Header: _currentTag = null, _userSlot = { tag }
     Header->>Header: _mountUserSlot(el) via ref

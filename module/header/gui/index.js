@@ -1,6 +1,7 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import Header from './Header.js';
+import './Notifications.js';
 
 export default {
   async mount(container) {
@@ -11,5 +12,6 @@ export default {
       component['app-name'] = data.out?.app_title ?? 'App';
     } catch (_) {}
     container.appendChild(component);
+    document.body.appendChild(document.createElement('header-notifications'));
   }
 };

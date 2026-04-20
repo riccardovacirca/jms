@@ -5,7 +5,7 @@ import { authorized, user } from '../../store.js';
  * Dropdown utente per l'area "user" dell'header.
  * Mostra username e menu con Profilo, Account, Esci se autenticato,
  * pulsante Accedi altrimenti.
- * Si registra nello slot headerUserSlot tramite init.js del modulo user.
+ * Si registra nello slot UIRegistry.headerUser tramite init.js del modulo user.
  */
 class UserMenu extends LitElement {
 
@@ -98,7 +98,7 @@ class UserMenu extends LitElement {
               <li><hr class="dropdown-divider"></li>
               <li>
                 <a class="dropdown-item" href="#/dashboard"
-                   @click=${() => { this._menuOpen = false; }}>
+                   @click=${() => { this._menuOpen = false; window.dispatchEvent(new CustomEvent('dashboard-reset')); }}>
                   <i class="bi bi-speedometer2 me-2"></i>Dashboard
                 </a>
               </li>

@@ -1,16 +1,16 @@
 import { LitElement, html } from 'lit';
 import { ref } from 'lit/directives/ref.js';
-import { authorized, headerNavItems, headerUserSlot } from '../../store.js';
+import { authorized, UIRegistry } from '../../store.js';
 
 /**
  * Header component — barra di navigazione persistente a 4 aree fisse:
  *   logo | link | tema | user
  *
  * - logo: testo configurabile tramite attributo `app-name` (default: "App").
- * - link: popolata dai moduli tramite lo store `headerNavItems`.
+ * - link: popolata dai moduli tramite `UIRegistry.headerNav`.
  *         Ogni modulo registra al massimo un item (link singolo o dropdown).
  * - tema: pulsante light/dark fisso.
- * - user: slot occupabile da un solo modulo tramite lo store `headerUserSlot`.
+ * - user: slot occupabile da un solo modulo tramite `UIRegistry.headerUser`.
  *         Il modulo registra il tag del proprio custom element già definito.
  */
 class Header extends LitElement {
@@ -30,8 +30,8 @@ class Header extends LitElement {
     super();
     this['app-name'] = 'App';
     this._authorized = authorized.get();
-    this._navItems   = headerNavItems.get();
-    this._userSlot   = headerUserSlot.get();
+    this._navItems   = UIRegistry.headerNav.get();
+    this._userSlot   = UIRegistry.headerUser.get();
     this._menuOpen   = false;
     this._theme      = 'light';
     this._currentTag = null;
@@ -40,8 +40,8 @@ class Header extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._unsubAuthorized = authorized.subscribe(v => { this._authorized = v; });
-    this._unsubNavItems   = headerNavItems.subscribe(v => { this._navItems = v; });
-    this._unsubUserSlot   = headerUserSlot.subscribe(v => {
+    this._unsubNavItems   = UIRegistry.headerNav.subscribe(v => { this._navItems = v; });
+    this._unsubUserSlot   = UIRegistry.headerUser.subscribe(v => {
       this._currentTag = null;
       this._userSlot = v;
     });

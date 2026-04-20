@@ -1,4 +1,4 @@
-import { dashboardItems } from '../../../store.js';
+import { UIRegistry } from '../../../store.js';
 
 /**
  * Procedura di inizializzazione del modulo CTI.
@@ -6,7 +6,7 @@ import { dashboardItems } from '../../../store.js';
  */
 async function init()
 {
-  dashboardItems.set([...dashboardItems.get(),
+  UIRegistry.sidebarNav.set([...UIRegistry.sidebarNav.get(),
     {
       key:           'cti',
       label:         'CTI',

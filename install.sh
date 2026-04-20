@@ -654,7 +654,7 @@ install_dev() {
     fi
 
     echo "Removing template artifacts..."
-    rm -rf docker docs module bin
+    rm -rf docker docs module bin example domain
     rm -f TODO.txt
 
     echo "Done"

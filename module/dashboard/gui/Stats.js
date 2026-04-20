@@ -1,10 +1,10 @@
 import { LitElement, html } from 'lit';
-import { dashboardStats, user } from '../../store.js';
+import { UIRegistry, user } from '../../store.js';
 
 /**
  * Pagina di default del dashboard.
  *
- * Mostra le schede statistiche registrate dai moduli tramite l'atom `dashboardStats`.
+ * Mostra le schede statistiche registrate dai moduli tramite `UIRegistry.sidebarStats`.
  * Ogni voce ha la forma:
  *   { key, label, icon, color, value: string | (() => Promise<string>), minRuoloLevel }
  *
@@ -26,7 +26,7 @@ class Stats extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._unsubStats = dashboardStats.subscribe(() => this._loadCards());
+    this._unsubStats = UIRegistry.sidebarStats.subscribe(() => this._loadCards());
     this._unsubUser  = user.subscribe(() => this._loadCards());
   }
 
@@ -41,7 +41,7 @@ class Stats extends LitElement {
    */
   _loadCards() {
     const level = user.get()?.ruolo_level ?? 0;
-    const items = dashboardStats.get().filter(item => level >= (item.minRuoloLevel ?? 0));
+    const items = UIRegistry.sidebarStats.get().filter(item => level >= (item.minRuoloLevel ?? 0));
 
     this._cards = items.map(item => ({
       key:   item.key,

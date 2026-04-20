@@ -1,12 +1,12 @@
-import { dashboardItems, dashboardStats } from '../../store.js';
+import { UIRegistry } from '../../store.js';
 
 /**
  * Procedura di inizializzazione del modulo sales.
  * Registra nel dashboard il gruppo "Sales" con le voci Contatti (utenti), Liste e Campagne (admin+).
- * Registra in dashboardStats le schede statistiche per contatti, liste e campagne.
+ * Registra in UIRegistry.sidebarStats le schede statistiche per contatti, liste e campagne.
  */
 async function init() {
-  dashboardItems.set([...dashboardItems.get(),
+  UIRegistry.sidebarNav.set([...UIRegistry.sidebarNav.get(),
     {
       key:           'sales',
       label:         'Sales',
@@ -56,7 +56,7 @@ async function init() {
     return statsState.promise;
   };
 
-  dashboardStats.set([...dashboardStats.get(),
+  UIRegistry.sidebarStats.set([...UIRegistry.sidebarStats.get(),
     {
       key:           'sales-contatti',
       label:         'Contatti',

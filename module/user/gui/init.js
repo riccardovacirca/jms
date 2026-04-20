@@ -1,4 +1,4 @@
-import { authorized, user, headerUserSlot, dashboardItems } from '../../store.js';
+import { authorized, user, UIRegistry } from '../../store.js';
 import './UserMenu.js';
 
 /**
@@ -8,8 +8,8 @@ import './UserMenu.js';
  * la voce di gestione utenti al dashboard (visibile solo per admin+).
  */
 async function init() {
-  headerUserSlot.set({ tag: 'user-menu' });
-  dashboardItems.set([...dashboardItems.get(), {
+  UIRegistry.headerUser.set({ tag: 'user-menu' });
+  UIRegistry.sidebarNav.set([...UIRegistry.sidebarNav.get(), {
     key:           'user-admin',
     label:         'Utenti',
     icon:          'bi-people',

@@ -9,31 +9,56 @@ const authorized = atom(false);
 // null quando non autorizzato.
 const user = atom(null);
 
-// Voci di navigazione area "link" (sinistra, dopo il logo).
-// Ogni modulo può aggiungere al massimo un elemento con la forma:
-// { id: string, label: string, href: string, auth: boolean }
-//   oppure con sottovoci per un dropdown:
-// { id: string, label: string, auth: boolean, items: Array<{ label, href }> }
-// auth: true = visibile solo se authorized; false = sempre visibile.
-const headerNavItems = atom([]);
+/**
+ * Registro centralizzato dei componenti dinamici dell'interfaccia.
+ *
+ * Ogni slot è un atom nanostores indipendente: i consumer sottoscrivono
+ * solo lo slot di proprio interesse senza ricevere notifiche dagli altri.
+ * I moduli scrivono sugli slot nella propria init.js senza importare
+ * nulla dal consumer che li ospita.
+ *
+ * Slot disponibili:
+ *
+ *   headerNav    — Array di voci nav dell'header.
+ *                  Forma: { id, label, href, auth } oppure { id, label, auth, items: [{label, href}] }
+ *                  auth: true = visibile solo se authorized.
+ *
+ *   headerUser   — Singleton: tag del custom element da montare nell'area user dell'header.
+ *                  Forma: { tag: string } — un solo modulo alla volta.
+ *
+ *   sidebarNav   — Array di voci della sidebar del dashboard.
+ *                  Forma voce normale:  { key, label, icon, tag, import, minRuoloLevel }
+ *                  Forma gruppo:        { key, label, icon, group: true, minRuoloLevel }
+ *                  Forma voce figlia:   { key, label, icon, tag, import, parent, minRuoloLevel }
+ *                  minRuoloLevel: 0=sempre, 1=user, 2=admin, 3=root.
+ *
+ *   sidebarStats — Array di schede statistiche nella pagina di default del dashboard.
+ *                  Forma: { key, label, icon, color, value: string | (() => Promise<string>), minRuoloLevel }
+ */
+class UIRegistry {
+  static headerNav    = atom([]);
+  static headerUser   = atom(null);
+  static sidebarNav   = atom([]);
+  static sidebarStats = atom([]);
 
-// Slot area "user" (destra, prima del tema).
-// Un solo modulo alla volta può occupare questo slot registrando un
-// tag di custom element già definito: { tag: string }
-// Esempio: { tag: 'user-menu' }
-// null = nessun modulo registrato.
-const headerUserSlot = atom(null);
+  /**
+   * Slot notifiche — array di notifiche da mostrare all'utente.
+   * Forma: { id: string, message: string, type: 'info'|'success'|'warning'|'danger' }
+   * Scritto da qualsiasi modulo tramite UIRegistry.notify().
+   * Letto dal componente header-notifications (modulo header).
+   */
+  static notifications = atom([]);
 
-// Voci della sidebar del modulo dashboard.
-// Ogni modulo con interfaccia amministrativa registra al massimo una voce:
-// { key: string, label: string, icon: string, tag: string, import: () => Promise, minRuoloLevel: number }
-// minRuoloLevel: 1=user, 2=admin, 3=root; default 0 = sempre visibile.
-const dashboardItems = atom([]);
+  /**
+   * Accoda una notifica visibile all'utente.
+   *
+   * @param {string} message - testo della notifica
+   * @param {'info'|'success'|'warning'|'danger'} [type='info'] - stile Bootstrap alert
+   */
+  static notify(message, type = 'info') {
+    const id = crypto.randomUUID();
+    UIRegistry.notifications.set([...UIRegistry.notifications.get(), { id, message, type }]);
+  }
+}
 
-// Schede statistiche esposte nella pagina di default del dashboard.
-// Ogni modulo registra una o più voci nella propria init.js:
-// { key: string, label: string, icon: string, color: string, value: string | (() => Promise<string>), minRuoloLevel: number }
-// value può essere un valore statico o una funzione asincrona che restituisce il valore da visualizzare.
-const dashboardStats = atom([]);
-
-export { authorized, user, headerNavItems, headerUserSlot, dashboardItems, dashboardStats };
+export { authorized, user, UIRegistry };

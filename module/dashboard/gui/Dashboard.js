@@ -23,7 +23,21 @@ class Dashboard extends LitElement {
   constructor() {
     super();
     this._activeTag  = 'dashboard-stats';
-    this._currentTag    = null;
+    this._currentTag = null;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._onReset = () => {
+      this._currentTag = null;
+      this._activeTag  = 'dashboard-stats';
+    };
+    window.addEventListener('dashboard-reset', this._onReset);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('dashboard-reset', this._onReset);
   }
 
   /**

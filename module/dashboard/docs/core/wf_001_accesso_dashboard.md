@@ -18,7 +18,7 @@ Consentire agli utenti con ruolo ADMIN+ di accedere al pannello dashboard tramit
 
 * Utente autenticato con ruolo ADMIN+ (`ruolo_level >= 2`)
 * Modulo dashboard installato e registrato in `config.js` con `route: '/dashboard'`
-* Store `dashboardItems` popolato dalle init dei moduli installati
+* Store `UIRegistry.sidebarNav` popolato dalle init dei moduli installati
 
 ---
 
@@ -31,7 +31,7 @@ Consentire agli utenti con ruolo ADMIN+ di accedere al pannello dashboard tramit
 5. `Router.loadModule('dashboard')` importa `gui/src/module/dashboard/index.js`
 6. `index.js` crea `<dashboard-root>` e lo appende al container `#main`
 7. `Dashboard.connectedCallback()` non seleziona automaticamente alcuna voce (sidebar vuota al primo accesso)
-8. `<dashboard-sidebar>` legge `dashboardItems` dallo store e filtra le voci per `minRuoloLevel`
+8. `<dashboard-sidebar>` legge `UIRegistry.sidebarNav` dallo store e filtra le voci per `minRuoloLevel`
 9. L'area content `#dashboard-content` rimane vuota fino alla prima selezione dalla sidebar
 
 ### Flusso alternativo — Utente non autenticato

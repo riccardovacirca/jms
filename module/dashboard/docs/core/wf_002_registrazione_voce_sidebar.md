@@ -4,18 +4,18 @@
 
 ### Obiettivo
 
-Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministrativa di aggiungere una voce alla sidebar del dashboard. La registrazione avviene tramite lo store condiviso `dashboardItems` nell'`init.js` del modulo. La sidebar legge lo store reattivamente e filtra le voci in base al ruolo dell'utente corrente.
+Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministrativa di aggiungere una voce alla sidebar del dashboard. La registrazione avviene tramite lo store condiviso `UIRegistry.sidebarNav` nell'`init.js` del modulo. La sidebar legge lo store reattivamente e filtra le voci in base al ruolo dell'utente corrente.
 
 ### Attori
 
 * Modulo esterno (`init.js` del modulo che si registra)
-* Store condiviso (`dashboardItems` in `store.js`)
+* Registro condiviso (`UIRegistry` in `store.js`)
 * Componente sidebar (`Sidebar.js` → `<dashboard-sidebar>`)
 * Store utente (`user` in `store.js`)
 
 ### Precondizioni
 
-* Store `dashboardItems` inizializzato come atom vuoto in `store.js`
+* `UIRegistry.sidebarNav` inizializzato come atom vuoto in `store.js`
 * Il modulo esterno esegue la registrazione nella propria `init()`, prima del primo routing
 * `<dashboard-sidebar>` è montato e sottoscritto allo store
 
@@ -24,7 +24,7 @@ Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministr
 ### Flusso — Registrazione (init del modulo esterno)
 
 1. Il router esegue tutte le `init()` dei moduli in parallelo prima del primo routing
-2. `init()` del modulo esterno chiama `dashboardItems.set([...dashboardItems.get(), entry])`
+2. `init()` del modulo esterno chiama `UIRegistry.sidebarNav.set([...UIRegistry.sidebarNav.get(), entry])`
 3. La voce ha forma `{ key, label, icon, tag, import, minRuoloLevel }`:
    * `key` — identificatore univoco della voce
    * `label` — testo visualizzato nella sidebar
@@ -35,7 +35,7 @@ Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministr
 
 ### Flusso — Selezione voce dalla sidebar
 
-1. `<dashboard-sidebar>` filtra `dashboardItems` confrontando `minRuoloLevel` con `user.get()?.ruolo_level`
+1. `<dashboard-sidebar>` filtra `UIRegistry.sidebarNav` confrontando `minRuoloLevel` con `user.get()?.ruolo_level`
 2. Utente clicca una voce → `Sidebar` emette `CustomEvent('dashboard-select', { detail: entry })`
 3. `Dashboard._onSelect(e)` riceve l'evento:
    * Imposta `_activeTag = null` (svuota il content durante il caricamento)
@@ -50,7 +50,7 @@ Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministr
 
 ### Postcondizioni
 
-* **Registrazione**: voce presente in `dashboardItems`; la sidebar la mostra ai ruoli abilitati
+* **Registrazione**: voce presente in `UIRegistry.sidebarNav`; la sidebar la mostra ai ruoli abilitati
 * **Selezione**: custom element del modulo montato in `#dashboard-content`; selezioni successive dello stesso item non rimontano il componente
 
 ---
@@ -75,10 +75,10 @@ Consentire a qualsiasi modulo installato che dispone di un'interfaccia amministr
 ```mermaid
 sequenceDiagram
     participant Init as ModuloX/init.js
-    participant Store as dashboardItems (store)
+    participant Store as UIRegistry.sidebarNav (store)
     participant Sidebar as dashboard-sidebar
 
-    Init->>Store: dashboardItems.set([...get(), entry])
+    Init->>Store: UIRegistry.sidebarNav.set([...get(), entry])
     Store-->>Sidebar: subscriber notificato (nuovo array)
     Sidebar->>Sidebar: _items aggiornato → requestUpdate()
     Sidebar-->>Browser: sidebar ri-renderizzata con nuova voce

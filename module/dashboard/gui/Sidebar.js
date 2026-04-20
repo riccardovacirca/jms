@@ -1,5 +1,5 @@
 import { LitElement, html } from 'lit';
-import { dashboardItems, user } from '../../store.js';
+import { UIRegistry, user } from '../../store.js';
 
 /**
  * Sidebar del dashboard.
@@ -8,7 +8,7 @@ import { dashboardItems, user } from '../../store.js';
  * Se ha voci figlie, il click espande un accordion sotto di essa (uno alla volta).
  * Se non ha voci figlie e ha un `tag`, il click la seleziona direttamente.
  *
- * Struttura dati `dashboardItems`:
+ * Struttura dati `UIRegistry.sidebarNav`:
  *   - voce normale:  `{ key, label, icon, tag, import, minRuoloLevel }`
  *   - gruppo:        `{ key, label, icon, group: true, minRuoloLevel }` — solo toggle accordion
  *   - voce figlia:   `{ key, label, icon, tag, import, parent: 'parentKey', minRuoloLevel }`
@@ -25,21 +25,24 @@ class Sidebar extends LitElement {
 
   constructor() {
     super();
-    this._items       = dashboardItems.get();
-    this._activeKey   = null;
+    this._items       = UIRegistry.sidebarNav.get();
+    this._activeKey   = 'dashboard-stats';
     this._expandedKey = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this._unsubItems = dashboardItems.subscribe(v => { this._items = v; });
+    this._unsubItems = UIRegistry.sidebarNav.subscribe(v => { this._items = v; });
     this._unsubUser  = user.subscribe(() => { this.requestUpdate(); });
+    this._onReset    = () => { this._activeKey = 'dashboard-stats'; this._expandedKey = null; };
+    window.addEventListener('dashboard-reset', this._onReset);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubItems();
     this._unsubUser();
+    window.removeEventListener('dashboard-reset', this._onReset);
   }
 
   /**
